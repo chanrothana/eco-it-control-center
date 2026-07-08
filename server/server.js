@@ -121,7 +121,7 @@ const ALLOW_DEV_AUTH_BYPASS =
   String(process.env.ALLOW_DEV_AUTH_BYPASS || "false").toLowerCase() === "true";
 const APP_TIME_ZONE = "Asia/Phnom_Penh";
 
-function formatTelegramAlertSnapshot(date = new Date()) {
+function getAppDateTimeParts(date = new Date()) {
   try {
     const parts = new Intl.DateTimeFormat("en-CA", {
       timeZone: APP_TIME_ZONE,
@@ -133,11 +133,54 @@ function formatTelegramAlertSnapshot(date = new Date()) {
       hour12: false,
     }).formatToParts(date);
     const read = (type) => parts.find((part) => part.type === type)?.value || "";
-    const year = read("year");
-    const month = read("month");
-    const day = read("day");
-    const hour = read("hour");
-    const minute = read("minute");
+    return {
+      year: read("year"),
+      month: read("month"),
+      day: read("day"),
+      hour: read("hour"),
+      minute: read("minute"),
+    };
+  } catch {
+    const fallback = new Date(date);
+    return {
+      year: String(fallback.getUTCFullYear()),
+      month: String(fallback.getUTCMonth() + 1).padStart(2, "0"),
+      day: String(fallback.getUTCDate()).padStart(2, "0"),
+      hour: String(fallback.getUTCHours()).padStart(2, "0"),
+      minute: String(fallback.getUTCMinutes()).padStart(2, "0"),
+    };
+  }
+}
+
+function getAppTodayYmd(date = new Date()) {
+  const parts = getAppDateTimeParts(date);
+  if (parts.year && parts.month && parts.day) {
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  }
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+function getMaintenanceAlertSlotInfo(date = new Date()) {
+  const parts = getAppDateTimeParts(date);
+  const ymd = getAppTodayYmd(date);
+  const hour = Number(parts.hour || 0);
+  if (hour === 10) {
+    return { ymd, slot: "10", label: "10:00" };
+  }
+  if (hour === 15) {
+    return { ymd, slot: "15", label: "15:00" };
+  }
+  return null;
+}
+
+function formatTelegramAlertSnapshot(date = new Date()) {
+  try {
+    const parts = getAppDateTimeParts(date);
+    const year = parts.year;
+    const month = parts.month;
+    const day = parts.day;
+    const hour = parts.hour;
+    const minute = parts.minute;
     if (year && month && day && hour && minute) {
       return `${year}-${month}-${day} ${hour}:${minute} (${APP_TIME_ZONE})`;
     }
@@ -3131,6 +3174,111 @@ function resolveTelegramPhotoUrl(photoPath) {
   return `${PUBLIC_APP_URL}${raw}`;
 }
 
+function resolveUploadedAbsolutePath(rawPath) {
+  const raw = toText(rawPath);
+  if (!raw || !raw.startsWith("/uploads/")) return "";
+  const uploadRelative = raw.replace(/^\/uploads\//, "");
+  const safeUploadRelative = path
+    .normalize(uploadRelative)
+    .replace(/^(\.\.[/\\])+/, "");
+  const uploadFile = path.join(UPLOADS_DIR, safeUploadRelative);
+  const uploadResolved = path.resolve(uploadFile);
+  const uploadRoot = path.resolve(UPLOADS_DIR) + path.sep;
+  if (!uploadResolved.startsWith(uploadRoot)) return "";
+  return uploadResolved;
+}
+
+function escapeSvgText(value) {
+  return toText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildMaintenanceTelegramPreviewUrl(assetId, options = {}) {
+  const normalizedAssetId = toText(assetId).trim().toUpperCase();
+  if (!PUBLIC_APP_URL || !normalizedAssetId) return "";
+  const url = new URL(`${PUBLIC_APP_URL}/api/alerts/telegram/maintenance-preview`);
+  url.searchParams.set("assetId", normalizedAssetId);
+  const maintenanceDate = toText(options.maintenanceDate).trim();
+  const status = toText(options.status).trim();
+  const task = toText(options.task).trim();
+  if (maintenanceDate) url.searchParams.set("date", maintenanceDate);
+  if (status) url.searchParams.set("status", status);
+  if (task) url.searchParams.set("task", task);
+  return url.toString();
+}
+
+function buildMaintenanceTelegramAppLink(assetId, maintenanceDate = "") {
+  const normalizedAssetId = toText(assetId).trim().toUpperCase();
+  if (!PUBLIC_APP_URL || !normalizedAssetId) return "";
+  const url = new URL(`${PUBLIC_APP_URL}/`);
+  url.searchParams.set("mode", "maintenance");
+  url.searchParams.set("maintenanceAssetId", normalizedAssetId);
+  const normalizedDate = toText(maintenanceDate).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+    url.searchParams.set("maintenanceDate", normalizedDate);
+  }
+  return url.toString();
+}
+
+async function buildMaintenanceTelegramPreviewSvg(asset, options = {}) {
+  if (!asset || typeof asset !== "object") return "";
+  const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+  const assetId = toText(asset.assetId) || "Unknown";
+  const campus = toText(asset.campus) || "-";
+  const location = toText(asset.location) || "-";
+  const dueDate = toText(options.maintenanceDate || asset.nextMaintenanceDate) || "-";
+  const status = toText(options.status) || "Scheduled";
+  const task = toText(options.task || asset.scheduleNote) || "-";
+  const photoPath = resolveUploadedAbsolutePath(toText(asset.photo));
+  let embeddedPhoto = "";
+  if (photoPath && (await fileExists(photoPath))) {
+    const mimeType = contentTypeFor(photoPath);
+    const raw = await fs.readFile(photoPath);
+    embeddedPhoto = `data:${mimeType};base64,${raw.toString("base64")}`;
+  }
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="420" viewBox="0 0 760 420">
+  <defs>
+    <linearGradient id="cardBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14243f" />
+      <stop offset="100%" stop-color="#223a63" />
+    </linearGradient>
+    <linearGradient id="photoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d9e2f2" />
+      <stop offset="100%" stop-color="#eef3fb" />
+    </linearGradient>
+    <clipPath id="photoClip">
+      <rect x="28" y="54" width="200" height="200" rx="24" ry="24" />
+    </clipPath>
+  </defs>
+  <rect width="760" height="420" rx="34" ry="34" fill="url(#cardBg)" />
+  <rect x="28" y="54" width="200" height="200" rx="24" ry="24" fill="url(#photoBg)" />
+  ${
+    embeddedPhoto
+      ? `<image href="${embeddedPhoto}" x="28" y="54" width="200" height="200" preserveAspectRatio="xMidYMid slice" clip-path="url(#photoClip)" />`
+      : `<rect x="28" y="54" width="200" height="200" rx="24" ry="24" fill="#2d446c" />
+         <text x="128" y="160" text-anchor="middle" fill="#dbe7ff" font-size="28" font-family="Arial, sans-serif">NO</text>
+         <text x="128" y="194" text-anchor="middle" fill="#dbe7ff" font-size="28" font-family="Arial, sans-serif">PHOTO</text>`
+  }
+  <text x="258" y="74" fill="#ffd24f" font-size="28" font-family="Arial, sans-serif">🔔 ECO Maintenance Reminder</text>
+  <text x="258" y="118" fill="#ffffff" font-size="34" font-weight="700" font-family="Arial, sans-serif">${escapeSvgText(assetId)}</text>
+  <text x="258" y="154" fill="#dce8ff" font-size="24" font-family="Arial, sans-serif">${escapeSvgText(itemName)}</text>
+  <text x="258" y="204" fill="#9fc0ff" font-size="18" font-family="Arial, sans-serif">Status</text>
+  <text x="258" y="230" fill="#ffffff" font-size="24" font-family="Arial, sans-serif">${escapeSvgText(status)}</text>
+  <text x="258" y="274" fill="#9fc0ff" font-size="18" font-family="Arial, sans-serif">Location</text>
+  <text x="258" y="300" fill="#ffffff" font-size="24" font-family="Arial, sans-serif">${escapeSvgText(campus)} / ${escapeSvgText(location)}</text>
+  <text x="258" y="344" fill="#9fc0ff" font-size="18" font-family="Arial, sans-serif">Due Date</text>
+  <text x="258" y="370" fill="#ffffff" font-size="24" font-family="Arial, sans-serif">${escapeSvgText(dueDate)}</text>
+  <rect x="28" y="286" width="200" height="104" rx="20" ry="20" fill="rgba(255,255,255,0.09)" />
+  <text x="46" y="318" fill="#9fc0ff" font-size="16" font-family="Arial, sans-serif">Task</text>
+  <text x="46" y="348" fill="#ffffff" font-size="22" font-family="Arial, sans-serif">${escapeSvgText(task)}</text>
+</svg>`;
+}
+
 function resolveInventoryItemPhotoForTelegram(db, txn) {
   const txnPhotoUrl = resolveTelegramPhotoUrl(toText(txn && txn.photo));
   const settings =
@@ -3243,20 +3391,62 @@ function discoverTelegramChatIds(botToken = TELEGRAM_BOT_TOKEN) {
 async function sendTelegramMaintenanceBatch(rows, db = null) {
   if (!Array.isArray(rows) || !rows.length) return false;
   const snapshotText = formatTelegramAlertSnapshot(new Date());
-  const lines = rows.slice(0, 8).map((row, idx) => {
+  const summarizeLabel = (label) => {
+    const normalized = toText(label).trim().toLowerCase();
+    if (!normalized) return "Scheduled reminder";
+    if (normalized === "due today") return "Due today";
+    if (normalized === "7 days before") return "Due in 7 days";
+    if (normalized.includes("day") && normalized.includes("before")) {
+      const days = normalized.split(" ")[0];
+      return `Due in ${days} day${days === "1" ? "" : "s"}`;
+    }
+    if (normalized.includes("overdue")) {
+      const days = normalized.split(" ")[0];
+      return `${days} day${days === "1" ? "" : "s"} overdue`;
+    }
+    return toText(label);
+  };
+  let sent = false;
+  for (const row of rows) {
     const dateText = toText(row.scheduleDate) || "-";
     const assetId = toText(row.assetId) || "Unknown";
+    const itemName = toText(row.name) || "Asset";
     const campus = toText(row.campus) || "-";
     const location = toText(row.location) || "-";
-    const title = toText(row.title) || "Maintenance Alert";
-    const note = toText(row.scheduleNote || row.message || "").trim();
-    const alertLabel = toText(row.alertLabel || "").trim();
-    const suffix = note ? `\nNote: ${note}` : "";
-    return `${idx + 1}. ${title}${alertLabel ? ` (${alertLabel})` : ""}\nAsset: ${assetId} | Campus: ${campus} | Location: ${location} | Date: ${dateText}${suffix}`;
-  });
-  const extra = rows.length > 8 ? `\n+${rows.length - 8} more alert(s)` : "";
-  const text = `Eco IT Maintenance Alerts\nSnapshot: ${snapshotText}\nNote: App overdue list may change after this alert is sent.\n\n${lines.join("\n\n")}${extra}`;
-  return sendTelegramMaintenanceMessage(text, { db });
+    const note = toText(row.scheduleNote || row.message || "").trim() || "-";
+    const alertLabel = summarizeLabel(row.alertLabel);
+    const photoUrl =
+      buildMaintenanceTelegramPreviewUrl(assetId, {
+        maintenanceDate: dateText,
+        status: alertLabel,
+        task: note,
+      }) || resolveTelegramPhotoUrl(toText(row.photo || ""));
+    const appLink = buildMaintenanceTelegramAppLink(assetId, dateText);
+    const assetLine = appLink
+      ? `<b>Asset ID</b>: <a href="${escapeTelegramHtml(appLink)}">${escapeTelegramHtml(assetId)}</a>`
+      : `<b>Asset ID</b>: ${escapeTelegramHtml(assetId)}`;
+    const text = [
+      `🔔 ECO Maintenance Reminder`,
+      `Time: ${snapshotText}`,
+      assetLine,
+      `<b>Item</b>: ${escapeTelegramHtml(itemName)}`,
+      `<b>Status</b>: ${escapeTelegramHtml(alertLabel)}`,
+      `<b>Location</b>: ${escapeTelegramHtml(campus)} / ${escapeTelegramHtml(location)}`,
+      `<b>Due Date</b>: ${escapeTelegramHtml(dateText)}`,
+      `<b>Task</b>: ${escapeTelegramHtml(note)}`,
+      appLink
+        ? `Tap the Asset ID to open the maintenance record page directly.`
+        : `Open App > Maintenance > Schedule > Today/Overdue to record this job.`,
+    ].join("\n");
+    // eslint-disable-next-line no-await-in-loop
+    const report = await sendTelegramMaintenanceMessage(text, {
+      db,
+      photoUrl,
+      parseMode: "HTML",
+    });
+    sent = Boolean(report) || sent;
+  }
+  return sent;
 }
 
 function normalizeMaintenanceTelegramDailyLog(settings) {
@@ -3266,7 +3456,7 @@ function normalizeMaintenanceTelegramDailyLog(settings) {
   const output = {};
   for (const [key, value] of Object.entries(input)) {
     const normalizedKey = toText(key).trim();
-    const normalizedValue = normalizeLooseDateToYmd(value);
+    const normalizedValue = toText(value).trim();
     if (!normalizedKey || !normalizedValue) continue;
     output[normalizedKey] = normalizedValue;
   }
@@ -3278,16 +3468,26 @@ function buildMaintenanceTelegramReminderRows(db) {
     db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
       ? db.settings
       : {};
-  const todayYmd = new Date().toISOString().slice(0, 10);
+  const slotInfo = getMaintenanceAlertSlotInfo(new Date());
+  const todayYmd = getAppTodayYmd(new Date());
   const dailyLog = normalizeMaintenanceTelegramDailyLog(settings);
   const reminderRows = [];
   let changed = false;
   for (const [key, value] of Object.entries(dailyLog)) {
-    const sentDate = normalizeLooseDateToYmd(value);
+    const sentDate = normalizeLooseDateToYmd(String(value).split("@")[0]);
     if (!sentDate || sentDate < todayYmd) {
       delete dailyLog[key];
       changed = true;
     }
+  }
+  if (!slotInfo) {
+    settings.maintenanceTelegramDailyLog = dailyLog;
+    if (db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)) {
+      db.settings.maintenanceTelegramDailyLog = dailyLog;
+    } else if (db) {
+      db.settings = { maintenanceTelegramDailyLog: dailyLog };
+    }
+    return { rows: reminderRows, changed };
   }
   const assets = Array.isArray(db && db.assets) ? db.assets : [];
   for (const asset of assets) {
@@ -3297,8 +3497,9 @@ function buildMaintenanceTelegramReminderRows(db) {
     const days = daysUntilYmd(scheduleDate);
     if (days === null || days > 7) continue;
     if (hasCompletedMaintenanceOnDateServer(asset, scheduleDate)) continue;
-    const dedupeKey = `${assetIdNum}:${scheduleDate}:${todayYmd}`;
-    if (dailyLog[dedupeKey] === todayYmd) continue;
+    const slotStamp = `${slotInfo.ymd}@${slotInfo.slot}`;
+    const dedupeKey = `${assetIdNum}:${scheduleDate}:${slotStamp}`;
+    if (dailyLog[dedupeKey] === slotStamp) continue;
     let alertLabel = "";
     let title = "";
     if (days === 7) {
@@ -3321,12 +3522,18 @@ function buildMaintenanceTelegramReminderRows(db) {
       name: toText(asset && asset.name),
       campus: toText(asset && asset.campus),
       location: toText(asset && asset.location),
+      photo: toText(asset && asset.photo),
       scheduleDate,
       scheduleNote: toText(asset && asset.scheduleNote),
       title,
       alertLabel,
+      days,
     });
   }
+  reminderRows.sort((a, b) => {
+    if (Number(a.days) !== Number(b.days)) return Number(a.days) - Number(b.days);
+    return String(a.assetId || "").localeCompare(String(b.assetId || ""));
+  });
   settings.maintenanceTelegramDailyLog = dailyLog;
   if (db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)) {
     db.settings.maintenanceTelegramDailyLog = dailyLog;
@@ -3350,17 +3557,20 @@ async function maybeRunMaintenanceAlertSweep() {
     if (reminderResult.rows.length) {
       const sent = await sendTelegramMaintenanceBatch(reminderResult.rows, db);
       if (sent) {
-        const todayYmd = new Date().toISOString().slice(0, 10);
+        const slotInfo = getMaintenanceAlertSlotInfo(new Date());
         const settings =
           db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
             ? db.settings
             : {};
         const dailyLog = normalizeMaintenanceTelegramDailyLog(settings);
-        reminderResult.rows.forEach((row) => {
-          dailyLog[toText(row.key)] = todayYmd;
-        });
-        db.settings = { ...(db.settings || {}), maintenanceTelegramDailyLog: dailyLog };
-        await writeDb(db);
+        if (slotInfo) {
+          const slotStamp = `${slotInfo.ymd}@${slotInfo.slot}`;
+          reminderResult.rows.forEach((row) => {
+            dailyLog[toText(row.key)] = slotStamp;
+          });
+          db.settings = { ...(db.settings || {}), maintenanceTelegramDailyLog: dailyLog };
+          await writeDb(db);
+        }
       }
     }
   } catch (err) {
@@ -3461,6 +3671,7 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
 function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, options = {}) {
   if (!asset || !entry) return "";
   const mode = toText(options.mode) || "general";
+  const scheduleSourceDate = normalizeLooseDateToYmd(options.scheduleSourceDate) || toText(options.scheduleSourceDate);
   const ticketNo = toText(options.ticketNo);
   const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
   const isGeneralTask =
@@ -3482,6 +3693,8 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, optio
   const emphasize = (label, value) => `<b><u>${escapeTelegramHtml(label)}</u></b>: ${escapeTelegramHtml(value)}`;
   const header = mode === "ticket_fixed"
     ? buildTelegramColorStrip("🟩", "ជូនដំណឹង ECO - ការងារជួសជុល", "ការស្នើសុំជួសជុលត្រូវបានបញ្ចប់", true)
+    : mode === "schedule_completed"
+      ? buildTelegramColorStrip("🟩", "ជូនដំណឹង ECO - កាលវិភាគថែទាំ", "ការងារថែទាំតាមកាលវិភាគបានបញ្ចប់", true)
     : buildTelegramColorStrip("🟦", "ជូនដំណឹង ECO - ការងារជួសជុល", "មានកំណត់ត្រាការងារថ្មី", true);
   const lines = [
     ...header,
@@ -3496,6 +3709,9 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, optio
   ];
   if (mode === "ticket_fixed" && ticketNo) {
     lines.splice(2, 0, emphasize("Ticket", ticketNo));
+  }
+  if (mode === "schedule_completed" && scheduleSourceDate) {
+    lines.splice(4, 0, emphasize("ថ្ងៃកំណត់", scheduleSourceDate));
   }
   if (!isGeneralTask) {
     lines.splice(4, 0, emphasize("ទីតាំង", location));
@@ -6809,16 +7025,60 @@ const server = http.createServer(async (req, res) => {
           kind === "maintenance" ? "ECO Maintenance Telegram test" : "ECO IT Telegram test"
         }\nTime: ${new Date().toISOString()}\nBy: ${toText(user.displayName) || toText(user.username) || "staff"}`;
       const db = await readDb();
+      const requestedAssetId = toText(body && body.assetId).trim();
+      const requestedPhotoUrl = toText(body && body.photoUrl).trim();
+      const matchedAsset = requestedAssetId
+        ? (Array.isArray(db.assets) ? db.assets.find((row) => toText(row && row.assetId) === requestedAssetId) : null)
+        : null;
+      const photoUrl = requestedPhotoUrl || resolveTelegramPhotoUrl(toText(matchedAsset && matchedAsset.photo));
       const ok =
         kind === "maintenance"
-          ? await sendTelegramMaintenanceMessage(text, { db })
-          : await sendTelegramMessage(text, { db });
+          ? await sendTelegramMaintenanceMessage(text, { db, photoUrl, parseMode: "HTML" })
+          : await sendTelegramMessage(text, { db, photoUrl, parseMode: "HTML" });
       sendJson(res, 200, {
         ok,
         enabled: TELEGRAM_ALERT_ENABLED,
         kind,
+        assetId: requestedAssetId || toText(matchedAsset && matchedAsset.assetId),
+        photoAttached: Boolean(photoUrl),
         chatTargets: resolveTelegramConfiguredChatIds(db, [], kind === "maintenance" ? "maintenance" : "default"),
       });
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/alerts/telegram/maintenance-preview") {
+      const assetId = toText(url.searchParams.get("assetId")).trim();
+      if (!assetId) {
+        sendJson(res, 400, { error: "Asset ID is required" });
+        return;
+      }
+      const db = await readDb();
+      const assets = Array.isArray(db.assets) ? db.assets : [];
+      const asset = selectBestAssetByAssetId(assets, assetId);
+      if (!asset) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+      const svg = await buildMaintenanceTelegramPreviewSvg(asset, {
+        maintenanceDate: toText(url.searchParams.get("date")),
+        status: toText(url.searchParams.get("status")),
+        task: toText(url.searchParams.get("task")),
+      });
+      if (!svg) {
+        sendJson(res, 404, { error: "Preview unavailable" });
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": "image/svg+xml",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
+      res.end(svg);
       return;
     }
 
@@ -9772,6 +10032,8 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 403, { error: "Campus access denied" });
         return;
       }
+      const telegramAlertMode = toText(body && body.telegramAlertMode);
+      const scheduleSourceDate = normalizeLooseDateToYmd(body && body.scheduleSourceDate);
 
       const entry = {
         id: Date.now(),
@@ -9838,7 +10100,10 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 201, { asset: db.assets[idx], entry, telegramAlertQueued: true });
       void (async () => {
         try {
-          await sendMaintenanceRecordTelegramAlert(db, db.assets[idx], entry, user);
+          await sendMaintenanceRecordTelegramAlert(db, db.assets[idx], entry, user, {
+            mode: telegramAlertMode === "schedule_completed" ? "schedule_completed" : "general",
+            scheduleSourceDate,
+          });
         } catch (err) {
           console.warn(
             "[MAINTENANCE ALERT] Failed to send maintenance record Telegram alert:",
