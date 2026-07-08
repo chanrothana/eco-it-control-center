@@ -7293,6 +7293,50 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "POST" && url.pathname === "/api/tool-review-reports") {
+      const admin = requireAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const rawReport =
+        body && body.report && typeof body.report === "object" && !Array.isArray(body.report)
+          ? body.report
+          : body;
+      const normalizedIncoming = normalizeToolReviewReports([rawReport]);
+      const nextReport = normalizedIncoming[0];
+      if (!nextReport) {
+        sendJson(res, 400, { error: "Invalid tool review report" });
+        return;
+      }
+      const db = await readDb();
+      const settings =
+        db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+          ? db.settings
+          : {};
+      const currentReports = normalizeToolReviewReports(settings.toolReviewReports);
+      const matchIndex = currentReports.findIndex(
+        (row) =>
+          Number(row.id) === Number(nextReport.id) ||
+          (
+            String(row.month || "") === String(nextReport.month || "") &&
+            Number(row.itemId) === Number(nextReport.itemId)
+          )
+      );
+      const mergedReports =
+        matchIndex >= 0
+          ? currentReports.map((row, index) => (index === matchIndex ? nextReport : row))
+          : [nextReport, ...currentReports];
+      db.settings = {
+        ...settings,
+        toolReviewReports: normalizeToolReviewReports(mergedReports),
+      };
+      await writeDb(db);
+      sendJson(res, 200, {
+        ok: true,
+        report: nextReport,
+      });
+      return;
+    }
+
     if (req.method === "PATCH" && url.pathname === "/api/settings") {
       const admin = requireAdmin(req, res);
       if (!admin) return;

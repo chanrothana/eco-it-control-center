@@ -440,8 +440,15 @@ body:has(main.app-shell.theme-warm) {
 }
 
 .app-shell.theme-warm .tool-review-card-status.is-reviewed {
-  background: rgba(223, 134, 64, 0.16);
-  color: #a8601d;
+  background: rgba(46, 160, 96, 0.18);
+  color: #17663d;
+  border-color: rgba(46, 160, 96, 0.28);
+}
+
+.app-shell.theme-warm .tool-review-card-status.is-pending {
+  background: rgba(221, 145, 45, 0.17);
+  color: #9a5807;
+  border-color: rgba(221, 145, 45, 0.28);
 }
 
 .app-shell.theme-dark .input,
@@ -11840,13 +11847,15 @@ label.backup-action-btn {
 }
 
 .tool-review-card-status.is-reviewed {
-  background: rgba(56, 121, 222, 0.14);
-  color: #275cb8;
+  background: rgba(41, 163, 107, 0.18);
+  color: #16784c;
+  border: 1px solid rgba(41, 163, 107, 0.28);
 }
 
 .tool-review-card-status.is-pending {
-  background: rgba(201, 140, 63, 0.16);
-  color: #9d5f16;
+  background: rgba(214, 142, 34, 0.16);
+  color: #9a5a0a;
+  border: 1px solid rgba(214, 142, 34, 0.26);
 }
 
 .tool-review-workspace {

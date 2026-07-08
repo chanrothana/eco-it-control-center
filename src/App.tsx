@@ -15676,10 +15676,15 @@ export default function App() {
       .filter((row) => (toolReviewLocationFilter === "ALL" ? true : String(row.location || "").trim() === toolReviewLocationFilter))
       .sort((a, b) => a.itemCode.localeCompare(b.itemCode));
   }, [inventoryBalanceRows, inventoryDashboardGroup, toolReviewCampusFilter, toolReviewAreaFilter, toolReviewLocationFilter]);
-  const toolReviewSelectedItem = useMemo(
-    () => toolReviewItemOptions.find((row) => String(row.id) === String(toolReviewForm.itemId || "")) || null,
-    [toolReviewItemOptions, toolReviewForm.itemId]
-  );
+  const toolReviewSelectedItem = useMemo(() => {
+    const selectedItemId = String(toolReviewForm.itemId || "").trim();
+    if (!selectedItemId) return null;
+    return (
+      toolReviewItemOptions.find((row) => String(row.id) === selectedItemId) ||
+      inventoryBalanceRows.find((row) => String(row.id) === selectedItemId) ||
+      null
+    );
+  }, [inventoryBalanceRows, toolReviewItemOptions, toolReviewForm.itemId]);
   const toolReviewMonthReports = useMemo(() => {
     return toolReviewReports
       .filter((row) => row.month === toolReviewMonth)
@@ -19133,15 +19138,27 @@ export default function App() {
     if (!operator) return;
     setToolReviewForm((prev) => (prev.reviewedBy.trim() ? prev : { ...prev, reviewedBy: operator }));
   }, [authUser?.displayName, authUser?.username]);
+  const toolReviewHydratedKeyRef = useRef("");
   useEffect(() => {
+    const selectedItemId = String(toolReviewForm.itemId || "").trim();
+    if (!selectedItemId) {
+      toolReviewHydratedKeyRef.current = "";
+      setToolReviewPhotoName("");
+      return;
+    }
+    const hydrateKey = toolReviewExistingEntry
+      ? `${selectedItemId}:${toolReviewExistingEntry.id}:${toolReviewExistingEntry.updated || toolReviewExistingEntry.created || ""}`
+      : `${selectedItemId}:new`;
+    if (toolReviewHydratedKeyRef.current === hydrateKey) return;
+    toolReviewHydratedKeyRef.current = hydrateKey;
     setToolReviewPhotoName("");
     setToolReviewForm((prev) => {
-      if (!prev.itemId) return prev;
+      if (String(prev.itemId || "").trim() !== selectedItemId) return prev;
       if (!toolReviewExistingEntry) {
         const defaultQty =
-          toolReviewSelectedItem && String(toolReviewSelectedItem.id) === String(prev.itemId)
+          toolReviewSelectedItem && String(toolReviewSelectedItem.id) === selectedItemId
             ? String(Number(toolReviewSelectedItem.currentStock || 0))
-            : "";
+            : prev.countedQty;
         return {
           ...prev,
           countedQty: defaultQty,
@@ -19151,7 +19168,6 @@ export default function App() {
           photo: "",
         };
       }
-      if (String(prev.itemId) !== String(toolReviewExistingEntry.itemId)) return prev;
       return {
         ...prev,
         countedQty: String(toolReviewExistingEntry.countedQty ?? ""),
@@ -19162,7 +19178,7 @@ export default function App() {
         photo: toolReviewExistingEntry.photo || "",
       };
     });
-  }, [toolReviewExistingEntry, toolReviewSelectedItem]);
+  }, [toolReviewExistingEntry, toolReviewForm.itemId, toolReviewSelectedItem]);
   useEffect(() => {
     if (inventoryCodeManual) return;
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
@@ -25232,7 +25248,12 @@ export default function App() {
     setError("");
     try {
       setToolReviewReports(nextReports);
-      await persistInventorySettings(inventoryItems, inventoryTxns, nextReports);
+      await requestJson<{ ok: boolean; report?: ToolReviewReport }>("/api/tool-review-reports", {
+        method: "POST",
+        body: JSON.stringify({
+          report: nextEntry,
+        }),
+      });
       appendUiAudit(
         toolReviewExistingEntry ? "UPDATE" : "CREATE",
         "tool_review_report",
@@ -39629,7 +39650,14 @@ export default function App() {
         row.notes || "-",
       ]);
     } else if (reportType === "inventory_balance") {
-      title = reportInventoryIsToolGroup ? "Inventory Tool Balance Report" : "Inventory Stock Balance Report";
+      title = reportInventoryIsToolGroup
+        ? (
+            reportInventoryGroupFilter !== "ALL" &&
+            reportInventoryGroupFilterLabel
+          )
+            ? `${reportInventoryGroupFilterLabel} Report`
+            : "Inventory Tool Balance Report"
+        : "Inventory Stock Balance Report";
       columns = visibleInventoryReportColumnDefs.map((column) => column.label);
       rows = reportInventoryRows.map((row) => [
         ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
@@ -39929,6 +39957,16 @@ export default function App() {
               .join("")
           : `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
 
+    const inventoryToolReportMonthLabel = reportInventoryIsToolGroup
+      ? formatMonthYear(toolReviewMonth || toYmd(new Date()).slice(0, 7))
+      : "";
+    const inventoryToolPropertyLabel = reportInventoryIsToolGroup
+      ? reportInventoryGroupFilter === "SERVICE_TOOL"
+        ? (lang === "km" ? "ក្រុមហ៊ុនផ្គត់ផ្គង់ / Provider Company" : "Provider Company")
+        : (lang === "km" ? "ទ្រព្យសម្បត្តិសាលា / School Property" : "School Property")
+      : "";
+    const inventoryToolCheckedCount = reportInventoryRows.filter((row) => latestToolReviewByItemId.has(Number(row.id || 0))).length;
+    const inventoryToolNotCheckedCount = reportInventoryRows.filter((row) => !latestToolReviewByItemId.has(Number(row.id || 0))).length;
     const summaryHtml =
       reportType === "asset_full_record"
         ? `<p><strong>Maintenance Records:</strong> ${assetFullRecordMaintenanceRows.length} | <strong>Transfer Records:</strong> ${assetFullRecordTransferRows.length} | <strong>Verification Records:</strong> ${assetFullRecordVerificationRows.length}</p>`
@@ -39942,11 +39980,36 @@ export default function App() {
         ? `<p><strong>Campuses:</strong> ${furnitureControlCampusRows.rows.length} | <strong>Locations:</strong> ${furnitureControlGapSummary.rooms}</p>`
         : reportType === "inventory_balance"
         ? reportInventoryIsToolGroup
-          ? `<p><strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Checked:</strong> ${
-              reportInventoryRows.filter((row) => latestToolReviewByItemId.has(Number(row.id || 0))).length
-            } | <strong>Not Checked Yet:</strong> ${
-              reportInventoryRows.filter((row) => !latestToolReviewByItemId.has(Number(row.id || 0))).length
-            }</p>`
+          ? `<section class="report-summary-grid report-summary-grid-tools">
+              <div class="report-summary-card">
+                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "ខែ" : "Month")}</div>
+                <div class="report-summary-card-value">${escapeHtml(inventoryToolReportMonthLabel || "-")}</div>
+              </div>
+              <div class="report-summary-card">
+                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "សាខា" : "Campus")}</div>
+                <div class="report-summary-card-value">${escapeHtml(reportInventoryCampusFilterLabel || "-")}</div>
+              </div>
+              <div class="report-summary-card">
+                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "ប្រភេទឧបករណ៍" : "Tools")}</div>
+                <div class="report-summary-card-value">${escapeHtml(reportInventoryGroupFilterLabel || "-")}</div>
+              </div>
+              <div class="report-summary-card">
+                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "កម្មសិទ្ធិ" : "Property Type")}</div>
+                <div class="report-summary-card-value">${escapeHtml(inventoryToolPropertyLabel || "-")}</div>
+              </div>
+              <div class="report-summary-card">
+                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "ឧបករណ៍សរុប" : "Total Tools")}</div>
+                <div class="report-summary-card-value">${reportInventoryRows.length}</div>
+              </div>
+              <div class="report-summary-card">
+                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "បានពិនិត្យរួច" : "Checked")}</div>
+                <div class="report-summary-card-value">${inventoryToolCheckedCount}</div>
+              </div>
+              <div class="report-summary-card">
+                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "មិនទាន់ពិនិត្យ" : "Not Checked Yet")}</div>
+                <div class="report-summary-card-value">${inventoryToolNotCheckedCount}</div>
+              </div>
+            </section>`
           : `<p><strong>Total Items:</strong> ${reportInventoryRows.length} | <strong>Low Stock:</strong> ${reportInventoryRows.filter((row) => row.lowStock).length}</p>`
         : reportType === "staff_borrowing"
         ? `<p><strong>Borrowed / Assigned Assets:</strong> ${sortedStaffBorrowingRows.length} | <strong>Campus:</strong> ${escapeHtml(
@@ -40092,9 +40155,11 @@ export default function App() {
             lang === "km" ? "ទំហំ QR" : "QR Size"
           )}: ${escapeHtml(qrLabelSizeLabel)}</p>`
         : reportType === "inventory_balance"
-        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Mode: ${escapeHtml(reportInventoryModeLabel)} | Group: ${escapeHtml(
-            reportInventoryGroupFilterLabel
-          )} | Campus: ${escapeHtml(reportInventoryCampusFilterLabel)}</p>`
+        ? reportInventoryIsToolGroup
+          ? `<p class="meta">${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទបោះពុម្ព" : "Generated")}: ${escapeHtml(generatedAt)}</p>`
+          : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Mode: ${escapeHtml(reportInventoryModeLabel)} | Group: ${escapeHtml(
+              reportInventoryGroupFilterLabel
+            )} | Campus: ${escapeHtml(reportInventoryCampusFilterLabel)}</p>`
         : `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
             lang === "km" ? "តម្រងសាខា" : "Campus Filter"
           )}: ${escapeHtml(filterLabel)}</p>`;
@@ -40103,7 +40168,7 @@ export default function App() {
     const qrLabelPageCss =
       reportType === "qr_labels"
         ? `@page { size: A4 portrait; margin: 4mm; }`
-        : `@page { size: A4 landscape; margin: 3mm; }`;
+        : `@page { size: A4 landscape; margin: 0.25in; }`;
 
     const previewTableClassName =
       reportType === "staff_borrowing"
@@ -40512,6 +40577,68 @@ export default function App() {
           .report-head-left { min-width: 0; flex: 1 1 auto; }
           .report-head-logo { width: 210px; max-width: 36vw; height: auto; object-fit: contain; }
           p.meta { margin: 0 0 12px; color: #41584c; }
+          .report-head.report-head-centered {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr;
+            justify-items: center;
+            text-align: center;
+            align-items: center;
+            margin-bottom: 10px;
+            min-height: 82px;
+          }
+          .report-head.report-head-centered .report-head-left {
+            width: 100%;
+          }
+          .report-head.report-head-centered .report-head-logo {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 190px;
+            max-width: 28vw;
+          }
+          .report-head.report-head-centered h1 {
+            font-size: 16px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #586b5e;
+            margin-bottom: 8px;
+          }
+          .report-head.report-head-centered h2 {
+            font-size: 28px;
+            font-weight: 800;
+            color: #1f2e26;
+          }
+          .report-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin: 0 0 14px;
+          }
+          .report-summary-grid-tools {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+          .report-summary-card {
+            border: 1px solid #d7ccb8;
+            border-radius: 12px;
+            background: #fffdf8;
+            padding: 10px 12px;
+          }
+          .report-summary-card-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #8a6f47;
+            margin-bottom: 4px;
+          }
+          .report-summary-card-value {
+            font-size: 13px;
+            font-weight: 700;
+            color: #294036;
+            line-height: 1.35;
+          }
           .report-two-column-summary {
             display: grid;
             grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
@@ -40805,7 +40932,7 @@ export default function App() {
           </div>
         </div>
         <div class="preview-shell">
-          <div class="report-head">
+          <div class="report-head${reportType === "inventory_balance" && reportInventoryIsToolGroup ? " report-head-centered" : ""}">
             <div class="report-head-left">
               <h1>${escapeHtml(lang === "km" ? "សាលា អេកូ អន្តរជាតិ" : "Eco International School")}</h1>
               <h2>${escapeHtml(title)}</h2>
@@ -70325,8 +70452,12 @@ function formatTicketRequestSource(value?: string) {
             <section className="panel modal-panel tool-review-modal-panel" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
                 <div>
-                  <h2>Verify Tool</h2>
-                  <div className="tiny">Check real amount, take latest photo, then submit.</div>
+                  <h2>{lang === "km" ? "ផ្ទៀងផ្ទាត់ឧបករណ៍" : "Verify Tool"}</h2>
+                  <div className="tiny">
+                    {lang === "km"
+                      ? "ពិនិត្យចំនួនពិត ថតរូបថ្មីបំផុត ហើយដាក់ស្នើ។"
+                      : "Check real amount, take latest photo, then submit."}
+                  </div>
                 </div>
                 <button className="tab" onClick={() => setToolReviewModalOpen(false)}>{t.close}</button>
               </div>
@@ -70348,15 +70479,15 @@ function formatTicketRequestSource(value?: string) {
                   <div className="tool-review-selected-copy">
                     <div className="tool-review-selected-info-list">
                       <div className="tool-review-selected-info-row">
-                        <small>Tool ID</small>
+                        <small>{lang === "km" ? "លេខសម្គាល់ឧបករណ៍" : "Tool ID"}</small>
                         <span>{toolReviewSelectedItem.itemCode}</span>
                       </div>
                       <div className="tool-review-selected-info-row">
-                        <small>Campus</small>
+                        <small>{lang === "km" ? "សាខា" : "Campus"}</small>
                         <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)}</span>
                       </div>
                       <div className="tool-review-selected-info-row">
-                        <small>Location</small>
+                        <small>{lang === "km" ? "ទីតាំង" : "Location"}</small>
                         <span>{toolReviewSelectedItem.location || "-"}</span>
                       </div>
                     </div>
@@ -70366,37 +70497,47 @@ function formatTicketRequestSource(value?: string) {
 
               <div className="tool-review-meta-grid tool-review-meta-grid-compact">
                 <article className="tool-review-meta-card">
-                  <small>Expected Amount</small>
+                  <small>{lang === "km" ? "ចំនួនដែលរំពឹង" : "Expected Amount"}</small>
                   <strong>{Number(toolReviewSelectedItem.currentStock || 0)} {toolReviewSelectedItem.unit || "pcs"}</strong>
                 </article>
                 <article className={`tool-review-meta-card tool-review-status-card ${toolReviewExistingEntry ? "is-done" : "is-pending"}`}>
-                  <small>Status</small>
-                  <strong>{toolReviewExistingEntry ? "Done" : "Pending"}</strong>
+                  <small>{lang === "km" ? "ស្ថានភាព" : "Status"}</small>
+                  <strong>{toolReviewExistingEntry ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}</strong>
                 </article>
               </div>
 
               <div className="form-grid tool-review-form-grid">
                 <div className="tool-review-compact-row">
                   <label className="field tool-review-field-centered">
-                    <span>Real Amount</span>
+                    <span>{lang === "km" ? "ចំនួនពិត" : "Real Amount"}</span>
                     <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
                   </label>
                   <label className="field tool-review-field-centered">
-                    <span>Condition</span>
+                    <span>{lang === "km" ? "ស្ថានភាព" : "Condition"}</span>
                     <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
                       {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
-                        <option key={`tool-review-modal-condition-${option}`} value={option}>{option}</option>
+                        <option key={`tool-review-modal-condition-${option}`} value={option}>
+                          {lang === "km"
+                            ? ({
+                                Good: "ល្អ",
+                                Fair: "មធ្យម",
+                                Damaged: "ខូច",
+                                Missing: "បាត់",
+                                "Need Replacement": "ត្រូវប្តូរ",
+                              } as Record<string, string>)[option] || option
+                            : option}
+                        </option>
                       ))}
                     </select>
                   </label>
                 </div>
                 <div className="tool-review-compact-row">
                   <label className="field tool-review-field-centered">
-                    <span>Reviewed By</span>
+                    <span>{lang === "km" ? "ពិនិត្យដោយ" : "Reviewed By"}</span>
                     <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
                   </label>
                   <label className="field tool-review-field-centered">
-                    <span>New Photo</span>
+                    <span>{lang === "km" ? "រូបថ្មី" : "New Photo"}</span>
                     <div className="tool-review-upload-control">
                       <input
                         id={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
@@ -70410,10 +70551,10 @@ function formatTicketRequestSource(value?: string) {
                         htmlFor={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
                         className="tool-review-upload-trigger"
                       >
-                        Upload Photo
+                        {lang === "km" ? "បញ្ចូលរូប" : "Upload Photo"}
                       </label>
                       <span className={`tool-review-upload-name ${toolReviewPhotoName ? "has-file" : ""}`}>
-                        {toolReviewPhotoName || "No new photo yet"}
+                        {toolReviewPhotoName || (lang === "km" ? "មិនទាន់មានរូបថ្មី" : "No new photo yet")}
                       </span>
                     </div>
                   </label>
@@ -70422,12 +70563,16 @@ function formatTicketRequestSource(value?: string) {
 
               <div className="tool-review-photo-section">
                 <div className="tool-review-photo-section-head">
-                  <strong>Photo Comparison</strong>
-                  <span>Compare the previous photo with the new upload before submit.</span>
+                  <strong>{lang === "km" ? "ប្រៀបធៀបរូបថត" : "Photo Comparison"}</strong>
+                  <span>
+                    {lang === "km"
+                      ? "ប្រៀបធៀបរូបចាស់ជាមួយរូបថ្មី មុនពេលដាក់ស្នើ។"
+                      : "Compare the previous photo with the new upload before submit."}
+                  </span>
                 </div>
                 <div className="tool-review-photo-compare">
                   <div className="tool-review-proof-preview tool-review-proof-preview-compare">
-                    <small>Last Photo</small>
+                    <small>{lang === "km" ? "រូបចាស់" : "Last Photo"}</small>
                     {toolReviewPreviousPhoto ? (
                       <img
                         src={toolReviewPreviousPhoto}
@@ -70435,11 +70580,11 @@ function formatTicketRequestSource(value?: string) {
                         className="tool-review-modal-proof"
                       />
                     ) : (
-                      <div className="tool-review-modal-proof tool-review-modal-proof-empty">No previous photo</div>
+                      <div className="tool-review-modal-proof tool-review-modal-proof-empty">{lang === "km" ? "មិនមានរូបចាស់" : "No previous photo"}</div>
                     )}
                   </div>
                   <div className="tool-review-proof-preview tool-review-proof-preview-compare">
-                    <small>New Photo</small>
+                    <small>{lang === "km" ? "រូបថ្មី" : "New Photo"}</small>
                     {toolReviewForm.photo ? (
                       <img
                         src={toolReviewForm.photo}
@@ -70447,14 +70592,14 @@ function formatTicketRequestSource(value?: string) {
                         className="tool-review-modal-proof"
                       />
                     ) : (
-                      <div className="tool-review-modal-proof tool-review-modal-proof-empty">No new photo yet</div>
+                      <div className="tool-review-modal-proof tool-review-modal-proof-empty">{lang === "km" ? "មិនទាន់មានរូបថ្មី" : "No new photo yet"}</div>
                     )}
                   </div>
                 </div>
               </div>
 
               <label className="field field-wide">
-                <span>Note</span>
+                <span>{lang === "km" ? "កំណត់ចំណាំ" : "Note"}</span>
                 <textarea
                   ref={toolReviewNoteRef}
                   rows={1}
@@ -70465,14 +70610,14 @@ function formatTicketRequestSource(value?: string) {
                     e.currentTarget.style.height = `${Math.max(e.currentTarget.scrollHeight, 44)}px`;
                     setToolReviewForm((prev) => ({ ...prev, note: e.target.value }));
                   }}
-                  placeholder="Missing pieces, damaged parts, replacement needed..."
+                  placeholder={lang === "km" ? "បាត់គ្រឿងបន្លាស់ ខូច ឬ ត្រូវប្តូរ..." : "Missing pieces, damaged parts, replacement needed..."}
                 />
               </label>
 
               <div className="asset-actions tool-review-modal-actions">
-                <div className="tiny">Submit this month verification for the selected tool.</div>
+                <div className="tiny">{lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់ប្រចាំខែ សម្រាប់ឧបករណ៍ដែលបានជ្រើស។" : "Submit this month verification for the selected tool."}</div>
                 <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
-                  {toolReviewExistingEntry ? "Update Verification" : "Submit Verification"}
+                  {toolReviewExistingEntry ? (lang === "km" ? "កែប្រែការផ្ទៀងផ្ទាត់" : "Update Verification") : (lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់" : "Submit Verification")}
                 </button>
               </div>
             </section>
