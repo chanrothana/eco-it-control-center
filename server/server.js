@@ -189,23 +189,12 @@ function formatTelegramAlertSnapshot(date = new Date()) {
 }
 
 function formatMaintenanceTelegramDateTime(entry) {
-  const fallbackDate = toText(entry && entry.date) || "-";
+  const chosenDate = toText(entry && entry.date) || "-";
   const displayAtRaw = toText(entry && entry.updatedAt) || toText(entry && entry.createdAt);
-  if (!displayAtRaw) return fallbackDate;
+  if (!displayAtRaw) return chosenDate;
   const displayAt = new Date(displayAtRaw);
-  if (Number.isNaN(displayAt.getTime())) return fallbackDate;
+  if (Number.isNaN(displayAt.getTime())) return chosenDate;
   try {
-    const dateParts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: APP_TIME_ZONE,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(displayAt);
-    const readDate = (type) => dateParts.find((part) => part.type === type)?.value || "";
-    const year = readDate("year");
-    const month = readDate("month");
-    const day = readDate("day");
-    const dateText = year && month && day ? `${year}-${month}-${day}` : fallbackDate;
     const timeParts = new Intl.DateTimeFormat("en-US", {
       timeZone: APP_TIME_ZONE,
       hour: "numeric",
@@ -217,10 +206,10 @@ function formatMaintenanceTelegramDateTime(entry) {
     const minute = readTime("minute");
     const period = readTime("dayPeriod").toUpperCase();
     if (hour && minute && period) {
-      return `${dateText}, ${hour}:${minute}${period}`;
+      return `${chosenDate}, ${hour}:${minute}${period}`;
     }
   } catch {}
-  return fallbackDate;
+  return chosenDate;
 }
 const DEFAULT_ADMIN_PASSWORD = String(
   process.env.BOOTSTRAP_ADMIN_PASSWORD || (!IS_PROD ? "EcoAdmin@2026!" : "")

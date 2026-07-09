@@ -40496,19 +40496,58 @@ export default function App() {
                 }
               </div>
             </section>`
-          : `<p><strong>Total Assets:</strong> ${assetMasterReportRows.length}</p>${
-              assetMasterCampusBreakdown.length
-                ? `<p><strong>By Campus:</strong> ${assetMasterCampusBreakdown
-                    .map(([campus, count]) => `${escapeHtml(campus)} = ${count}`)
-                    .join(" | ")}</p>`
-                : ""
-            }${
-              showAssetMasterItemBreakdown
-                ? `<p><strong>By Item:</strong> ${assetMasterItemBreakdown
-                    .map(([name, count]) => `${escapeHtml(name)} = ${count}`)
-                    .join(" | ")}</p>`
-                : ""
-            }`
+          : `<section class="report-two-column-summary">
+              <div class="report-summary-panel">
+                <div class="report-summary-panel-title">${escapeHtml(lang === "km" ? "ព័ត៌មានរបាយការណ៍" : "Report Overview")}</div>
+                <div class="report-summary-box">
+                  <div class="report-summary-box-label">${escapeHtml(lang === "km" ? "ទ្រព្យសរុប" : "Total Assets")}</div>
+                  <div class="report-summary-box-value">${assetMasterReportRows.length}</div>
+                </div>
+                <div class="report-summary-box">
+                  <div class="report-summary-box-label">${escapeHtml(lang === "km" ? "សាខា" : "Campus Filter")}</div>
+                  <div class="report-summary-box-value">${escapeHtml(
+                    assetMasterCampusFilter.includes("ALL")
+                      ? t.allCampuses
+                      : assetMasterCampusFilter.length
+                        ? assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", ")
+                        : "-"
+                  )}</div>
+                </div>
+                <div class="report-summary-box">
+                  <div class="report-summary-box-label">${escapeHtml(lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report Of")}</div>
+                  <div class="report-summary-box-value">${escapeHtml(
+                    assetMasterItemFilter.includes("ALL")
+                      ? (lang === "km" ? "គ្រប់ឈ្មោះទំនិញ" : "All Item Names")
+                      : assetMasterItemFilter.length
+                        ? assetMasterItemFilter.join(", ")
+                        : "-"
+                  )}</div>
+                </div>
+              </div>
+              <div class="report-summary-panel">
+                <div class="report-summary-panel-title">${escapeHtml(lang === "km" ? "សេចក្តីសង្ខេប" : "Breakdown")}</div>
+                ${
+                  assetMasterCampusBreakdown.length
+                    ? `<div class="report-summary-box">
+                        <div class="report-summary-box-label">${escapeHtml(lang === "km" ? "តាមសាខា" : "By Campus")}</div>
+                        <div class="report-summary-box-value report-summary-box-value-grid">${assetMasterCampusBreakdown
+                          .map(([campus, count]) => `<div class="report-summary-entry">${escapeHtml(campus)} = ${count}</div>`)
+                          .join("")}</div>
+                      </div>`
+                    : ""
+                }
+                ${
+                  showAssetMasterItemBreakdown
+                    ? `<div class="report-summary-box">
+                        <div class="report-summary-box-label">${escapeHtml(lang === "km" ? "តាមប្រភេទទំនិញ" : "By Item")}</div>
+                        <div class="report-summary-box-value report-summary-box-value-list">${assetMasterItemBreakdown
+                          .map(([name, count]) => `<div class="report-summary-entry">${escapeHtml(name)} = ${count}</div>`)
+                          .join("")}</div>
+                      </div>`
+                    : ""
+                }
+              </div>
+            </section>`
         : reportType === "set_code"
         ? buildPrintSummaryGrid([
             { label: lang === "km" ? "Set Code សរុប" : "Total Set Codes", value: setCodeReportRows.length },
