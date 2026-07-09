@@ -189,27 +189,38 @@ function formatTelegramAlertSnapshot(date = new Date()) {
 }
 
 function formatMaintenanceTelegramDateTime(entry) {
-  const date = toText(entry && entry.date) || "-";
-  const createdAtRaw = toText(entry && entry.createdAt);
-  if (!createdAtRaw) return date;
-  const createdAt = new Date(createdAtRaw);
-  if (Number.isNaN(createdAt.getTime())) return date;
+  const fallbackDate = toText(entry && entry.date) || "-";
+  const displayAtRaw = toText(entry && entry.updatedAt) || toText(entry && entry.createdAt);
+  if (!displayAtRaw) return fallbackDate;
+  const displayAt = new Date(displayAtRaw);
+  if (Number.isNaN(displayAt.getTime())) return fallbackDate;
   try {
-    const parts = new Intl.DateTimeFormat("en-US", {
+    const dateParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: APP_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(displayAt);
+    const readDate = (type) => dateParts.find((part) => part.type === type)?.value || "";
+    const year = readDate("year");
+    const month = readDate("month");
+    const day = readDate("day");
+    const dateText = year && month && day ? `${year}-${month}-${day}` : fallbackDate;
+    const timeParts = new Intl.DateTimeFormat("en-US", {
       timeZone: APP_TIME_ZONE,
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-    }).formatToParts(createdAt);
-    const read = (type) => parts.find((part) => part.type === type)?.value || "";
-    const hour = read("hour");
-    const minute = read("minute");
-    const period = read("dayPeriod").toUpperCase();
+    }).formatToParts(displayAt);
+    const readTime = (type) => timeParts.find((part) => part.type === type)?.value || "";
+    const hour = readTime("hour");
+    const minute = readTime("minute");
+    const period = readTime("dayPeriod").toUpperCase();
     if (hour && minute && period) {
-      return `${date}, ${hour}:${minute}${period}`;
+      return `${dateText}, ${hour}:${minute}${period}`;
     }
   } catch {}
-  return date;
+  return fallbackDate;
 }
 const DEFAULT_ADMIN_PASSWORD = String(
   process.env.BOOTSTRAP_ADMIN_PASSWORD || (!IS_PROD ? "EcoAdmin@2026!" : "")
@@ -3705,16 +3716,13 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, optio
       ? emphasize("ការងារទូទៅ", itemName || "General Maintenance Task")
       : emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
     emphasize("សាខា", campus),
-    emphasize("កាលបរិច្ឆេទ", date),
+    emphasize("កាលបរិច្ឆេទ និងម៉ោង", date),
     `<b>ប្រភេទការងារ</b>: ${escapeTelegramHtml(type)}`,
     `អ្នកអនុវត្ត: ${escapeTelegramHtml(performedBy)}`,
     `ការងារដែលបានធ្វើ: ${escapeTelegramHtml(note)}`,
   ];
   if (mode === "ticket_fixed" && ticketNo) {
     lines.splice(2, 0, emphasize("Ticket", ticketNo));
-  }
-  if (mode === "schedule_completed" && scheduleSourceDate) {
-    lines.splice(4, 0, emphasize("ថ្ងៃកំណត់", scheduleSourceDate));
   }
   if (!isGeneralTask) {
     lines.splice(4, 0, emphasize("ទីតាំង", location));
