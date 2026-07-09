@@ -13669,6 +13669,25 @@ label.backup-action-btn {
   line-height: 1.35;
 }
 
+.maintenance-history-desktop-teamline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 4px;
+  color: #4e6383;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.maintenance-history-desktop-teamline span {
+  color: #5a6f91;
+}
+
+.maintenance-history-desktop-teamline strong {
+  color: #213754;
+  font-weight: 800;
+}
+
 .maintenance-history-desktop-actions {
   flex-direction: row;
   align-items: flex-start;

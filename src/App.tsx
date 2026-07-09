@@ -552,6 +552,7 @@ type ToolOwnerType =
   | "CLEANING_PROVIDER"
   | "GARDEN_PROVIDER"
   | "OTHER_PROVIDER";
+type ReportInventoryPropertyFilter = "AUTO" | "SCHOOL" | "PROVIDER";
 type ToolReviewCondition =
   | "Good"
   | "Fair"
@@ -2583,7 +2584,8 @@ function itemSetupAssetCategoryLabel(code: string) {
 const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP", "3.5HP"] as const;
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
 const FAN_TYPE_OPTIONS = ["Wall Fan", "Ceiling Fan", "Exhaust Fan", "Stand Fan"] as const;
-const FAN_TYPE_CODES = ["FAN", "WFN", "CFN", "EFN"] as const;
+const FAN_TYPE_CODES = ["FAN", "WFN", "CFN", "EFN", "SFN"] as const;
+const KEYBOARD_PIANO_TYPE_CODE = "KPN";
 
 function shortAirconCapacityLabel(value: string) {
   const text = String(value || "").trim();
@@ -2740,9 +2742,12 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Remote Control", itemKm: "រីម៉ូតបញ្ជា", code: "RMT" },
     { itemEn: "Front Unit (Indoor)", itemKm: "ផ្នែកខាងមុខ (ក្នុងបន្ទប់)", code: "FPN" },
     { itemEn: "Back Unit (Outdoor)", itemKm: "ផ្នែកខាងក្រៅ", code: "RPN" },
+    { itemEn: "Keyboard Piano Stand", itemKm: "ជើងព្យាណូអគ្គិសនី", code: "KPS" },
+    { itemEn: "Keyboard Piano Power Adapter", itemKm: "អាដាប់ទ័រព្យាណូអគ្គិសនី", code: "KPA" },
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
     { itemEn: "Chair", itemKm: "កៅអី", code: "CHR" },
     { itemEn: "Piano", itemKm: "ព្យាណូ", code: "PNO" },
+    { itemEn: "Keyboard Piano", itemKm: "ព្យាណូអគ្គិសនី", code: "KPN" },
   ],
   FURNITURE: [
     { itemEn: "Table", itemKm: "តុ", code: "TBL" },
@@ -2755,7 +2760,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 
 const NEW_ENTRY_HIDDEN_TYPE_CODES: Record<string, string[]> = {
   IT: ["BAT", "CHB", "MCD", "BAG", "PBG", "RMT", "ADP", "HDC", "WMR"],
-  FACILITY: ["RMT", "FPN", "RPN", "TBL", "CHR", "PNO"],
+  FACILITY: ["RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "WFN", "CFN", "EFN", "SFN"],
 };
 
 const WALKIE_TALKIE_TYPE_CODE = "WTK";
@@ -2846,6 +2851,7 @@ type LaptopAccessoryType = "ADP" | "MSE" | "KBD" | "MON";
 type CameraComponentType = "BAT" | "CHB" | "MCD" | "BAG";
 type ProjectorComponentType = "PBG" | "RMT" | "ADP" | "HDC";
 type MicrophoneComponentType = "MIC1" | "MIC2" | "WMR";
+type PianoComponentType = "KPS" | "KPA";
 type SetPackChildDraft = {
   enabled: boolean;
   status: string;
@@ -2924,6 +2930,13 @@ function defaultMicrophoneComponentDraft(): Record<MicrophoneComponentType, SetP
   };
 }
 
+function defaultPianoComponentDraft(): Record<PianoComponentType, SetPackChildDraft> {
+  return {
+    KPS: defaultSetPackChildDraft(),
+    KPA: defaultSetPackChildDraft(),
+  };
+}
+
 function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "UWF" | "WBC" {
   if (type === "MON2") return "MON";
   return type;
@@ -2950,6 +2963,9 @@ function canLinkToParentAsset(category: string, type: string): boolean {
     !FAN_TYPE_CODES.includes(code as (typeof FAN_TYPE_CODES)[number]) &&
     code !== WATER_DISPENSER_MAIN_TYPE &&
     code !== "AC" &&
+    code !== KEYBOARD_PIANO_TYPE_CODE &&
+    code !== "KPS" &&
+    code !== "KPA" &&
     code !== "RFG" &&
     code !== "MWV" &&
     code !== "OVG" &&
@@ -5490,6 +5506,9 @@ function toolOwnerTypeLabel(value?: string) {
   const normalized = String(value || "").trim().toUpperCase();
   return TOOL_OWNER_TYPE_OPTIONS.find((option) => option.value === normalized)?.label || (normalized || "School");
 }
+function isProviderToolOwnerType(value?: string) {
+  return String(value || "").trim().toUpperCase() !== "SCHOOL";
+}
 function normalizeToolReviewReportsClient(input: unknown): ToolReviewReport[] {
   return normalizeArray<ToolReviewReport>(input).map((row) => ({
     id: Number(row.id) || Date.now(),
@@ -7039,6 +7058,13 @@ function isFanAsset(category: string, type: string) {
   );
 }
 
+function isKeyboardPianoAsset(category: string, type: string) {
+  return (
+    String(category || "").toUpperCase() === "FACILITY" &&
+    String(type || "").trim().toUpperCase() === KEYBOARD_PIANO_TYPE_CODE
+  );
+}
+
 function hidesAssignmentHistory(category: string, type: string) {
   const normalizedCategory = String(category || "").trim().toUpperCase();
   const normalizedType = String(type || "").trim().toUpperCase();
@@ -7053,7 +7079,8 @@ function showsIncludedComponentCards(category: string, type: string) {
   const normalizedType = String(type || "").trim().toUpperCase();
   return (
     (normalizedCategory === "IT" && normalizedType === TV_TYPE_CODE) ||
-    (normalizedCategory === "FACILITY" && normalizedType === "AC")
+    (normalizedCategory === "FACILITY" && normalizedType === "AC") ||
+    (normalizedCategory === "FACILITY" && normalizedType === KEYBOARD_PIANO_TYPE_CODE)
   );
 }
 
@@ -9603,6 +9630,7 @@ export default function App() {
     "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL"
   >("CLEAN_TOOL");
   const [reportInventoryCampusFilter, setReportInventoryCampusFilter] = useState("ALL");
+  const [reportInventoryPropertyFilter, setReportInventoryPropertyFilter] = useState<ReportInventoryPropertyFilter>("AUTO");
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -11101,6 +11129,21 @@ export default function App() {
     MIC1: false,
     MIC2: false,
     WMR: false,
+  });
+  const [pianoComponentEnabled, setPianoComponentEnabled] = useState<Record<PianoComponentType, boolean>>({
+    KPS: true,
+    KPA: true,
+  });
+  const [pianoComponentDraft, setPianoComponentDraft] = useState<Record<PianoComponentType, SetPackChildDraft>>(
+    () => defaultPianoComponentDraft()
+  );
+  const [pianoComponentFileKey, setPianoComponentFileKey] = useState<Record<PianoComponentType, number>>({
+    KPS: 0,
+    KPA: 0,
+  });
+  const [pianoComponentDetailOpen, setPianoComponentDetailOpen] = useState<Record<PianoComponentType, boolean>>({
+    KPS: false,
+    KPA: false,
   });
   const [editSetPackEnabled, setEditSetPackEnabled] = useState<Record<SetPackChildType, boolean>>({
     MON: false,
@@ -15264,6 +15307,14 @@ export default function App() {
       WMR: buildAssetId(assetForm.campus, "IT", WIRELESS_MIC_RECEIVER_TYPE, baseWmr),
     };
   }, [assets, assetForm.campus]);
+  const pianoComponentSuggestedAssetId = useMemo<Record<PianoComponentType, string>>(() => {
+    const baseStand = calcNextSeq(assets, assetForm.campus, "FACILITY", "KPS");
+    const baseAdapter = calcNextSeq(assets, assetForm.campus, "FACILITY", "KPA");
+    return {
+      KPS: buildAssetId(assetForm.campus, "FACILITY", "KPS", baseStand),
+      KPA: buildAssetId(assetForm.campus, "FACILITY", "KPA", baseAdapter),
+    };
+  }, [assets, assetForm.campus]);
   const parentAssetsForEdit = useMemo(() => {
     const editing = assets.find((a) => a.id === editingAssetId);
     if (!editing) return [] as Asset[];
@@ -15920,6 +15971,12 @@ export default function App() {
   const reportInventoryRows = useMemo(
     () =>
       reportInventoryBaseRows.filter((row) => {
+        const isToolGroupFilter =
+          reportInventoryGroupFilter === "ALL" ||
+          reportInventoryGroupFilter === "CLEAN_TOOL" ||
+          reportInventoryGroupFilter === "MAINT_TOOL" ||
+          reportInventoryGroupFilter === "GARDEN_TOOL" ||
+          reportInventoryGroupFilter === "SERVICE_TOOL";
         const rowGroup = inventoryBusinessGroupValue(row);
         if (reportInventoryGroupFilter === "ALL") {
           if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
@@ -15931,9 +15988,18 @@ export default function App() {
         if (reportInventoryCampusFilter !== "ALL" && String(row.campus || "") !== reportInventoryCampusFilter) {
           return false;
         }
+        if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
+          const isProvider = isProviderToolOwnerType(row.ownerType);
+          if (reportInventoryPropertyFilter === "SCHOOL" && isProvider) {
+            return false;
+          }
+          if (reportInventoryPropertyFilter === "PROVIDER" && !isProvider) {
+            return false;
+          }
+        }
         return true;
       }),
-    [reportInventoryBaseRows, reportInventoryCampusFilter, reportInventoryGroupFilter]
+    [reportInventoryBaseRows, reportInventoryCampusFilter, reportInventoryGroupFilter, reportInventoryPropertyFilter]
   );
   const reportInventoryGroupedRows = useMemo(() => {
     const byGroup = new Map<InventoryBusinessGroup, typeof reportInventoryRows>();
@@ -15981,6 +16047,14 @@ export default function App() {
     () => (reportInventoryCampusFilter === "ALL" ? t.allCampuses : inventoryCampusLabel(reportInventoryCampusFilter)),
     [inventoryCampusLabel, reportInventoryCampusFilter, t.allCampuses]
   );
+  const reportInventoryPropertyFilterOptions = useMemo(
+    () => [
+      { value: "AUTO" as const, label: lang === "km" ? "ស្វ័យប្រវត្តិ" : "Auto Default" },
+      { value: "SCHOOL" as const, label: lang === "km" ? "ទ្រព្យសម្បត្តិសាលា" : "School Property" },
+      { value: "PROVIDER" as const, label: lang === "km" ? "ក្រុមហ៊ុនផ្គត់ផ្គង់" : "Provider Company" },
+    ],
+    [lang]
+  );
   const reportInventoryCampusOptions = useMemo(() => {
     return allowedCampusOptions;
   }, [allowedCampusOptions]);
@@ -16023,6 +16097,9 @@ export default function App() {
     () => reportInventoryGroupFilter === "ALL" && reportInventoryIsToolGroup,
     [reportInventoryGroupFilter, reportInventoryIsToolGroup]
   );
+  const reportInventoryPropertyFilterLabel = useMemo(() => {
+    return reportInventoryPropertyFilterOptions.find((option) => option.value === reportInventoryPropertyFilter)?.label || "Auto Default";
+  }, [reportInventoryPropertyFilter, reportInventoryPropertyFilterOptions]);
   useEffect(() => {
     if (reportInventoryGroupFilter === "ALL") {
       setReportInventoryGroupFilter("CLEAN_TOOL");
@@ -19028,6 +19105,13 @@ export default function App() {
     ],
     [t.includeMic1, t.includeMic2, t.includeController]
   );
+  const pianoComponentMeta = useMemo<Array<{ type: PianoComponentType; label: string }>>(
+    () => [
+      { type: "KPS", label: lang === "km" ? "ជើងព្យាណូ" : "Stand" },
+      { type: "KPA", label: lang === "km" ? "អាដាប់ទ័រថាមពល" : "Power Adapter" },
+    ],
+    [lang]
+  );
 
   useEffect(() => {
     const campusKey = CODE_TO_CAMPUS[campusEditCode];
@@ -20044,6 +20128,7 @@ export default function App() {
     const isMicrophoneAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === MICROPHONE_SET_TYPE;
     const isTvAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === TV_TYPE_CODE;
     const isWalkieAsset = assetForm.category === "IT" && assetForm.type.toUpperCase() === WALKIE_TALKIE_TYPE_CODE;
+    const isKeyboardPiano = isKeyboardPianoAsset(assetForm.category, assetForm.type);
     const shouldLinkToParent = !isDesktopAsset && (isLinkableForCreate && assetForm.useExistingSet);
     const createPack = isDesktopAsset && assetForm.createSetPack;
     const createLaptopAccessories = isLaptopAsset
@@ -20065,6 +20150,11 @@ export default function App() {
       ? (Object.entries(microphoneComponentEnabled) as Array<[MicrophoneComponentType, boolean]>)
           .filter(([, enabled]) => enabled)
           .map(([type]) => ({ type, draft: microphoneComponentDraft[type] }))
+      : [];
+    const createPianoComponents = isKeyboardPiano
+      ? (Object.entries(pianoComponentEnabled) as Array<[PianoComponentType, boolean]>)
+          .filter(([, enabled]) => enabled)
+          .map(([type]) => ({ type, draft: pianoComponentDraft[type] }))
       : [];
     const createTvRemoteCount = isTvAsset ? Math.max(1, Math.min(2, Number(assetForm.tvRemoteCount || 1))) : 0;
     const createWalkieCharger = isWalkieAsset && Boolean(assetForm.walkieHasCharger);
@@ -20306,6 +20396,29 @@ export default function App() {
         localMicrophoneComponentSerials.set(key, type);
       }
     }
+    if (createPianoComponents.length) {
+      const localPianoComponentSerials = new Map<string, string>();
+      for (const { type, draft } of createPianoComponents) {
+        const serial = String(draft.serialNumber || "").trim();
+        if (!serial) continue;
+        const key = normalizeAssetSerialKey(serial);
+        if (!key) continue;
+        const duplicateExisting = findDuplicateAssetSerial(assets, serial);
+        if (duplicateExisting) {
+          setError(`Serial number already exists: ${duplicateExisting.assetId}`);
+          return;
+        }
+        if (mainSerial && normalizeAssetSerialKey(mainSerial) === key) {
+          setError(`Duplicate serial in keyboard piano component (${type}): ${serial}`);
+          return;
+        }
+        if (localPianoComponentSerials.has(key)) {
+          setError(`Duplicate serial in keyboard piano components: ${serial}`);
+          return;
+        }
+        localPianoComponentSerials.set(key, type);
+      }
+    }
 
     setBusy(true);
     setError("");
@@ -20481,6 +20594,40 @@ export default function App() {
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
               notes: draft.notes || `Auto-created microphone component for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: componentPhotos[0] || "",
+              photos: componentPhotos,
+              status: draft.status || assetForm.status,
+            }),
+          });
+        }
+      }
+      if (createPianoComponents.length && created.asset?.assetId) {
+        for (const { type, draft } of createPianoComponents) {
+          const componentPhotos = normalizeAssetPhotos(draft).slice(0, MAX_SET_PACK_PHOTOS);
+          const role = type === "KPS" ? "Stand" : "Power Adapter";
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: "FACILITY",
+              type,
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              componentRole: role,
+              componentRequired: true,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: draft.brand || assetForm.brand,
+              model: draft.model,
+              serialNumber: draft.serialNumber,
+              specs: draft.specs,
+              purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
+              warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
+              vendor: draft.vendor || assetForm.vendor,
+              notes: draft.notes || `Auto-created keyboard piano component for ${created.asset.assetId}`,
               nextMaintenanceDate: "",
               scheduleNote: "",
               photo: componentPhotos[0] || "",
@@ -20728,6 +20875,19 @@ export default function App() {
         MIC1: prev.MIC1 + 1,
         MIC2: prev.MIC2 + 1,
         WMR: prev.WMR + 1,
+      }));
+      setPianoComponentEnabled({
+        KPS: true,
+        KPA: true,
+      });
+      setPianoComponentDraft(defaultPianoComponentDraft());
+      setPianoComponentDetailOpen({
+        KPS: false,
+        KPA: false,
+      });
+      setPianoComponentFileKey((prev) => ({
+        KPS: prev.KPS + 1,
+        KPA: prev.KPA + 1,
       }));
       setModelTemplateNote("");
       setAssetFileKey((k) => k + 1);
@@ -21398,6 +21558,19 @@ export default function App() {
           MIC1: prev.MIC1 + 1,
           MIC2: prev.MIC2 + 1,
           WMR: prev.WMR + 1,
+        }));
+        setPianoComponentEnabled({
+          KPS: true,
+          KPA: true,
+        });
+        setPianoComponentDraft(defaultPianoComponentDraft());
+        setPianoComponentDetailOpen({
+          KPS: false,
+          KPA: false,
+        });
+        setPianoComponentFileKey((prev) => ({
+          KPS: prev.KPS + 1,
+          KPA: prev.KPA + 1,
         }));
         setModelTemplateNote("");
         setAssetFileKey((k) => k + 1);
@@ -32055,6 +32228,36 @@ export default function App() {
       e.target.value = "";
     }
   }
+  async function onPianoComponentPhotoFile(type: PianoComponentType, e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (files.some((file) => file.size > 15 * 1024 * 1024)) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await Promise.all(files.map((file) => optimizeUploadPhoto(file)));
+      setPianoComponentDraft((prev) => {
+        const merged = normalizeAssetPhotos({
+          photo: prev[type].photo,
+          photos: [...(prev[type].photos || []), ...optimized],
+        }).slice(0, MAX_SET_PACK_PHOTOS);
+        return {
+          ...prev,
+          [type]: {
+            ...prev[type],
+            photo: merged[0] || "",
+            photos: merged,
+          },
+        };
+      });
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
 
   async function onEditWalkieChargerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
@@ -38208,6 +38411,7 @@ export default function App() {
       setReportInventoryMode("all");
       setReportInventoryGroupFilter("CLEAN_TOOL");
       setReportInventoryCampusFilter("ALL");
+      setReportInventoryPropertyFilter("AUTO");
       setInventoryReportVisibleColumns([
         "code",
         "photo",
@@ -38272,6 +38476,7 @@ export default function App() {
     setStaffBorrowingAssignedToFilter("ALL");
     setStaffBorrowingLocationFilter("ALL");
     setReportInventoryMode("all");
+    setReportInventoryPropertyFilter("AUTO");
     resetAssetMasterReportFilters();
     setQrCampusFilter(["ALL"]);
     setQrLocationFilter(["ALL"]);
@@ -38782,6 +38987,7 @@ export default function App() {
       code === "WFN" ||
       code === "CFN" ||
       code === "EFN" ||
+      code === "SFN" ||
       name.includes("wall fan") ||
       name.includes("ceiling fan") ||
       name.includes("exhaust fan") ||
@@ -38798,7 +39004,7 @@ export default function App() {
     if (code === "CHR" || name.includes("chair")) return icon(Building2);
     if (code === "DSK" || name.includes("deskset")) return icon(Building2);
     if (code === "CAB" || name.includes("cabinet")) return icon(Building2);
-    if (code === "PNO" || name.includes("piano")) return icon(Building2);
+    if (code === "PNO" || code === "KPN" || name.includes("piano")) return icon(Building2);
 
     if (isSafety) return icon(Shield);
     if (isFacility || isFurniture) return icon(Building2);
@@ -39961,9 +40167,23 @@ export default function App() {
       ? formatMonthYear(toolReviewMonth || toYmd(new Date()).slice(0, 7))
       : "";
     const inventoryToolPropertyLabel = reportInventoryIsToolGroup
-      ? reportInventoryGroupFilter === "SERVICE_TOOL"
-        ? (lang === "km" ? "ក្រុមហ៊ុនផ្គត់ផ្គង់ / Provider Company" : "Provider Company")
-        : (lang === "km" ? "ទ្រព្យសម្បត្តិសាលា / School Property" : "School Property")
+      ? reportInventoryPropertyFilter === "SCHOOL"
+        ? (lang === "km" ? "ទ្រព្យសម្បត្តិសាលា" : "School Property")
+        : reportInventoryPropertyFilter === "PROVIDER"
+          ? (lang === "km" ? "ក្រុមហ៊ុនផ្គត់ផ្គង់" : "Provider Company")
+          : reportInventoryRows.length
+            ? (() => {
+                const schoolCount = reportInventoryRows.filter((row) => !isProviderToolOwnerType(row.ownerType)).length;
+                const providerCount = reportInventoryRows.filter((row) => isProviderToolOwnerType(row.ownerType)).length;
+                if (schoolCount && providerCount) {
+                  return lang === "km" ? "ចម្រុះ" : "Mixed";
+                }
+                if (providerCount) {
+                  return lang === "km" ? "ក្រុមហ៊ុនផ្គត់ផ្គង់" : "Provider Company";
+                }
+                return lang === "km" ? "ទ្រព្យសម្បត្តិសាលា" : "School Property";
+              })()
+            : reportInventoryPropertyFilterLabel
       : "";
     const inventoryToolCheckedCount = reportInventoryRows.filter((row) => latestToolReviewByItemId.has(Number(row.id || 0))).length;
     const inventoryToolNotCheckedCount = reportInventoryRows.filter((row) => !latestToolReviewByItemId.has(Number(row.id || 0))).length;
@@ -40156,7 +40376,9 @@ export default function App() {
           )}: ${escapeHtml(qrLabelSizeLabel)}</p>`
         : reportType === "inventory_balance"
         ? reportInventoryIsToolGroup
-          ? `<p class="meta">${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទបោះពុម្ព" : "Generated")}: ${escapeHtml(generatedAt)}</p>`
+          ? `<p class="meta">${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទបោះពុម្ព" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
+              lang === "km" ? "កម្មសិទ្ធិ" : "Property Type"
+            )}: ${escapeHtml(inventoryToolPropertyLabel || reportInventoryPropertyFilterLabel)}</p>`
           : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Mode: ${escapeHtml(reportInventoryModeLabel)} | Group: ${escapeHtml(
               reportInventoryGroupFilterLabel
             )} | Campus: ${escapeHtml(reportInventoryCampusFilterLabel)}</p>`
@@ -46437,6 +46659,295 @@ function formatTicketRequestSource(value?: string) {
                                       }}
                                       onChange={(e) =>
                                         setMicrophoneComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            notes: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : isKeyboardPianoAsset(assetForm.category, assetForm.type) ? (
+                    <div className="field field-wide">
+                      <span>Included Components</span>
+                      <div className="setpack-toggle-row">
+                        <span className="tiny">Add the keyboard piano stand and power adapter together with this asset.</span>
+                      </div>
+                      <div className="setpack-component-list">
+                        {pianoComponentMeta.map((item) => (
+                          <div
+                            key={`piano-component-row-${item.type}`}
+                            className={`setpack-component-row${pianoComponentEnabled[item.type] ? " setpack-component-row-enabled" : ""}`}
+                          >
+                            <div className="setpack-component-main">
+                              <label className="setpack-component-check">
+                                <input
+                                  type="checkbox"
+                                  checked={pianoComponentEnabled[item.type]}
+                                  onChange={(e) =>
+                                    setPianoComponentEnabled((prev) => ({
+                                      ...prev,
+                                      [item.type]: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>{item.label}</span>
+                              </label>
+                              {pianoComponentEnabled[item.type] ? (
+                                <>
+                                  <span className="tiny setpack-component-meta">
+                                    {t.assetId}: {pianoComponentSuggestedAssetId[item.type]} | {assetItemName("FACILITY", item.type)}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="tab setpack-detail-btn"
+                                    onClick={() =>
+                                      setPianoComponentDetailOpen((prev) => ({
+                                        ...prev,
+                                        [item.type]: !prev[item.type],
+                                      }))
+                                    }
+                                  >
+                                    {pianoComponentDetailOpen[item.type] ? t.hideDetails : t.addDetails}
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                            {pianoComponentEnabled[item.type] && pianoComponentDetailOpen[item.type] ? (
+                              <div className="setpack-component-detail-wrap">
+                                <div className="form-grid">
+                                  <label className="field">
+                                    <span>{t.status}</span>
+                                    <select
+                                      className="input"
+                                      value={pianoComponentDraft[item.type].status}
+                                      onChange={(e) =>
+                                        setPianoComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            status: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    >
+                                      {ASSET_STATUS_OPTIONS.map((status) => (
+                                        <option key={`piano-component-${item.type}-status-${status.value}`} value={status.value}>
+                                          {lang === "km" ? status.km : status.en}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.brand}</span>
+                                    <input
+                                      className="input"
+                                      value={pianoComponentDraft[item.type].brand}
+                                      onChange={(e) =>
+                                        setPianoComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            brand: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.model}</span>
+                                    <input
+                                      className="input"
+                                      list="asset-model-options"
+                                      value={pianoComponentDraft[item.type].model}
+                                      onChange={(e) =>
+                                        setPianoComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            model: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.serialNumber}</span>
+                                    <input
+                                      className="input"
+                                      value={pianoComponentDraft[item.type].serialNumber}
+                                      onChange={(e) =>
+                                        setPianoComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            serialNumber: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.purchaseDate}</span>
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={pianoComponentDraft[item.type].purchaseDate}
+                                      onChange={(e) =>
+                                        setPianoComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            purchaseDate: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    <span>{t.warrantyUntil}</span>
+                                    <input
+                                      type="date"
+                                      className="input"
+                                      value={pianoComponentDraft[item.type].warrantyUntil}
+                                      onChange={(e) =>
+                                        setPianoComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            warrantyUntil: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <div className="field field-wide add-detail-media-row">
+                                    <label className="field">
+                                      <span>{t.vendor}</span>
+                                      <input
+                                        className="input"
+                                        value={pianoComponentDraft[item.type].vendor}
+                                        onChange={(e) =>
+                                          setPianoComponentDraft((prev) => ({
+                                            ...prev,
+                                            [item.type]: {
+                                              ...prev[item.type],
+                                              vendor: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <div className="field add-detail-photo-field">
+                                      <span>{t.photo}</span>
+                                      <input
+                                        id={`piano-component-photo-${item.type}`}
+                                        key={pianoComponentFileKey[item.type]}
+                                        className="file-input"
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => onPianoComponentPhotoFile(item.type, e)}
+                                      />
+                                      <div className="add-detail-photo-card">
+                                        <label className="add-detail-photo-swatch" htmlFor={`piano-component-photo-${item.type}`}>
+                                          {normalizeAssetPhotos(pianoComponentDraft[item.type]).length ? (
+                                            <img
+                                              loading="lazy"
+                                              decoding="async"
+                                              src={normalizeAssetPhotos(pianoComponentDraft[item.type])[0]}
+                                              alt={`${item.label} preview`}
+                                              className="photo-preview"
+                                            />
+                                          ) : (
+                                            <>
+                                              <div className="photo-placeholder" aria-hidden="true">+</div>
+                                              <span className="add-detail-photo-empty">{t.noPhoto}</span>
+                                            </>
+                                          )}
+                                        </label>
+                                        {normalizeAssetPhotos(pianoComponentDraft[item.type]).length ? (
+                                          <div className="add-detail-photo-actions">
+                                            <button
+                                              className="btn-danger add-detail-photo-icon"
+                                              type="button"
+                                              title="Delete Photo"
+                                              aria-label="Delete Photo"
+                                              disabled={!normalizeAssetPhotos(pianoComponentDraft[item.type]).length}
+                                              onClick={() => {
+                                                setPianoComponentDraft((prev) => ({
+                                                  ...prev,
+                                                  [item.type]: {
+                                                    ...prev[item.type],
+                                                    photo: "",
+                                                    photos: [],
+                                                  },
+                                                }));
+                                                setPianoComponentFileKey((prev) => ({
+                                                  ...prev,
+                                                  [item.type]: prev[item.type] + 1,
+                                                }));
+                                              }}
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <label className="field field-wide">
+                                    <span>{t.specs}</span>
+                                    <textarea
+                                      className="textarea textarea-auto-grow"
+                                      rows={1}
+                                      value={pianoComponentDraft[item.type].specs}
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onChange={(e) =>
+                                        setPianoComponentDraft((prev) => ({
+                                          ...prev,
+                                          [item.type]: {
+                                            ...prev[item.type],
+                                            specs: e.target.value,
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </label>
+                                  <label className="field field-wide">
+                                    <span>{t.notes}</span>
+                                    <textarea
+                                      className="textarea textarea-auto-grow"
+                                      rows={1}
+                                      value={pianoComponentDraft[item.type].notes}
+                                      ref={(el) => {
+                                        if (!el) return;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onInput={(e) => {
+                                        const el = e.currentTarget;
+                                        el.style.height = "auto";
+                                        el.style.height = `${el.scrollHeight}px`;
+                                      }}
+                                      onChange={(e) =>
+                                        setPianoComponentDraft((prev) => ({
                                           ...prev,
                                           [item.type]: {
                                             ...prev[item.type],
@@ -62240,6 +62751,22 @@ function formatTicketRequestSource(value?: string) {
                           emptyText={lang === "km" ? "មិនមានប្រភេទឧបករណ៍" : "No tool category found."}
                         />
                       </label>
+                      {reportInventoryIsToolGroup ? (
+                        <label className="field report-inventory-mobile-campus-field">
+                          <span>{lang === "km" ? "កម្មសិទ្ធិ" : "Property Type"}</span>
+                          <LocationPicker
+                            value={reportInventoryPropertyFilter}
+                            onChange={(value) => setReportInventoryPropertyFilter(value as ReportInventoryPropertyFilter)}
+                            options={reportInventoryPropertyFilterOptions.map((option) => ({
+                              value: option.value,
+                              label: option.label,
+                            }))}
+                            placeholder={lang === "km" ? "ជ្រើសកម្មសិទ្ធិ" : "Select property type"}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកកម្មសិទ្ធិ..." : "Search property type..."}
+                            emptyText={lang === "km" ? "មិនមានកម្មសិទ្ធិ" : "No property type found."}
+                          />
+                        </label>
+                      ) : null}
                     </div>
                   </section>
                 ) : null}
@@ -62457,6 +62984,19 @@ function formatTicketRequestSource(value?: string) {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                   />
+                  {reportInventoryIsToolGroup ? (
+                    <LocationPicker
+                      value={reportInventoryPropertyFilter}
+                      onChange={(value) => setReportInventoryPropertyFilter(value as ReportInventoryPropertyFilter)}
+                      options={reportInventoryPropertyFilterOptions.map((option) => ({
+                        value: option.value,
+                        label: option.label,
+                      }))}
+                      placeholder={lang === "km" ? "ជ្រើសកម្មសិទ្ធិ" : "Property Type"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកកម្មសិទ្ធិ..." : "Search property type..."}
+                      emptyText={lang === "km" ? "មិនមានកម្មសិទ្ធិ" : "No property type found."}
+                    />
+                  ) : null}
                   <SearchableMultiSelectPicker
                     summary={columnFilterSummary}
                     options={inventoryReportColumnDefs.map((column) => ({
