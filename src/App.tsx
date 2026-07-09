@@ -10855,6 +10855,7 @@ export default function App() {
   const useMobileCardLayout =
     isPhoneView || (typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false);
   const [reportMobileFiltersOpen, setReportMobileFiltersOpen] = useState(false);
+  const [reportDesktopFiltersCollapsed, setReportDesktopFiltersCollapsed] = useState(false);
   const [ticketMobileQueueFiltersOpen, setTicketMobileQueueFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [inventorySupplyMonth, setInventorySupplyMonth] = useState(() => toYmd(new Date()).slice(0, 7));
@@ -38442,6 +38443,19 @@ export default function App() {
     }
     return reportTypeGuideText;
   }, [reportType, lang, assetMasterItemTitle, reportTypeGuideText, qrLabelEntityType, reportAssetIdFilter]);
+  const reportOverviewChips = useMemo(() => {
+    const chips: string[] = [];
+    if (selectedReportTypeLabel) chips.push(selectedReportTypeLabel);
+    if (reportType === "maintenance_completion") {
+      maintenanceCompletionSummaryChips.forEach((chip) => {
+        if (chip) chips.push(chip);
+      });
+    }
+    if (reportAssetFilterLabel) chips.push(reportAssetFilterLabel);
+    return chips;
+  }, [maintenanceCompletionSummaryChips, reportAssetFilterLabel, reportType, selectedReportTypeLabel]);
+  const reportFiltersCollapsedDesktop =
+    reportType === "maintenance_completion" ? maintenanceReportFiltersCollapsed : reportDesktopFiltersCollapsed;
   const hasReportFilters = useMemo(
     () =>
       reportType === "staff_borrowing" ||
@@ -63043,39 +63057,6 @@ function formatTicketRequestSource(value?: string) {
                 </article>
               </div>
             )}
-            {reportType === "maintenance_completion" ? (
-              <div className="report-maintenance-toolbar">
-                <div className="report-maintenance-toolbar-copy">
-                  <div className="tiny">ED Filter: {maintenanceCompletionFilterLabel}</div>
-                  <div className="report-maintenance-chip-row">
-                    {maintenanceCompletionSummaryChips.map((chip) => (
-                      <span key={chip} className="report-maintenance-chip">
-                        {chip}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                {!isPhoneView ? (
-                  <div className="report-maintenance-toolbar-actions">
-                    <button
-                      type="button"
-                      className="tab"
-                      onClick={() => setMaintenanceReportFiltersCollapsed((value) => !value)}
-                    >
-                      {maintenanceReportFiltersCollapsed ? "Show Filters" : "Hide Filters"}
-                    </button>
-                    <button type="button" className="tab" onClick={resetReportFilters}>
-                      Reset Filters
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            {reportAssetFilterLabel ? (
-              <div className="tiny" style={{ marginBottom: 10 }}>
-                {reportAssetFilterLabel}
-              </div>
-            ) : null}
             {reportType === "inventory_balance" ? (
               <>
                 {isPhoneView ? (
@@ -63170,37 +63151,68 @@ function formatTicketRequestSource(value?: string) {
             ) : null}
             <div className={`report-builder ${reportType === "it_vault" ? "report-builder-it-vault" : ""} ${reportType === "inventory_balance" ? "report-builder-inventory" : ""}`}>
               {reportType !== "inventory_balance" ? (
-                <div className="report-builder-top">
-                  <label className="field report-type-field">
-                    <span>{lang === "km" ? "ជំហានទី 1៖ ជ្រើសប្រភេទរបាយការណ៍" : "Step 1: Choose Report Type"}</span>
-                    <LocationPicker
-                      value={reportType}
-                      onChange={(value) => {
-                        const next = value as ReportType;
-                        setReportType(next);
-                        setReportSection(REPORT_TYPE_SECTION_MAP[next]);
-                      }}
-                      options={currentSectionReportTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
-                      placeholder={lang === "km" ? "ជ្រើសប្រភេទរបាយការណ៍" : "Choose report type"}
-                      searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទរបាយការណ៍..." : "Search report type..."}
-                      emptyText={lang === "km" ? "មិនមានប្រភេទរបាយការណ៍" : "No report type found."}
-                    />
-                  </label>
-                  <div className="report-builder-actions">
-                    <button
-                      type="button"
-                      className="tab report-mobile-filter-btn"
-                      onClick={() => setReportMobileFiltersOpen((open) => !open)}
-                    >
-                      {isPhoneView && reportMobileFiltersOpen
-                        ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
-                        : (lang === "km" ? "តម្រង" : "Filters")}
-                    </button>
-                    {isPhoneView ? (
+                <div className="report-builder-top report-builder-top-smart">
+                  <div className="report-builder-overview">
+                    <div className="report-builder-overview-copy">
+                      <div className="report-builder-overview-kicker">
+                        {lang === "km" ? "របាយការណ៍ដែលបានជ្រើស" : "Selected Report"}
+                      </div>
+                      <strong>{selectedReportDisplayTitle}</strong>
+                      <span>{selectedReportDisplayGuide}</span>
+                    </div>
+                    {reportType === "maintenance_completion" ? (
+                      <div className="tiny report-builder-overview-meta">ED Filter: {maintenanceCompletionFilterLabel}</div>
+                    ) : null}
+                    {reportOverviewChips.length ? (
+                      <div className="report-builder-active-row">
+                        {reportOverviewChips.map((chip) => (
+                          <span key={`report-overview-chip-${chip}`} className="report-builder-active-chip">
+                            {chip}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="report-builder-actions report-builder-actions-smart">
+                    <label className="field report-type-field">
+                      <span>{lang === "km" ? "ប្រភេទរបាយការណ៍" : "Report Type"}</span>
+                      <LocationPicker
+                        value={reportType}
+                        onChange={(value) => {
+                          const next = value as ReportType;
+                          setReportType(next);
+                          setReportSection(REPORT_TYPE_SECTION_MAP[next]);
+                        }}
+                        options={currentSectionReportTypeOptions.map((option) => ({ value: option.value, label: option.label }))}
+                        placeholder={lang === "km" ? "ជ្រើសប្រភេទរបាយការណ៍" : "Choose report type"}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទរបាយការណ៍..." : "Search report type..."}
+                        emptyText={lang === "km" ? "មិនមានប្រភេទរបាយការណ៍" : "No report type found."}
+                      />
+                    </label>
+                    <div className="report-builder-action-buttons">
+                      <button
+                        type="button"
+                        className="tab report-mobile-filter-btn"
+                        onClick={() =>
+                          isPhoneView
+                            ? setReportMobileFiltersOpen((open) => !open)
+                            : reportType === "maintenance_completion"
+                              ? setMaintenanceReportFiltersCollapsed((value) => !value)
+                              : setReportDesktopFiltersCollapsed((value) => !value)
+                        }
+                      >
+                        {isPhoneView
+                          ? reportMobileFiltersOpen
+                            ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
+                            : (lang === "km" ? "តម្រង" : "Filters")
+                          : reportFiltersCollapsedDesktop
+                            ? (lang === "km" ? "បង្ហាញតម្រង" : "Show Filters")
+                            : (lang === "km" ? "លាក់តម្រង" : "Hide Filters")}
+                      </button>
                       <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
                         {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                       </button>
-                    ) : null}
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -63208,14 +63220,14 @@ function formatTicketRequestSource(value?: string) {
                 <>
                   <div
                     className={`tiny report-filters-title ${
-                      reportType === "maintenance_completion" && maintenanceReportFiltersCollapsed && !isPhoneView
+                      reportFiltersCollapsedDesktop && !isPhoneView
                         ? "report-filters-title-collapsed"
                         : ""
                     }`}
                   >
                     {reportType === "inventory_balance"
                       ? (lang === "km" ? "តម្រងរបាយការណ៍" : "Report Filters")
-                      : (lang === "km" ? "ជំហានទី 2៖ ជ្រើសតម្រង (បើចាំបាច់)" : "Step 2: Set Filters (if needed)")}
+                      : (lang === "km" ? "តម្រង" : "Filters")}
                   </div>
                   {isPhoneView && reportMobileFiltersOpen ? (
                     <button
@@ -63229,7 +63241,7 @@ function formatTicketRequestSource(value?: string) {
                     className={`report-mobile-filter-sheet ${
                       isPhoneView && reportMobileFiltersOpen ? "report-mobile-filter-sheet-open" : ""
                     } ${reportType === "it_vault" ? "report-mobile-filter-sheet-it-vault" : ""} ${
-                      reportType === "maintenance_completion" && maintenanceReportFiltersCollapsed && !isPhoneView
+                      reportFiltersCollapsedDesktop && !isPhoneView
                         ? "report-mobile-filter-sheet-collapsed"
                         : ""
                     }`}
@@ -63931,15 +63943,6 @@ function formatTicketRequestSource(value?: string) {
               ) : null}
                       {!isPhoneView && reportType !== "inventory_balance" ? (
                         <>
-                          <button
-                            type="button"
-                            className="tab report-filter-reset-btn"
-                            onClick={resetReportFilters}
-                            aria-label={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
-                            title={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
-                          >
-                            {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
-                          </button>
                         </>
                       ) : null}
                     </div>
@@ -63952,12 +63955,6 @@ function formatTicketRequestSource(value?: string) {
                     : "No extra filters for this report. You can go directly to print."}
                 </div>
               )}
-              {reportType !== "inventory_balance" ? (
-                <div className="report-builder-hint">
-                  <strong>{selectedReportDisplayTitle}</strong>
-                  <span>{selectedReportDisplayGuide}</span>
-                </div>
-              ) : null}
               {reportType === "qr_labels" ? (
                 <div className="panel-filters qr-size-toolbar">
                   <div className="tiny report-filters-title">

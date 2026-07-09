@@ -328,7 +328,7 @@ const TYPE_CODES = {
     "FGP",
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "RFG", "MWV", "OVG", "WCL", "WDP", "WTK", "RMT", "FPN", "RPN", "TBL", "CHR", "PNO"],
+  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "RFG", "MWV", "OVG", "WCL", "WDP", "WTK", "RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "KPN"],
   FURNITURE: ["TBL", "CHR", "DSK", "CAB", "NBD"],
 };
 const TYPE_LABELS = {
@@ -375,11 +375,14 @@ const TYPE_LABELS = {
   WTK: "Walkie Talkie",
   FPN: "Front Panel",
   RPN: "Rear Panel",
+  KPS: "Keyboard Piano Stand",
+  KPA: "Keyboard Piano Power Adapter",
   TBL: "Table",
   CHR: "Chair",
   DSK: "Deskset",
   CAB: "Cabinet",
   PNO: "Piano",
+  KPN: "Keyboard Piano",
   GEN: "General Maintenance",
 };
 const CATEGORY_CODE = {
