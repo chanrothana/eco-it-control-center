@@ -10770,6 +10770,7 @@ export default function App() {
   const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState<string[]>(["ALL"]);
   const [assetMasterCategoryFilter, setAssetMasterCategoryFilter] = useState<string[]>(["ALL"]);
   const [assetMasterItemFilter, setAssetMasterItemFilter] = useState<string[]>(["ALL"]);
+  const [assetMasterStatusFilter, setAssetMasterStatusFilter] = useState<string[]>(["ALL"]);
   const [edAssetTemplate, setEdAssetTemplate] = useState<EdAssetTemplate>("ALL");
   const [assetMasterVisibleColumns, setAssetMasterVisibleColumns] = useState<AssetMasterColumnKey[]>([
     "photo",
@@ -38131,6 +38132,10 @@ export default function App() {
     );
     return options.sort((a, b) => a.localeCompare(b));
   }, [assetMasterRowsByCampusCategoryFilter]);
+  const assetMasterStatusFilterOptions = useMemo(
+    () => ASSET_STATUS_OPTIONS.map((option) => option.value),
+    []
+  );
 
   const filteredAssetMasterRows = useMemo(() => {
     return assetMasterSetRows.filter((row) => {
@@ -38138,9 +38143,23 @@ export default function App() {
       if (!assetMasterCampusFilter.includes("ALL") && !assetMasterCampusFilter.includes(row.campus)) return false;
       if (!assetMasterCategoryFilter.includes("ALL") && !assetMasterCategoryFilter.includes(row.category)) return false;
       if (!assetMasterItemFilter.includes("ALL") && !assetMasterItemFilter.includes(row.itemName)) return false;
+      if (
+        !assetMasterStatusFilter.includes("ALL") &&
+        !assetMasterStatusFilter.some((status) => row.status === assetStatusLabel(status))
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [assetMasterSetRows, reportAssetIdFilter, assetMasterCampusFilter, assetMasterCategoryFilter, assetMasterItemFilter]);
+  }, [
+    assetMasterSetRows,
+    reportAssetIdFilter,
+    assetMasterCampusFilter,
+    assetMasterCategoryFilter,
+    assetMasterItemFilter,
+    assetMasterStatusFilter,
+    assetStatusLabel,
+  ]);
 
   const sortedAssetMasterRows = useMemo(() => {
     const direction = assetMasterSort.direction === "asc" ? 1 : -1;
@@ -38295,6 +38314,11 @@ export default function App() {
     : lang === "km"
       ? `បានជ្រើស ${assetMasterItemFilter.length} ឈ្មោះ`
       : `${assetMasterItemFilter.length} item selected`;
+  const statusFilterSummary = assetMasterStatusFilter.includes("ALL")
+    ? (lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status")
+    : lang === "km"
+      ? `បានជ្រើស ${assetMasterStatusFilter.length} ស្ថានភាព`
+      : `${assetMasterStatusFilter.length} status selected`;
   const edTemplateOptions = useMemo<Array<{ value: EdAssetTemplate; label: string }>>(
     () =>
       lang === "km"
@@ -38376,6 +38400,20 @@ export default function App() {
   const assetMasterCampusBreakdownText = useMemo(
     () => assetMasterCampusBreakdown.map(([campus, count]) => `${campus} = ${count}`).join(" | "),
     [assetMasterCampusBreakdown]
+  );
+  const assetMasterStatusBreakdown = useMemo(() => {
+    const statusKeys = ["Active", "Inactive", "Maintenance", "Retired"];
+    return statusKeys
+      .map((status) => ({
+        key: status,
+        label: assetStatusLabel(status),
+        count: assetMasterReportRows.filter((row) => row.status === assetStatusLabel(status)).length,
+      }))
+      .filter((row) => row.count > 0);
+  }, [assetMasterReportRows, assetStatusLabel]);
+  const assetMasterStatusBreakdownText = useMemo(
+    () => assetMasterStatusBreakdown.map((row) => `${row.label} = ${row.count}`).join(" | "),
+    [assetMasterStatusBreakdown]
   );
   const airconAssetMasterSummary = useMemo(() => {
     const airconRows = assetMasterReportRows.filter((row) =>
@@ -38812,6 +38850,7 @@ export default function App() {
     setAssetMasterCampusFilter(["ALL"]);
     setAssetMasterCategoryFilter(["ALL"]);
     setAssetMasterItemFilter(["ALL"]);
+    setAssetMasterStatusFilter(["ALL"]);
     setEdAssetTemplate("ALL");
     setAssetMasterVisibleColumns([
       "photo",
@@ -40832,6 +40871,16 @@ export default function App() {
                       </div>`
                     : ""
                 }
+                ${
+                  assetMasterStatusBreakdown.length
+                    ? `<div class="report-summary-box">
+                        <div class="report-summary-box-label">By Status</div>
+                        <div class="report-summary-box-value report-summary-box-value-list">${assetMasterStatusBreakdown
+                          .map((row) => `<div class="report-summary-entry">${escapeHtml(row.label)} = ${row.count}</div>`)
+                          .join("")}</div>
+                      </div>`
+                    : ""
+                }
               </div>
               <div class="report-summary-panel">
                 <div class="report-summary-panel-title">AC Breakdown</div>
@@ -40882,8 +40931,18 @@ export default function App() {
                       : assetMasterItemFilter.length
                         ? assetMasterItemFilter.join(", ")
                         : "-"
-                  )}</div>
+                    )}</div>
                 </div>
+                ${
+                  assetMasterStatusBreakdown.length
+                    ? `<div class="report-summary-box">
+                        <div class="report-summary-box-label">${escapeHtml(lang === "km" ? "តាមស្ថានភាព" : "By Status")}</div>
+                        <div class="report-summary-box-value report-summary-box-value-list">${assetMasterStatusBreakdown
+                          .map((row) => `<div class="report-summary-entry">${escapeHtml(row.label)} = ${row.count}</div>`)
+                          .join("")}</div>
+                      </div>`
+                    : ""
+                }
               </div>
               <div class="report-summary-panel">
                 <div class="report-summary-panel-title">${escapeHtml(lang === "km" ? "សេចក្តីសង្ខេប" : "Breakdown")}</div>
@@ -64427,6 +64486,28 @@ function formatTicketRequestSource(value?: string) {
                     emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No item found."}
                   />
                   <SearchableMultiSelectPicker
+                    summary={statusFilterSummary}
+                    options={assetMasterStatusFilterOptions.map((status) => ({
+                      value: status,
+                      label: assetStatusLabel(status),
+                    }))}
+                    selectedValues={assetMasterStatusFilter}
+                    allOptionLabel={lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status"}
+                    allOptionChecked={assetMasterStatusFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetMasterStatusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetMasterStatusFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetMasterStatusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetMasterStatusFilterOptions)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកស្ថានភាព..." : "Search status..."}
+                    emptyText={lang === "km" ? "មិនមានស្ថានភាព" : "No status found."}
+                  />
+                  <SearchableMultiSelectPicker
                     summary={columnFilterSummary}
                     options={assetMasterColumnDefs.map((column) => ({
                       value: column.key,
@@ -64523,6 +64604,9 @@ function formatTicketRequestSource(value?: string) {
                 ) : null}
                 {assetMasterCampusBreakdownText ? (
                   <span> | <strong>By Campus:</strong> {assetMasterCampusBreakdownText}</span>
+                ) : null}
+                {assetMasterStatusBreakdownText ? (
+                  <span> | <strong>By Status:</strong> {assetMasterStatusBreakdownText}</span>
                 ) : null}
                 {isAirconAssetMasterReport && airconAssetMasterSummary.byType.length ? (
                   <span> | <strong>By AC Type:</strong> {airconAssetMasterSummary.byType.map(([name, count]) => `${name}: ${count}`).join(" | ")}</span>
