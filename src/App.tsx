@@ -592,6 +592,36 @@ type ToolReviewReport = {
   created: string;
   updated?: string;
 };
+function inferToolReviewActionFromValues(
+  countedQtyValue: number,
+  expectedQtyValue: number,
+  conditionValue: ToolReviewCondition,
+  noteValue: string
+): "good" | "add_more" | "take_out" {
+  const cleanNote = String(noteValue || "").toLowerCase();
+  if (
+    countedQtyValue > expectedQtyValue ||
+    cleanNote.includes("add stock") ||
+    cleanNote.includes("need add more") ||
+    cleanNote.includes("add more") ||
+    cleanNote.includes("ត្រូវបន្ថែម")
+  ) {
+    return "add_more";
+  }
+  if (
+    countedQtyValue < expectedQtyValue ||
+    conditionValue === "Damaged" ||
+    conditionValue === "Need Replacement" ||
+    conditionValue === "Missing" ||
+    cleanNote.includes("take out") ||
+    cleanNote.includes("broken / take out") ||
+    cleanNote.includes("take out stock") ||
+    cleanNote.includes("ដកចេញ")
+  ) {
+    return "take_out";
+  }
+  return "good";
+}
 type InventoryTxn = {
   id: number;
   itemId: number;
@@ -2546,13 +2576,6 @@ const INVENTORY_REPORT_TOOL_GROUPS: InventoryBusinessGroup[] = [
   "CLEAN_TOOL",
   "MAINT_TOOL",
   "GARDEN_TOOL",
-];
-const TOOL_REVIEW_CONDITION_OPTIONS: ToolReviewCondition[] = [
-  "Good",
-  "Fair",
-  "Damaged",
-  "Missing",
-  "Need Replacement",
 ];
 const DEFAULT_TOOL_OWNER_TYPE_OPTIONS: ToolOwnerTypeOption[] = [
   { value: "SCHOOL", label: "School" },
@@ -9727,10 +9750,17 @@ export default function App() {
       },
       reviewedEntry?: ToolReviewReport | null
     ) => {
+      const expectedQty = Number(row.currentStock || 0);
+      const countedQty = reviewedEntry ? Number(reviewedEntry.countedQty || 0) : expectedQty;
+      const action = reviewedEntry
+        ? inferToolReviewActionFromValues(countedQty, expectedQty, reviewedEntry.condition, reviewedEntry.note || "")
+        : "good";
       setToolReviewForm((prev) => ({
         ...prev,
         itemId: String(row.id),
-        countedQty: reviewedEntry ? String(reviewedEntry.countedQty) : String(Number(row.currentStock || 0)),
+        action,
+        countedQty: String(countedQty),
+        adjustQty: reviewedEntry && action !== "good" ? String(Math.abs(Math.round(countedQty - expectedQty))) : "",
         condition: reviewedEntry?.condition || "Good",
         supervisor: reviewedEntry?.supervisor || "",
         note: reviewedEntry?.note || "",
@@ -13376,7 +13406,9 @@ export default function App() {
   const [toolReviewModalOpen, setToolReviewModalOpen] = useState(false);
   const [toolReviewForm, setToolReviewForm] = useState({
     itemId: "",
+    action: "good" as "good" | "add_more" | "take_out",
     countedQty: "",
+    adjustQty: "",
     condition: "Good" as ToolReviewCondition,
     reviewedBy: "",
     supervisor: "",
@@ -15925,38 +15957,39 @@ export default function App() {
     if (!toolReviewSelectedItem) return "";
     const expectedQty = Math.max(0, Number(toolReviewSelectedItem.currentStock || 0));
     const countedQty = Number(toolReviewForm.countedQty || 0);
-    const note = String(toolReviewForm.note || "").toLowerCase();
-    if (toolReviewForm.condition === "Good" && countedQty === expectedQty) return "good";
-    if (toolReviewForm.condition === "Missing" || note.includes("need add more") || note.includes("ត្រូវបន្ថែម")) return "add_more";
-    if (
-      toolReviewForm.condition === "Damaged" ||
-      toolReviewForm.condition === "Need Replacement" ||
-      note.includes("broken / take out") ||
-      note.includes("ដកចេញ")
-    ) {
-      return "take_out";
+    if (toolReviewForm.action) {
+      return toolReviewForm.action;
     }
-    return "";
-  }, [toolReviewForm.condition, toolReviewForm.countedQty, toolReviewForm.note, toolReviewSelectedItem]);
+    return inferToolReviewActionFromValues(countedQty, expectedQty, toolReviewForm.condition, toolReviewForm.note);
+  }, [toolReviewForm.action, toolReviewForm.condition, toolReviewForm.countedQty, toolReviewForm.note, toolReviewSelectedItem]);
+  const toolReviewExpectedQty = useMemo(
+    () => Math.max(0, Number(toolReviewSelectedItem?.currentStock || 0)),
+    [toolReviewSelectedItem]
+  );
+  const toolReviewAdjustmentQty = useMemo(() => {
+    const rawQty = Number(toolReviewForm.adjustQty || 0);
+    if (!Number.isFinite(rawQty) || rawQty < 0) return 0;
+    return Math.round(rawQty);
+  }, [toolReviewForm.adjustQty]);
   const toolReviewPhotoRule = useMemo(() => {
     if (toolReviewQuickAction === "add_more") {
       return {
         required: true,
-        uploadTitle: lang === "km" ? "រូបភស្តុតាងបន្ថែម" : "Add More Proof",
+        uploadTitle: lang === "km" ? "រូបភស្តុតាងបន្ថែមស្តុក" : "Add Stock Proof",
         helper:
           lang === "km"
-            ? "ថតរូបបច្ចុប្បន្ន ដើម្បីបង្ហាញថាឧបករណ៍ខ្វះ ឬ ត្រូវបន្ថែម។"
-            : "Upload a current photo to show the tool is missing quantity and needs more items.",
+            ? "ថតរូបបច្ចុប្បន្ន ដើម្បីបង្ហាញថាបានបន្ថែមចំនួនឧបករណ៍នេះ។"
+            : "Upload a current photo to show that more quantity was added to this tool.",
       };
     }
     if (toolReviewQuickAction === "take_out") {
       return {
         required: true,
-        uploadTitle: lang === "km" ? "រូបភស្តុតាងខូច" : "Broken Proof",
+        uploadTitle: lang === "km" ? "រូបភស្តុតាងដកចេញ" : "Take Out Proof",
         helper:
           lang === "km"
-            ? "ថតរូបបច្ចុប្បន្ន ដើម្បីបង្ហាញថាឧបករណ៍ខូច ឬ ត្រូវដកចេញពីការប្រើ។"
-            : "Upload a current photo to show the tool is broken or should be removed from use.",
+            ? "ថតរូបបច្ចុប្បន្ន ដើម្បីបង្ហាញថាបានដកចេញ ឬ ឧបករណ៍ខូចត្រូវកាត់ចេញពីចំនួន។"
+            : "Upload a current photo to show some quantity was taken out because it is broken or removed from use.",
       };
     }
     return {
@@ -15964,8 +15997,8 @@ export default function App() {
       uploadTitle: lang === "km" ? "រូបថ្មី" : "New Photo",
       helper:
         lang === "km"
-          ? "សម្រាប់ការផ្ទៀងផ្ទាត់ធម្មតា រូបថ្មីអាចបញ្ចូលបន្ថែមបាន ប្រសិនបើចង់រក្សាកំណត់ត្រាថ្មី។"
-          : "For normal verification, a new photo is optional but helpful if you want an updated record.",
+          ? "សម្រាប់ Verify ធម្មតា សូមបញ្ជាក់ចំនួនពិត។ រូបថ្មីអាចបញ្ចូលបន្ថែមបាន ប្រសិនបើចង់រក្សាកំណត់ត្រាថ្មី។"
+          : "For normal verify, confirm the real amount. A new photo is optional if you want an updated record.",
     };
   }, [lang, toolReviewQuickAction]);
   const applyToolReviewQuickAction = useCallback(
@@ -15976,10 +16009,14 @@ export default function App() {
         if (action === "good") {
           return {
             ...prev,
+            action,
             countedQty: String(expectedQty),
+            adjustQty: "",
             condition: "Good",
             note:
+              prev.note.includes("Add stock") ||
               prev.note.includes("Need add more") ||
+              prev.note.includes("Take out stock") ||
               prev.note.includes("Broken / take out") ||
               prev.note.includes("ត្រូវបន្ថែម") ||
               prev.note.includes("ដកចេញ")
@@ -15988,18 +16025,27 @@ export default function App() {
           };
         }
         if (action === "add_more") {
+          const nextAdjustQty = Math.max(1, Math.round(Number(prev.adjustQty || 0) || Math.max(Number(prev.countedQty || 0) - expectedQty, 1)));
           return {
             ...prev,
-            countedQty: prev.countedQty || String(Math.max(expectedQty - 1, 0)),
-            condition: "Missing",
-            note: prev.note.trim() || (lang === "km" ? "ត្រូវបន្ថែមចំនួន: ____ pcs" : "Need add more: ____ pcs"),
+            action,
+            countedQty: String(expectedQty + nextAdjustQty),
+            adjustQty: String(nextAdjustQty),
+            condition: "Good",
+            note: prev.note.trim() || (lang === "km" ? "បន្ថែមស្តុកចំនួន: ____ pcs" : "Add stock: ____ pcs"),
           };
         }
+        const nextAdjustQty = Math.max(
+          1,
+          Math.round(Number(prev.adjustQty || 0) || Math.max(expectedQty - Number(prev.countedQty || expectedQty), 1))
+        );
         return {
           ...prev,
-          countedQty: prev.countedQty || String(Math.max(expectedQty - 1, 0)),
+          action,
+          countedQty: String(Math.max(expectedQty - nextAdjustQty, 0)),
+          adjustQty: String(nextAdjustQty),
           condition: expectedQty <= 1 ? "Need Replacement" : "Damaged",
-          note: prev.note.trim() || (lang === "km" ? "ខូច / ដកចេញពីការប្រើ: ____ pcs" : "Broken / take out from use: ____ pcs"),
+          note: prev.note.trim() || (lang === "km" ? "ដកចេញពីស្តុក: ____ pcs" : "Take out stock: ____ pcs"),
         };
       });
     },
@@ -19376,16 +19422,27 @@ export default function App() {
             : prev.countedQty;
         return {
           ...prev,
+          action: "good",
           countedQty: defaultQty,
+          adjustQty: "",
           condition: "Good",
           supervisor: "",
           note: "",
           photo: "",
         };
       }
+      const expectedQty = toolReviewSelectedItem && String(toolReviewSelectedItem.id) === selectedItemId ? Number(toolReviewSelectedItem.currentStock || 0) : Number(toolReviewExistingEntry.expectedQty || 0);
+      const countedQty = Number(toolReviewExistingEntry.countedQty ?? 0);
+      const action = inferToolReviewActionFromValues(countedQty, expectedQty, toolReviewExistingEntry.condition, toolReviewExistingEntry.note || "");
+      const adjustQty =
+        action === "good"
+          ? ""
+          : String(Math.max(0, Math.abs(Math.round(countedQty - expectedQty))));
       return {
         ...prev,
+        action,
         countedQty: String(toolReviewExistingEntry.countedQty ?? ""),
+        adjustQty,
         condition: toolReviewExistingEntry.condition,
         reviewedBy: toolReviewExistingEntry.reviewedBy || prev.reviewedBy,
         supervisor: toolReviewExistingEntry.supervisor || "",
@@ -19394,6 +19451,21 @@ export default function App() {
       };
     });
   }, [toolReviewExistingEntry, toolReviewForm.itemId, toolReviewSelectedItem]);
+  useEffect(() => {
+    if (!toolReviewSelectedItem) return;
+    setToolReviewForm((prev) => {
+      const action = prev.action || "good";
+      if (action === "good") return prev;
+      const adjustQty = Math.max(0, Math.round(Number(prev.adjustQty || 0) || 0));
+      const nextCountedQty = action === "add_more" ? toolReviewExpectedQty + adjustQty : Math.max(toolReviewExpectedQty - adjustQty, 0);
+      const nextCountedQtyText = String(nextCountedQty);
+      if (prev.countedQty === nextCountedQtyText) return prev;
+      return {
+        ...prev,
+        countedQty: nextCountedQtyText,
+      };
+    });
+  }, [toolReviewExpectedQty, toolReviewSelectedItem, toolReviewForm.action, toolReviewForm.adjustQty]);
   useEffect(() => {
     if (inventoryCodeManual) return;
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
@@ -25579,6 +25651,89 @@ export default function App() {
     },
     [toolReviewReports]
   );
+  const saveToolReviewStockAdjustment = useCallback(
+    async (selectedItem: NonNullable<typeof toolReviewSelectedItem>, nextEntry: ToolReviewReport) => {
+      const expectedQty = Math.max(0, Number(selectedItem.currentStock || 0));
+      const countedQty = Math.max(0, Math.round(Number(nextEntry.countedQty || 0)));
+      const diff = countedQty - expectedQty;
+      if (!diff) return { ok: true };
+
+      const type: InventoryTxn["type"] = diff > 0 ? "IN" : "OUT";
+      const qty = Math.abs(diff);
+      const txDate = toYmd(new Date());
+      const reviewedBy = String(nextEntry.reviewedBy || "").trim();
+      const cleanNote = String(nextEntry.note || "").trim();
+      const baseNote =
+        `${lang === "km" ? "កែសម្រួលស្តុកពី Verify Tool" : "Tool verification stock adjustment"} (${nextEntry.month}) | ` +
+        `${expectedQty} -> ${countedQty} ${nextEntry.unit || "pcs"} | ${nextEntry.condition}`;
+      const fullNote = cleanNote ? `${baseNote} | ${cleanNote}` : baseNote;
+      const cleanedPhoto = String(nextEntry.photo || "").trim();
+
+      const draftTxn: InventoryTxn = {
+        id: Date.now(),
+        itemId: selectedItem.id,
+        campus: selectedItem.campus,
+        itemCode: selectedItem.itemCode,
+        itemName: selectedItem.itemName,
+        date: txDate,
+        created: new Date().toISOString(),
+        type,
+        qty,
+        by: reviewedBy,
+        note: fullNote,
+        fromCampus: selectedItem.campus,
+        toCampus: selectedItem.campus,
+        photo: cleanedPhoto,
+        approvalStatus: "APPROVED",
+        approvalRequestedBy: "",
+        approvalRequestedAt: "",
+        approvalDecisionBy: authUser?.displayName || authUser?.username || reviewedBy,
+        approvalDecisionAt: new Date().toISOString(),
+        approvalDecisionNote: "",
+      };
+
+      try {
+        const res = await requestJson<{ txn?: InventoryTxn; txns?: InventoryTxn[] }>("/api/inventory/txns", {
+          method: "POST",
+          body: JSON.stringify({
+            itemId: selectedItem.id,
+            date: txDate,
+            type,
+            qty,
+            by: reviewedBy,
+            note: fullNote,
+            photo: cleanedPhoto,
+            approvalStatus: "APPROVED",
+            approvalRequestedBy: "",
+            approvalRequestedAt: "",
+            approvalDecisionBy: authUser?.displayName || authUser?.username || reviewedBy,
+            approvalDecisionAt: new Date().toISOString(),
+            approvalDecisionNote: "",
+          }),
+        });
+        const savedTxns = (Array.isArray(res.txns) && res.txns.length ? res.txns : (res.txn ? [res.txn] : [])).filter(Boolean) as InventoryTxn[];
+        if (!savedTxns.length) throw new Error("No inventory transaction returned.");
+        setInventoryTxns((prev) => {
+          const exclude = new Set(savedTxns.map((entry) => entry.id));
+          return [...savedTxns, ...prev.filter((entry) => !exclude.has(entry.id))];
+        });
+        for (const savedTxn of savedTxns) {
+          appendUiAudit("CREATE", "inventory_txn", `${savedTxn.itemCode}-${savedTxn.id}`, `${savedTxn.type} ${savedTxn.qty} ${nextEntry.unit || "pcs"} | tool review`);
+        }
+        return { ok: true };
+      } catch (err) {
+        if (!isMissingRouteError(err)) {
+          throw err;
+        }
+        const nextTxns = [draftTxn, ...inventoryTxns];
+        setInventoryTxns(nextTxns);
+        void persistInventorySettings(inventoryItems, nextTxns, toolReviewReports);
+        appendUiAudit("CREATE", "inventory_txn", `${draftTxn.itemCode}-${draftTxn.id}`, `${draftTxn.type} ${draftTxn.qty} ${nextEntry.unit || "pcs"} | tool review`);
+        return { ok: true };
+      }
+    },
+    [authUser?.displayName, authUser?.username, appendUiAudit, inventoryItems, inventoryTxns, lang, persistInventorySettings, toolReviewReports]
+  );
 
   async function saveToolReviewReport() {
     if (!requireAdminAction()) return;
@@ -25588,6 +25743,7 @@ export default function App() {
       return;
     }
     const countedQty = Number(toolReviewForm.countedQty || 0);
+    const adjustQty = Math.max(0, Number(toolReviewForm.adjustQty || 0));
     const reviewedBy = String(toolReviewForm.reviewedBy || "").trim();
     const supervisor = String(toolReviewForm.supervisor || "").trim();
     if (!toolReviewMonth) {
@@ -25596,6 +25752,10 @@ export default function App() {
     }
     if (!Number.isFinite(countedQty) || countedQty < 0) {
       setError("Counted quantity must be 0 or higher.");
+      return;
+    }
+    if ((toolReviewQuickAction === "add_more" || toolReviewQuickAction === "take_out") && (!Number.isFinite(adjustQty) || adjustQty <= 0)) {
+      setError(toolReviewQuickAction === "add_more" ? "Please enter how many pieces were added." : "Please enter how many pieces were taken out.");
       return;
     }
     if (!reviewedBy) {
@@ -25650,10 +25810,22 @@ export default function App() {
         nextEntry.itemCode,
         `${nextEntry.month} | ${nextEntry.condition} | ${nextEntry.reviewedBy}`
       );
+      try {
+        await saveToolReviewStockAdjustment(selectedItem, nextEntry);
+      } catch (stockErr) {
+        setError(
+          stockErr instanceof Error
+            ? `${lang === "km" ? "បានរក្សាទុករបាយការណ៍ហើយ ប៉ុន្តែមិនអាចកែសម្រួលស្តុកបាន" : "Report saved, but stock amount could not be updated"}: ${stockErr.message}`
+            : (lang === "km" ? "បានរក្សាទុករបាយការណ៍ហើយ ប៉ុន្តែមិនអាចកែសម្រួលស្តុកបាន" : "Report saved, but stock amount could not be updated")
+        );
+        return;
+      }
       setToolReviewModalOpen(false);
       setToolReviewForm((prev) => ({
         ...prev,
+        action: "good",
         countedQty: "",
+        adjustQty: "",
         condition: "Good",
         supervisor: "",
         note: "",
@@ -72167,11 +72339,11 @@ function formatTicketRequestSource(value?: string) {
                 <div className="tool-review-modal-main">
                   <div className="tool-review-quick-actions">
                     <div className="tool-review-quick-actions-head">
-                      <strong>{lang === "km" ? "ជ្រើសរើសលឿន" : "Quick Decision"}</strong>
+                      <strong>{lang === "km" ? "ជ្រើសរើសលឿន" : "Quick Action"}</strong>
                       <span className="tool-review-quick-actions-copy">
                         {lang === "km"
-                          ? "ជ្រើសប៊ូតុងមួយ មុនពេលកែចំនួន ឬ កំណត់ចំណាំ។"
-                          : "Choose one button first, then only adjust amount or note if needed."}
+                          ? "ជ្រើស Verify, Add Stock, ឬ Take Out Stock មុនពេលកែចំនួន ឬ កំណត់ចំណាំ។"
+                          : "Choose Verify, Add Stock, or Take Out Stock first, then adjust amount or note if needed."}
                       </span>
                     </div>
                     <div className="tool-review-quick-actions-grid">
@@ -72182,8 +72354,8 @@ function formatTicketRequestSource(value?: string) {
                       >
                         <span className="tool-review-quick-action-icon" aria-hidden="true">✓</span>
                         <div className="tool-review-quick-action-copy-block">
-                          <strong>{lang === "km" ? "ល្អ" : "Good"}</strong>
-                          <span>{lang === "km" ? "ចំនួនគ្រប់ និង ប្រើបាន" : "Amount is complete and usable."}</span>
+                          <strong>{lang === "km" ? "Verify" : "Verify"}</strong>
+                          <span>{lang === "km" ? "បញ្ជាក់ចំនួនពិតដែលមានឥឡូវនេះ" : "Confirm the real amount currently available."}</span>
                         </div>
                       </button>
                       <button
@@ -72193,8 +72365,8 @@ function formatTicketRequestSource(value?: string) {
                       >
                         <span className="tool-review-quick-action-icon" aria-hidden="true">+</span>
                         <div className="tool-review-quick-action-copy-block">
-                          <strong>{lang === "km" ? "ត្រូវបន្ថែម" : "Need Add More"}</strong>
-                          <span>{lang === "km" ? "ខ្វះចំនួន ឬ មិនគ្រប់ប្រើ" : "Missing quantity or not enough to use."}</span>
+                          <strong>{lang === "km" ? "បន្ថែមស្តុក" : "Add Stock"}</strong>
+                          <span>{lang === "km" ? "បន្ថែមចំនួនឧបករណ៍នេះទៅក្នុងស្តុក" : "Increase the amount of this tool."}</span>
                         </div>
                       </button>
                       <button
@@ -72204,41 +72376,63 @@ function formatTicketRequestSource(value?: string) {
                       >
                         <span className="tool-review-quick-action-icon" aria-hidden="true">!</span>
                         <div className="tool-review-quick-action-copy-block">
-                          <strong>{lang === "km" ? "ខូច / ដកចេញ" : "Broken / Take Out"}</strong>
-                          <span>{lang === "km" ? "ខូច ហើយត្រូវដកចេញពីការប្រើ" : "Damaged and should be removed from use."}</span>
+                          <strong>{lang === "km" ? "ដកចេញពីស្តុក" : "Take Out Stock"}</strong>
+                          <span>{lang === "km" ? "កាត់បន្ថយចំនួន ព្រោះខូច ឬ ដកចេញពីការប្រើ" : "Decrease the amount because it is broken or removed from use."}</span>
                         </div>
                       </button>
                     </div>
                   </div>
 
                   <div className="form-grid tool-review-form-grid">
-                    <div className="tool-review-compact-row tool-review-compact-row-triple">
+                    <div className={`tool-review-compact-row ${toolReviewQuickAction !== "good" ? "tool-review-compact-row-triple" : ""}`}>
                       <label className="field tool-review-field-centered">
-                        <span>{lang === "km" ? "ចំនួនពិត" : "Real Amount"}</span>
-                        <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
+                        <span>
+                          {toolReviewQuickAction === "good"
+                            ? (lang === "km" ? "ចំនួនពិត" : "Real Amount")
+                            : (lang === "km" ? "ចំនួនដើម" : "Beginning Amount")}
+                        </span>
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          value={toolReviewQuickAction === "good" ? toolReviewForm.countedQty : String(toolReviewExpectedQty)}
+                          readOnly={toolReviewQuickAction !== "good"}
+                          onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))}
+                        />
                       </label>
-                      <label className="field tool-review-field-centered">
-                        <span>{lang === "km" ? "ស្ថានភាព" : "Condition"}</span>
-                        <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
-                          {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
-                            <option key={`tool-review-modal-condition-${option}`} value={option}>
-                              {lang === "km"
-                                ? ({
-                                    Good: "ល្អ",
-                                    Fair: "មធ្យម",
-                                    Damaged: "ខូច",
-                                    Missing: "បាត់",
-                                    "Need Replacement": "ត្រូវប្តូរ",
-                                  } as Record<string, string>)[option] || option
-                                : option}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="field tool-review-field-centered">
-                        <span>{lang === "km" ? "ពិនិត្យដោយ" : "Reviewed By"}</span>
-                        <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
-                      </label>
+                      {toolReviewQuickAction !== "good" ? (
+                        <>
+                          <label className="field tool-review-field-centered">
+                            <span>
+                              {toolReviewQuickAction === "add_more"
+                                ? (lang === "km" ? "ចំនួនបន្ថែម" : "Add Qty")
+                                : (lang === "km" ? "ចំនួនដកចេញ" : "Take Out Qty")}
+                            </span>
+                            <input
+                              className="input"
+                              type="number"
+                              min="0"
+                              value={toolReviewForm.adjustQty}
+                              onChange={(e) => {
+                                const rawValue = e.target.value;
+                                setToolReviewForm((prev) => {
+                                  const cleanValue = rawValue === "" ? "" : String(Math.max(0, Math.round(Number(rawValue) || 0)));
+                                  return {
+                                    ...prev,
+                                    adjustQty: cleanValue,
+                                  };
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>{lang === "km" ? "សេចក្ដីសង្ខេបស្តុក" : "Stock Summary"}</span>
+                            <div className="detail-value">
+                              {`${Number(toolReviewForm.countedQty || 0)} ${toolReviewSelectedItem?.unit || "pcs"}`}
+                            </div>
+                          </label>
+                        </>
+                      ) : null}
                     </div>
                   </div>
 
@@ -72316,6 +72510,15 @@ function formatTicketRequestSource(value?: string) {
                       setToolReviewForm((prev) => ({ ...prev, note: e.target.value }));
                     }}
                     placeholder={lang === "km" ? "បាត់គ្រឿងបន្លាស់ ខូច ឬ ត្រូវប្តូរ..." : "Missing pieces, damaged parts, replacement needed..."}
+                  />
+                </label>
+
+                <label className="field tool-review-reviewed-by-field tool-review-field-centered">
+                  <span>{lang === "km" ? "ពិនិត្យដោយ" : "Reviewed By"}</span>
+                  <input
+                    className="input"
+                    value={toolReviewForm.reviewedBy}
+                    onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))}
                   />
                 </label>
 

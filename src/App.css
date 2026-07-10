@@ -12625,12 +12625,18 @@ label.backup-action-btn {
 
 .tool-review-note-submit-row {
   display: grid;
-  grid-template-columns: minmax(0, 4fr) minmax(160px, 1fr);
+  grid-template-columns: minmax(0, 7fr) minmax(120px, 1fr) minmax(160px, 2fr);
   gap: 12px;
   align-items: end;
 }
 
 .tool-review-note-field {
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.tool-review-reviewed-by-field {
   margin: 0;
   min-width: 0;
   width: 100%;
@@ -12965,7 +12971,7 @@ label.backup-action-btn {
 }
 
 .tool-review-modal-panel .tool-review-note-submit-row {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 7fr) minmax(120px, 1fr) minmax(160px, 2fr);
   gap: 10px;
 }
 
