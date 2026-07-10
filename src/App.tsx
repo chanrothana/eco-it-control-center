@@ -15818,31 +15818,6 @@ export default function App() {
       return true;
     });
   }, [inventoryItemRows, inventoryToolListAreaFilter, inventoryToolListLocationFilter, inventoryToolListStatusFilter]);
-  const inventoryToolListSummary = useMemo(() => {
-    const locations = new Set<string>();
-    let totalUnits = 0;
-    let lowRows = 0;
-    let zeroRows = 0;
-
-    for (const row of inventoryToolListRows) {
-      totalUnits += Number(row.currentStock || 0);
-      if (row.currentStock <= 0) {
-        zeroRows += 1;
-      } else if (row.currentStock <= Number(row.minStock || 0)) {
-        lowRows += 1;
-      }
-      const location = String(row.location || "").trim();
-      if (location) locations.add(location);
-    }
-
-    return {
-      totalTypes: inventoryToolListRows.length,
-      totalUnits,
-      lowRows,
-      zeroRows,
-      locations: locations.size,
-    };
-  }, [inventoryToolListRows]);
   const latestToolReviewByItemId = useMemo(() => {
     const map = new Map<number, ToolReviewReport>();
     for (const row of toolReviewReports) {
@@ -15858,14 +15833,29 @@ export default function App() {
     return map;
   }, [toolReviewReports]);
   const toolReviewItemOptions = useMemo(() => {
+    const query = inventoryItemFilterQuery.trim().toLowerCase();
     return inventoryBalanceRows
       .filter((row) => inventoryBusinessGroupValue(row) === inventoryDashboardGroup)
       .filter((row) => inventoryToolGroupNeedsMonthlyReview(inventoryBusinessGroupValue(row)))
       .filter((row) => (toolReviewCampusFilter === "ALL" ? true : String(row.campus || "").trim() === toolReviewCampusFilter))
       .filter((row) => (toolReviewAreaFilter === "ALL" ? true : String(row.area || "").trim() === toolReviewAreaFilter))
       .filter((row) => (toolReviewLocationFilter === "ALL" ? true : String(row.location || "").trim() === toolReviewLocationFilter))
+      .filter((row) => {
+        if (!query) return true;
+        const text = [
+          row.itemCode,
+          row.itemName,
+          inventoryDisplayName(row.itemName, lang),
+          row.campus,
+          row.area,
+          row.location,
+        ]
+          .map((value) => String(value || "").toLowerCase())
+          .join(" ");
+        return text.includes(query);
+      })
       .sort((a, b) => a.itemCode.localeCompare(b.itemCode));
-  }, [inventoryBalanceRows, inventoryDashboardGroup, toolReviewCampusFilter, toolReviewAreaFilter, toolReviewLocationFilter]);
+  }, [inventoryBalanceRows, inventoryDashboardGroup, inventoryDisplayName, inventoryItemFilterQuery, lang, toolReviewCampusFilter, toolReviewAreaFilter, toolReviewLocationFilter]);
   const toolReviewSelectedItem = useMemo(() => {
     const selectedItemId = String(toolReviewForm.itemId || "").trim();
     if (!selectedItemId) return null;
@@ -53452,15 +53442,6 @@ function formatTicketRequestSource(value?: string) {
                     <span>Group</span>
                     <div className="detail-value">{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</div>
                   </label>
-                  <label className="field field-wide">
-                    <span>Search</span>
-                    <input
-                      className="input"
-                      placeholder="Search code, name, location, unit, vendor..."
-                      value={inventoryItemFilterQuery}
-                      onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
-                    />
-                  </label>
                 </div>
 
                 <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
@@ -53808,29 +53789,6 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 </div>
 
-                <div className="stats-grid inventory-tool-list-stats">
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-neutral">
-                    <div className="stat-label">{inventoryDashboardGroup === "CLEAN_TOOL" ? "Cleaning Tool Types" : "Maintenance Tool Types"}</div>
-                    <div className="stat-value">{inventoryToolListSummary.totalTypes}</div>
-                  </div>
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-primary">
-                    <div className="stat-label">Units Available</div>
-                    <div className="stat-value">{inventoryToolListSummary.totalUnits}</div>
-                  </div>
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-alert">
-                    <div className="stat-label">Low Coverage</div>
-                    <div className="stat-value">{inventoryToolListSummary.lowRows}</div>
-                  </div>
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-danger">
-                    <div className="stat-label">Zero Available</div>
-                    <div className="stat-value">{inventoryToolListSummary.zeroRows}</div>
-                  </div>
-                  <div className="stat-card inventory-admin-stat-card inventory-admin-stat-card-secondary">
-                    <div className="stat-label">Locations</div>
-                    <div className="stat-value">{inventoryToolListSummary.locations}</div>
-                  </div>
-                </div>
-
                 <div className="panel-filters inventory-tool-list-filter-bar">
                   <label className="field">
                     <span>{t.campus}</span>
@@ -54033,6 +53991,15 @@ function formatTicketRequestSource(value?: string) {
                       />
                     </label>
                   ) : null}
+                  <label className="field field-wide">
+                    <span>Search</span>
+                    <input
+                      className="input"
+                      placeholder="Search code, tool name, location, supervisor..."
+                      value={inventoryItemFilterQuery}
+                      onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
+                    />
+                  </label>
                 </div>
 
                 <article className="panel inventory-daily-gallery-panel tool-review-gallery-panel">
