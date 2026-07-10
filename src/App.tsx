@@ -63,6 +63,15 @@ const DEFAULT_CLASSROOM_IMAGE_URL = publicAssetUrl("/classroom-default.svg");
 const MAINTENANCE_NOTIFICATION_READ_FALLBACK_KEY = "maintenance_notification_read_map_v1";
 const ASSET_DATA_REQUEST_TIMEOUT_MS = 45000;
 const TONER_OLD_STATUS_OPTIONS = ["Empty", "Low", "Leaking", "Defective"] as const;
+const SCHEDULE_GROUP_PRESET_OPTIONS = [
+  { value: "", en: "Auto by asset type", km: "ស្វ័យប្រវត្តិតាមប្រភេទទ្រព្យ" },
+  { value: "Computer Maintenance", en: "Computer Maintenance", km: "កាលវិភាគថែទាំកុំព្យូទ័រ" },
+  { value: "Safety Maintenance", en: "Safety Maintenance", km: "កាលវិភាគថែទាំសុវត្ថិភាព" },
+  { value: "Internet / CCTV Maintenance", en: "Internet / CCTV Maintenance", km: "កាលវិភាគអ៊ីនធឺណិត / CCTV" },
+  { value: "Air-Con Maintenance", en: "Air-Con Maintenance", km: "កាលវិភាគម៉ាស៊ីនត្រជាក់" },
+  { value: "General Maintenance", en: "General Maintenance", km: "កាលវិភាគថែទាំទូទៅ" },
+  { value: "Report Schedule", en: "Report Schedule", km: "កាលវិភាគរបាយការណ៍" },
+] as const;
 
 type Asset = {
   id: number;
@@ -99,6 +108,7 @@ type Asset = {
   nextVerificationDate?: string;
   verificationFrequency?: "NONE" | "MONTHLY" | "TERMLY";
   scheduleNote?: string;
+  scheduleGroup?: string;
   repeatMode?: "NONE" | "MONTHLY_WEEKDAY" | "EVERY_6_MONTHS" | "EVERY_12_MONTHS" | "WDP_FILTER_CYCLE";
   repeatWeekOfMonth?: number;
   repeatWeekday?: number;
@@ -382,6 +392,7 @@ type ReportType =
   | "asset_by_location"
   | "furniture_control"
   | "inventory_balance"
+  | "schedule_calendar"
   | "overdue"
   | "transfer"
   | "staff_borrowing"
@@ -1521,7 +1532,7 @@ const DUPLICATE_PHOTO_UPLOAD_ERROR = "duplicate-photo-upload";
 const PHOTO_USAGE_FIELD_KEYS = new Set(["photo", "photos", "beforePhotos", "afterPhotos"]);
 const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
   asset: ["asset_full_record", "asset_master", "set_code", "asset_by_location", "furniture_control", "staff_borrowing", "qr_labels"],
-  maintenance: ["maintenance_completion", "overdue"],
+  maintenance: ["schedule_calendar", "maintenance_completion", "overdue"],
   inventory: ["inventory_balance"],
   transfer: ["transfer"],
   verification: ["verification_summary"],
@@ -1534,6 +1545,7 @@ const REPORT_TYPE_SECTION_MAP: Record<ReportType, ReportSection> = {
   asset_by_location: "asset",
   furniture_control: "asset",
   inventory_balance: "inventory",
+  schedule_calendar: "maintenance",
   overdue: "maintenance",
   transfer: "transfer",
   staff_borrowing: "asset",
@@ -1986,6 +1998,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.asset_by_location", labelEn: "Asset by Campus and Location", labelKm: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
       { key: "reports.furniture_control", labelEn: "Chair/Table Control", labelKm: "គ្រប់គ្រងកៅអី និងតុ" },
       { key: "reports.inventory_balance", labelEn: "Inventory Stock Balance", labelKm: "សមតុល្យស្តុក" },
+      { key: "reports.schedule_calendar", labelEn: "Maintenance Schedule Calendar", labelKm: "ប្រតិទិនកាលវិភាគថែទាំ" },
       { key: "reports.overdue", labelEn: "Overdue Maintenance", labelKm: "ថែទាំលើសកាលកំណត់" },
       { key: "reports.transfer", labelEn: "Asset Transfer Log", labelKm: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
       { key: "reports.staff_borrowing", labelEn: "Staff Asset Assignment List", labelKm: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
@@ -9724,11 +9737,9 @@ export default function App() {
         photo: reviewedEntry?.photo || "",
       }));
       setToolReviewPhotoName("");
-      if (maintenanceQuickMode) {
-        setToolReviewModalOpen(true);
-      }
+      setToolReviewModalOpen(true);
     },
-    [maintenanceQuickMode]
+    []
   );
   const handleNavChange = useCallback((nextTab: NavModule) => {
     startTabTransition(() => {
@@ -10804,11 +10815,14 @@ export default function App() {
   const [quickCountQuery, setQuickCountQuery] = useState("");
   const [dashboardQuickCountOpen, setDashboardQuickCountOpen] = useState(true);
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [reportScheduleMonth, setReportScheduleMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [reportDateFrom, setReportDateFrom] = useState(() => `${toYmd(new Date()).slice(0, 7)}-01`);
   const [reportDateTo, setReportDateTo] = useState(() => {
     const now = new Date();
     return toYmd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   });
+  const [reportScheduleCampusFilter, setReportScheduleCampusFilter] = useState("ALL");
+  const [reportScheduleGroupFilter, setReportScheduleGroupFilter] = useState("ALL");
   const [reportMaintenanceCampusFilter, setReportMaintenanceCampusFilter] = useState("ALL");
   const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
   const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
@@ -13203,6 +13217,7 @@ export default function App() {
     assetId: "",
     date: "",
     note: "",
+    group: "",
     repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
@@ -13225,11 +13240,13 @@ export default function App() {
     assetId: "",
     date: toYmd(new Date()),
     note: "",
+    group: "",
     repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
     repeatCycleStep: 1,
   });
+  const [scheduleGroupFilter, setScheduleGroupFilter] = useState("ALL");
   const [scheduleQuickFilterCampus, setScheduleQuickFilterCampus] = useState("ALL");
   const [scheduleQuickFilterLocation, setScheduleQuickFilterLocation] = useState("ALL");
   const [scheduleQuickFilterCategory, setScheduleQuickFilterCategory] = useState("ALL");
@@ -13246,6 +13263,7 @@ export default function App() {
     type: "FE",
     date: "",
     note: "",
+    group: "",
     repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
@@ -13355,25 +13373,6 @@ export default function App() {
   const [toolReviewPhotoFileKey, setToolReviewPhotoFileKey] = useState(0);
   const [toolReviewPhotoName, setToolReviewPhotoName] = useState("");
   const [toolReviewModalOpen, setToolReviewModalOpen] = useState(false);
-  const [toolReviewSummaryModal, setToolReviewSummaryModal] = useState<null | {
-    title: string;
-    items: Array<{
-      id: number;
-      itemCode: string;
-      itemName: string;
-      campus: string;
-      location: string;
-      currentStock: number;
-      unit: string;
-      photo: string;
-      responsibleParty: string;
-      condition: string;
-      reviewedBy: string;
-      reviewedAt: string;
-      note: string;
-      status: "reviewed" | "pending" | "issue";
-    }>;
-  }>(null);
   const [toolReviewForm, setToolReviewForm] = useState({
     itemId: "",
     countedQty: "",
@@ -15059,6 +15058,49 @@ export default function App() {
     },
     [itemNames, lang, allTypeOptions]
   );
+  const scheduleGroupOptionLabel = useCallback(
+    (value?: string) => {
+      const normalized = String(value || "").trim();
+      const option = SCHEDULE_GROUP_PRESET_OPTIONS.find((item) => item.value === normalized);
+      if (option) return lang === "km" ? option.km : option.en;
+      return normalized || (lang === "km" ? "កាលវិភាគថែទាំទូទៅ" : "General Maintenance");
+    },
+    [lang]
+  );
+  const inferScheduleGroupValue = useCallback(
+    (asset: Pick<Asset, "category" | "type" | "pcType" | "scheduleGroup">) => {
+      const saved = String(asset.scheduleGroup || "").trim();
+      if (saved) return saved;
+      const category = String(asset.category || "").trim().toUpperCase();
+      const type = String(asset.type || "").trim().toUpperCase();
+      const itemName = assetItemName(category, type, asset.pcType || "").toLowerCase();
+      if (category === "FACILITY" && type === "AC") return "Air-Con Maintenance";
+      if (category === "SAFETY") return "Safety Maintenance";
+      if (
+        ["CAM", "DVR", "NVR", "RTR", "SWT", "AP", "WAP", "WFI", "WFC", "TEL", "PAB"].includes(type) ||
+        /cctv|camera|internet|network|router|switch|access point|wifi|nvr|dvr/.test(itemName)
+      ) {
+        return "Internet / CCTV Maintenance";
+      }
+      if (
+        category === "IT" &&
+        (type === "PC" ||
+          type === "LAP" ||
+          type === "TAB" ||
+          type === "PRN" ||
+          /computer|desktop|laptop|printer|monitor|tablet|mini pc|imac|mac mini/.test(itemName))
+      ) {
+        return "Computer Maintenance";
+      }
+      return "General Maintenance";
+    },
+    [assetItemName]
+  );
+  const assetScheduleGroupLabel = useCallback(
+    (asset: Pick<Asset, "category" | "type" | "pcType" | "scheduleGroup">) =>
+      scheduleGroupOptionLabel(inferScheduleGroupValue(asset)),
+    [inferScheduleGroupValue, scheduleGroupOptionLabel]
+  );
   const reportCategoryLabel = useCallback(
     (category: string) => {
       const row = CATEGORY_OPTIONS.find((item) => item.value === category);
@@ -15836,51 +15878,6 @@ export default function App() {
       issues,
     };
   }, [toolReviewItemOptions, toolReviewMonthReports]);
-  function openToolReviewSummaryModal(mode: "all" | "reviewed" | "pending" | "issues") {
-    const issueConditions = new Set<ToolReviewCondition>(["Damaged", "Missing", "Need Replacement"]);
-    const items = toolReviewItemOptions
-      .map((row) => {
-        const reviewedEntry = toolReviewMonthReportByItemId.get(String(row.id)) || null;
-        const status: "reviewed" | "pending" | "issue" = !reviewedEntry
-          ? "pending"
-          : issueConditions.has(reviewedEntry.condition)
-            ? "issue"
-            : "reviewed";
-        return {
-          id: Number(row.id || 0),
-          itemCode: String(row.itemCode || "").trim(),
-          itemName: inventoryDisplayName(row.itemName || "-", lang),
-          campus: String(row.campus || "").trim(),
-          location: String(row.location || "").trim(),
-          currentStock: Number(row.currentStock || 0),
-          unit: String(row.unit || "pcs").trim(),
-          photo: String(row.photo || "").trim(),
-          responsibleParty: String(row.responsibleParty || "").trim(),
-          condition: reviewedEntry?.condition || "Pending",
-          reviewedBy: String(reviewedEntry?.reviewedBy || "").trim(),
-          reviewedAt: String(reviewedEntry?.updated || reviewedEntry?.created || "").trim(),
-          note: String(reviewedEntry?.note || "").trim(),
-          status,
-        };
-      })
-      .filter((row) => {
-        if (mode === "all") return true;
-        if (mode === "reviewed") return row.status === "reviewed" || row.status === "issue";
-        if (mode === "pending") return row.status === "pending";
-        return row.status === "issue";
-      });
-
-    const title =
-      mode === "all"
-        ? "Tools In Scope"
-        : mode === "reviewed"
-          ? "Reviewed Tools"
-          : mode === "pending"
-            ? "Pending Tools"
-            : "Tools With Issues";
-
-    setToolReviewSummaryModal({ title, items });
-  }
   const toolReviewExistingEntry = useMemo(
     () =>
       toolReviewForm.itemId
@@ -15923,6 +15920,90 @@ export default function App() {
     if (setupPhoto) return setupPhoto;
     return "";
   }, [toolReviewPreviousEntry, toolReviewSelectedItem]);
+  const toolReviewQuickAction = useMemo(() => {
+    if (!toolReviewSelectedItem) return "";
+    const expectedQty = Math.max(0, Number(toolReviewSelectedItem.currentStock || 0));
+    const countedQty = Number(toolReviewForm.countedQty || 0);
+    const note = String(toolReviewForm.note || "").toLowerCase();
+    if (toolReviewForm.condition === "Good" && countedQty === expectedQty) return "good";
+    if (toolReviewForm.condition === "Missing" || note.includes("need add more") || note.includes("ត្រូវបន្ថែម")) return "add_more";
+    if (
+      toolReviewForm.condition === "Damaged" ||
+      toolReviewForm.condition === "Need Replacement" ||
+      note.includes("broken / take out") ||
+      note.includes("ដកចេញ")
+    ) {
+      return "take_out";
+    }
+    return "";
+  }, [toolReviewForm.condition, toolReviewForm.countedQty, toolReviewForm.note, toolReviewSelectedItem]);
+  const toolReviewPhotoRule = useMemo(() => {
+    if (toolReviewQuickAction === "add_more") {
+      return {
+        required: true,
+        uploadTitle: lang === "km" ? "រូបភស្តុតាងបន្ថែម" : "Add More Proof",
+        helper:
+          lang === "km"
+            ? "ថតរូបបច្ចុប្បន្ន ដើម្បីបង្ហាញថាឧបករណ៍ខ្វះ ឬ ត្រូវបន្ថែម។"
+            : "Upload a current photo to show the tool is missing quantity and needs more items.",
+      };
+    }
+    if (toolReviewQuickAction === "take_out") {
+      return {
+        required: true,
+        uploadTitle: lang === "km" ? "រូបភស្តុតាងខូច" : "Broken Proof",
+        helper:
+          lang === "km"
+            ? "ថតរូបបច្ចុប្បន្ន ដើម្បីបង្ហាញថាឧបករណ៍ខូច ឬ ត្រូវដកចេញពីការប្រើ។"
+            : "Upload a current photo to show the tool is broken or should be removed from use.",
+      };
+    }
+    return {
+      required: false,
+      uploadTitle: lang === "km" ? "រូបថ្មី" : "New Photo",
+      helper:
+        lang === "km"
+          ? "សម្រាប់ការផ្ទៀងផ្ទាត់ធម្មតា រូបថ្មីអាចបញ្ចូលបន្ថែមបាន ប្រសិនបើចង់រក្សាកំណត់ត្រាថ្មី។"
+          : "For normal verification, a new photo is optional but helpful if you want an updated record.",
+    };
+  }, [lang, toolReviewQuickAction]);
+  const applyToolReviewQuickAction = useCallback(
+    (action: "good" | "add_more" | "take_out") => {
+      if (!toolReviewSelectedItem) return;
+      const expectedQty = Math.max(0, Number(toolReviewSelectedItem.currentStock || 0));
+      setToolReviewForm((prev) => {
+        if (action === "good") {
+          return {
+            ...prev,
+            countedQty: String(expectedQty),
+            condition: "Good",
+            note:
+              prev.note.includes("Need add more") ||
+              prev.note.includes("Broken / take out") ||
+              prev.note.includes("ត្រូវបន្ថែម") ||
+              prev.note.includes("ដកចេញ")
+                ? ""
+                : prev.note,
+          };
+        }
+        if (action === "add_more") {
+          return {
+            ...prev,
+            countedQty: prev.countedQty || String(Math.max(expectedQty - 1, 0)),
+            condition: "Missing",
+            note: prev.note.trim() || (lang === "km" ? "ត្រូវបន្ថែមចំនួន: ____ pcs" : "Need add more: ____ pcs"),
+          };
+        }
+        return {
+          ...prev,
+          countedQty: prev.countedQty || String(Math.max(expectedQty - 1, 0)),
+          condition: expectedQty <= 1 ? "Need Replacement" : "Damaged",
+          note: prev.note.trim() || (lang === "km" ? "ខូច / ដកចេញពីការប្រើ: ____ pcs" : "Broken / take out from use: ____ pcs"),
+        };
+      });
+    },
+    [lang, toolReviewSelectedItem]
+  );
   const toolReviewReferencePhotos = useMemo(() => {
     const photos = new Set<string>();
     const itemId = String(toolReviewForm.itemId || "").trim();
@@ -25520,6 +25601,14 @@ export default function App() {
       setError("Reviewed by is required.");
       return;
     }
+    if (toolReviewPhotoRule.required && !String(toolReviewForm.photo || "").trim()) {
+      setError(
+        toolReviewQuickAction === "take_out"
+          ? "Please upload a proof photo for broken or take out tools."
+          : "Please upload a proof photo for add more tools."
+      );
+      return;
+    }
     const timestamp = new Date().toISOString();
     const nextEntry: ToolReviewReport = {
       id: toolReviewExistingEntry?.id || Date.now(),
@@ -30027,6 +30116,7 @@ export default function App() {
         scheduleForm.repeatMode === "WDP_FILTER_CYCLE"
           ? getWdpFilterCycleNote(Number(scheduleForm.repeatCycleStep || 1))
           : scheduleForm.note.trim(),
+      scheduleGroup: String(scheduleForm.group || "").trim() || inferScheduleGroupValue(selectedScheduleAsset || { category: "", type: "", pcType: "" }),
       repeatMode: scheduleForm.repeatMode,
       repeatWeekOfMonth:
         scheduleForm.repeatMode === "MONTHLY_WEEKDAY"
@@ -30070,6 +30160,7 @@ export default function App() {
         ...f,
         note: "",
         date: "",
+        group: "",
       }));
       await loadData();
     } catch (err) {
@@ -30091,6 +30182,7 @@ export default function App() {
       assetId: "",
       date: ymd,
       note: "",
+      group: "",
       repeatMode: "NONE",
       repeatWeekOfMonth: computedWeekOfMonth,
       repeatWeekday: computedWeekday,
@@ -30128,6 +30220,7 @@ export default function App() {
         scheduleQuickForm.repeatMode === "WDP_FILTER_CYCLE"
           ? getWdpFilterCycleNote(Number(scheduleQuickForm.repeatCycleStep || 1))
           : scheduleQuickForm.note.trim(),
+      scheduleGroup: String(scheduleQuickForm.group || "").trim() || inferScheduleGroupValue(selectedQuickScheduleAsset || { category: "", type: "", pcType: "" }),
       repeatMode: scheduleQuickForm.repeatMode,
       repeatWeekOfMonth:
         scheduleQuickForm.repeatMode === "MONTHLY_WEEKDAY"
@@ -30182,6 +30275,7 @@ export default function App() {
       assetId: String(asset.id),
       date: asset.nextMaintenanceDate || "",
       note: asset.scheduleNote || "",
+      group: String(asset.scheduleGroup || "").trim(),
       repeatMode: asset.repeatMode || "NONE",
       repeatWeekOfMonth: Number(asset.repeatWeekOfMonth || 1),
       repeatWeekday: Number(asset.repeatWeekday || 6),
@@ -30197,6 +30291,7 @@ export default function App() {
     const payload = {
       nextMaintenanceDate: "",
       scheduleNote: "",
+      scheduleGroup: "",
       repeatMode: "NONE" as const,
       repeatWeekOfMonth: 0,
       repeatWeekday: 0,
@@ -30223,7 +30318,7 @@ export default function App() {
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("SCHEDULE_DELETE", "asset", String(assetId), "Schedule removed");
       if (scheduleForm.assetId === String(assetId)) {
-        setScheduleForm((f) => ({ ...f, date: "", note: "", repeatMode: "NONE", repeatCycleStep: 1 }));
+        setScheduleForm((f) => ({ ...f, date: "", note: "", group: "", repeatMode: "NONE", repeatCycleStep: 1 }));
       }
       await loadData();
     } catch (err) {
@@ -30247,6 +30342,7 @@ export default function App() {
     const payload = {
       nextMaintenanceDate: "",
       scheduleNote: "",
+      scheduleGroup: "",
       repeatMode: "NONE" as const,
       repeatWeekOfMonth: 0,
       repeatWeekday: 0,
@@ -30313,6 +30409,7 @@ export default function App() {
         type: targetAsset.type,
         date: targetAsset.repeatMode === "MONTHLY_WEEKDAY" ? "" : (targetAsset.nextMaintenanceDate || ""),
         note: targetAsset.scheduleNote || "",
+        group: String(targetAsset.scheduleGroup || "").trim(),
         repeatMode: targetAsset.repeatMode || "NONE",
         repeatWeekOfMonth: Number(targetAsset.repeatWeekOfMonth || 1),
         repeatWeekday: Number(targetAsset.repeatWeekday || 6),
@@ -30357,6 +30454,9 @@ export default function App() {
         bulkScheduleForm.repeatMode === "WDP_FILTER_CYCLE"
           ? getWdpFilterCycleNote(Number(bulkScheduleForm.repeatCycleStep || 1))
           : bulkScheduleForm.note.trim(),
+      scheduleGroup:
+        String(bulkScheduleForm.group || "").trim() ||
+        inferScheduleGroupValue(matched[0] || { category: bulkScheduleForm.category, type: bulkScheduleForm.type, pcType: "" }),
       repeatMode: bulkScheduleForm.repeatMode,
       repeatWeekOfMonth:
         bulkScheduleForm.repeatMode === "MONTHLY_WEEKDAY"
@@ -30400,6 +30500,7 @@ export default function App() {
         ...f,
         date: "",
         note: "",
+        group: "",
       }));
       appendUiAudit(
         "SCHEDULE_BULK_UPDATE",
@@ -35626,13 +35727,216 @@ export default function App() {
     return filtered
       .map((a) => {
         const nextMaintenanceDate = resolveNextScheduleDate(a, today);
-        return { ...a, nextMaintenanceDate };
+        const scheduleGroup = inferScheduleGroupValue(a);
+        return { ...a, nextMaintenanceDate, scheduleGroup };
       })
       .filter((a) => a.nextMaintenanceDate)
       .sort((a, b) => (a.nextMaintenanceDate || "").localeCompare(b.nextMaintenanceDate || ""));
-  }, [campusFilter, resolvedAssets]);
+  }, [campusFilter, resolvedAssets, inferScheduleGroupValue]);
+  const reportScheduleAssets = useMemo(() => {
+    const today = toYmd(new Date());
+    return resolvedAssets
+      .map((asset) => {
+        const nextMaintenanceDate = resolveNextScheduleDate(asset, today);
+        const scheduleGroup = inferScheduleGroupValue(asset);
+        return { ...asset, nextMaintenanceDate, scheduleGroup };
+      })
+      .filter((asset) => asset.nextMaintenanceDate)
+      .sort((a, b) => {
+        const dateCompare = String(a.nextMaintenanceDate || "").localeCompare(String(b.nextMaintenanceDate || ""));
+        if (dateCompare) return dateCompare;
+        return String(a.assetId || "").localeCompare(String(b.assetId || ""));
+      });
+  }, [resolvedAssets, inferScheduleGroupValue]);
+  const scheduleGroupOptions = useMemo(
+    () =>
+      Array.from(new Set(scheduleAssets.map((asset) => String(asset.scheduleGroup || "").trim()).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [scheduleAssets]
+  );
+  const reportScheduleCampusOptions = useMemo(
+    () => Array.from(new Set(reportScheduleAssets.map((asset) => String(asset.campus || "").trim()).filter(Boolean))).sort(compareCampusByCode),
+    [reportScheduleAssets]
+  );
+  const reportScheduleGroupOptions = useMemo(
+    () =>
+      Array.from(new Set(reportScheduleAssets.map((asset) => String(asset.scheduleGroup || "").trim()).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [reportScheduleAssets]
+  );
+  const reportScheduleGroupLabel = useCallback(
+    (value: string) => {
+      if (!value || value === "ALL") return lang === "km" ? "គ្រប់ក្រុម" : "All Groups";
+      return scheduleGroupOptionLabel(value);
+    },
+    [lang, scheduleGroupOptionLabel]
+  );
+  const scheduleCalendarCampusColor = useCallback((campus: string) => {
+    const text = String(campus || "").toLowerCase();
+    if (text.includes("samdach")) return "#f6cfb2";
+    if (text.includes("c2.2") || text.includes("2.2")) return "#f7c948";
+    if (text.includes("c2.1") || text.includes("2.1")) return "#c8d8f6";
+    if (text.includes("veng")) return "#b9e58c";
+    if (text.includes("boeung") || text.includes("snor")) return "#d9d9d9";
+    return "#d6e6dc";
+  }, []);
+  const reportScheduleMonthLabel = useMemo(() => formatMonthYear(reportScheduleMonth), [reportScheduleMonth]);
+  const reportScheduleCalendarRows = useMemo(() => {
+    const [yearText, monthText] = reportScheduleMonth.split("-");
+    const year = Number(yearText);
+    const monthIndex = Number(monthText) - 1;
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 0 || monthIndex > 11) return [] as Array<{
+      key: string;
+      date: string;
+      campus: string;
+      scheduleGroup: string;
+      scheduleNote: string;
+      assetCount: number;
+      assetIds: string[];
+      locations: string[];
+      items: string[];
+    }>;
+    const startYmd = toYmd(new Date(year, monthIndex, 1));
+    const endYmd = toYmd(new Date(year, monthIndex + 1, 0));
+    const grouped = new Map<
+      string,
+      {
+        key: string;
+        date: string;
+        campus: string;
+        scheduleGroup: string;
+        scheduleNote: string;
+        assetCount: number;
+        assetIds: string[];
+        locations: string[];
+        items: string[];
+      }
+    >();
+    reportScheduleAssets.forEach((asset) => {
+      if (reportScheduleCampusFilter !== "ALL" && String(asset.campus || "") !== reportScheduleCampusFilter) return;
+      if (reportScheduleGroupFilter !== "ALL" && String(asset.scheduleGroup || "").trim() !== reportScheduleGroupFilter) return;
+      const addOccurrence = (dateKey: string) => {
+        if (!dateKey || dateKey < startYmd || dateKey > endYmd) return;
+        const scheduleNote = String(asset.scheduleNote || "").trim();
+        const group = String(asset.scheduleGroup || "").trim() || inferScheduleGroupValue(asset);
+        const campus = String(asset.campus || "").trim();
+        const key = [dateKey, campus, group, scheduleNote].join("||");
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            key,
+            date: dateKey,
+            campus,
+            scheduleGroup: group,
+            scheduleNote,
+            assetCount: 0,
+            assetIds: [],
+            locations: [],
+            items: [],
+          });
+        }
+        const row = grouped.get(key)!;
+        row.assetCount += 1;
+        if (asset.assetId && !row.assetIds.includes(asset.assetId)) row.assetIds.push(asset.assetId);
+        const location = String(asset.location || "").trim();
+        if (location && !row.locations.includes(location)) row.locations.push(location);
+        const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+        if (itemName && !row.items.includes(itemName)) row.items.push(itemName);
+      };
+      if (asset.repeatMode === "MONTHLY_WEEKDAY") {
+        const next = nthWeekdayOfMonth(year, monthIndex, Number(asset.repeatWeekday || 6), Number(asset.repeatWeekOfMonth || 1));
+        if (next) addOccurrence(toYmd(next));
+        return;
+      }
+      addOccurrence(String(asset.nextMaintenanceDate || ""));
+    });
+    return Array.from(grouped.values()).sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare) return dateCompare;
+      const campusCompare = compareCampusByCode(a.campus, b.campus);
+      if (campusCompare) return campusCompare;
+      const groupCompare = a.scheduleGroup.localeCompare(b.scheduleGroup);
+      if (groupCompare) return groupCompare;
+      return a.scheduleNote.localeCompare(b.scheduleNote);
+    });
+  }, [
+    reportScheduleAssets,
+    reportScheduleMonth,
+    reportScheduleCampusFilter,
+    reportScheduleGroupFilter,
+    assetItemName,
+    inferScheduleGroupValue,
+  ]);
+  const reportScheduleCalendarSummary = useMemo(
+    () => ({
+      totalDays: new Set(reportScheduleCalendarRows.map((row) => row.date)).size,
+      totalGroups: reportScheduleCalendarRows.length,
+      totalAssets: reportScheduleCalendarRows.reduce((sum, row) => sum + row.assetCount, 0),
+      campusCount: new Set(reportScheduleCalendarRows.map((row) => row.campus).filter(Boolean)).size,
+    }),
+    [reportScheduleCalendarRows]
+  );
+  const reportScheduleCalendarByDate = useMemo(() => {
+    const map = new Map<string, typeof reportScheduleCalendarRows>();
+    reportScheduleCalendarRows.forEach((row) => {
+      if (!map.has(row.date)) map.set(row.date, []);
+      map.get(row.date)?.push(row);
+    });
+    return map;
+  }, [reportScheduleCalendarRows]);
+  const reportScheduleCalendarDays = useMemo(() => {
+    const [yearText, monthText] = reportScheduleMonth.split("-");
+    const year = Number(yearText);
+    const monthIndex = Number(monthText) - 1;
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 0 || monthIndex > 11) return [] as Array<{
+      ymd: string;
+      day: number;
+      weekday: number;
+      inMonth: boolean;
+      entries: typeof reportScheduleCalendarRows;
+    }>;
+    const firstDay = new Date(year, monthIndex, 1);
+    const startOffset = firstDay.getDay();
+    const gridStart = new Date(year, monthIndex, 1 - startOffset);
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(gridStart);
+      date.setDate(gridStart.getDate() + index);
+      const ymd = toYmd(date);
+      return {
+        ymd,
+        day: date.getDate(),
+        weekday: date.getDay(),
+        inMonth: date.getMonth() === monthIndex,
+        entries: reportScheduleCalendarByDate.get(ymd) || [],
+      };
+    });
+  }, [reportScheduleMonth, reportScheduleCalendarByDate]);
+  useEffect(() => {
+    if (reportScheduleCampusFilter !== "ALL" && !reportScheduleCampusOptions.includes(reportScheduleCampusFilter)) {
+      setReportScheduleCampusFilter("ALL");
+    }
+  }, [reportScheduleCampusFilter, reportScheduleCampusOptions]);
+  useEffect(() => {
+    if (reportScheduleGroupFilter !== "ALL" && !reportScheduleGroupOptions.includes(reportScheduleGroupFilter)) {
+      setReportScheduleGroupFilter("ALL");
+    }
+  }, [reportScheduleGroupFilter, reportScheduleGroupOptions]);
+  const visibleScheduleAssets = useMemo(
+    () =>
+      scheduleAssets.filter((asset) => {
+        if (scheduleGroupFilter === "ALL") return true;
+        return String(asset.scheduleGroup || "").trim() === scheduleGroupFilter;
+      }),
+    [scheduleAssets, scheduleGroupFilter]
+  );
+  useEffect(() => {
+    if (scheduleGroupFilter !== "ALL" && !scheduleGroupOptions.includes(scheduleGroupFilter)) {
+      setScheduleGroupFilter("ALL");
+    }
+  }, [scheduleGroupFilter, scheduleGroupOptions]);
   const scheduleListRows = useMemo(() => {
-    return [...scheduleAssets].sort((a, b) => {
+    return [...visibleScheduleAssets].sort((a, b) => {
       const aDate = String(a.nextMaintenanceDate || "");
       const bDate = String(b.nextMaintenanceDate || "");
       if (aDate !== bDate) return aDate.localeCompare(bDate);
@@ -35641,7 +35945,7 @@ export default function App() {
       if (aName !== bName) return aName.localeCompare(bName);
       return a.assetId.localeCompare(b.assetId);
     });
-  }, [scheduleAssets, assetItemName]);
+  }, [visibleScheduleAssets, assetItemName]);
   const scheduleListMonthOptions = useMemo(() => {
     return Array.from(
       new Set(
@@ -35691,7 +35995,7 @@ export default function App() {
     const startYmd = toYmd(gridStart);
     const endYmd = toYmd(gridEnd);
     const map = new Map<string, Asset[]>();
-    for (const asset of scheduleAssets) {
+    for (const asset of visibleScheduleAssets) {
       if (asset.repeatMode === "MONTHLY_WEEKDAY") {
         for (let i = 0; i < 3; i += 1) {
           const monthRef = new Date(gridStart.getFullYear(), gridStart.getMonth() + i, 1);
@@ -35717,16 +36021,16 @@ export default function App() {
       map.get(key)?.push(asset);
     }
     return map;
-  }, [scheduleAssets, calendarMonth]);
+  }, [visibleScheduleAssets, calendarMonth]);
   const upcomingScheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     const in7 = toYmd(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-    return scheduleAssets.filter((a) => (a.nextMaintenanceDate || "") >= today && (a.nextMaintenanceDate || "") <= in7);
-  }, [scheduleAssets]);
+    return visibleScheduleAssets.filter((a) => (a.nextMaintenanceDate || "") >= today && (a.nextMaintenanceDate || "") <= in7);
+  }, [visibleScheduleAssets]);
   const overdueScheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
-    return scheduleAssets.filter((a) => (a.nextMaintenanceDate || "") < today);
-  }, [scheduleAssets]);
+    return visibleScheduleAssets.filter((a) => (a.nextMaintenanceDate || "") < today);
+  }, [visibleScheduleAssets]);
   const overdueMonthOptions = useMemo(() => {
     return Array.from(
       new Set(
@@ -35775,12 +36079,12 @@ export default function App() {
     return {
       overdue: overdueScheduleAssets.length,
       upcoming: upcomingScheduleAssets.length,
-      scheduled: scheduleAssets.length,
+      scheduled: visibleScheduleAssets.length,
       done,
       notYet,
       total,
     };
-  }, [allMaintenanceRows, overdueScheduleAssets.length, upcomingScheduleAssets.length, scheduleAssets.length]);
+  }, [allMaintenanceRows, overdueScheduleAssets.length, upcomingScheduleAssets.length, visibleScheduleAssets.length]);
   const maintenanceDoneToday = useMemo(() => {
     const today = toYmd(new Date());
     let count = 0;
@@ -35797,12 +36101,12 @@ export default function App() {
   }, [assets]);
   const maintenanceDueAssets = useMemo(
     () =>
-      scheduleAssets.filter((asset) => {
+      visibleScheduleAssets.filter((asset) => {
         const dueDate = String(asset.nextMaintenanceDate || "").trim();
         if (!dueDate) return false;
         return !hasCompletedMaintenanceOnDate(asset, dueDate);
       }),
-    [scheduleAssets]
+    [visibleScheduleAssets]
   );
   const maintenanceDueByItemRows = useMemo(() => {
     const map = new Map<string, { itemName: string; count: number; assets: Asset[] }>();
@@ -35905,7 +36209,7 @@ export default function App() {
       items = upcomingScheduleAssets;
     } else if (scheduleAlertModal === "scheduled") {
       title = "All Scheduled Assets";
-      items = scheduleAssets;
+      items = visibleScheduleAssets;
     } else if (scheduleAlertModal === "selected") {
       title = `Selected Date Assets - ${selectedCalendarDate}`;
       items = selectedDateItems;
@@ -35921,7 +36225,7 @@ export default function App() {
     scheduleAlertModal,
     overdueScheduleAssets,
     upcomingScheduleAssets,
-    scheduleAssets,
+    visibleScheduleAssets,
     selectedDateItems,
     selectedCalendarDate,
     scheduleAlertItemFilter,
@@ -36027,7 +36331,7 @@ export default function App() {
     inventoryQuickOutModal ||
     inventoryDashboardModal ||
     inventoryAdminDetailModal ||
-    toolReviewSummaryModal ||
+    toolReviewModalOpen ||
     scheduleScopeModal ||
     scheduleQuickCreateOpen ||
     scheduleAlertModal ||
@@ -38144,6 +38448,7 @@ export default function App() {
               { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
               { value: "furniture_control" as ReportType, label: "គ្រប់គ្រងកៅអី និងតុ" },
               { value: "inventory_balance" as ReportType, label: "សមតុល្យស្តុក" },
+              { value: "schedule_calendar" as ReportType, label: "ប្រតិទិនកាលវិភាគថែទាំ" },
               { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
               { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
               { value: "staff_borrowing" as ReportType, label: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
@@ -38159,6 +38464,7 @@ export default function App() {
               { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
               { value: "furniture_control" as ReportType, label: "Chair/Table Control" },
               { value: "inventory_balance" as ReportType, label: "Inventory Stock Balance" },
+              { value: "schedule_calendar" as ReportType, label: "Maintenance Schedule Calendar" },
               { value: "overdue" as ReportType, label: "Overdue Maintenance" },
               { value: "transfer" as ReportType, label: "Asset Transfer Log" },
               { value: "staff_borrowing" as ReportType, label: "Staff Asset Assignment List" },
@@ -38376,6 +38682,9 @@ export default function App() {
     if (reportType === "asset_master") {
       return `${selectedReportTypeLabel} - ${assetMasterCampusTitle}`;
     }
+    if (reportType === "schedule_calendar") {
+      return `${selectedReportTypeLabel} - ${reportScheduleMonthLabel}`;
+    }
     if (reportType === "qr_labels") {
       if (qrLabelEntityType === "rental_printer") {
         return lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល + QR" : "Rental Printer + QR Labels";
@@ -38383,7 +38692,7 @@ export default function App() {
       return reportAssetIdFilter ? `${selectedReportTypeLabel} - ${reportAssetIdFilter}` : selectedReportTypeLabel;
     }
     return selectedReportTypeLabel;
-  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle, lang, qrLabelEntityType, reportAssetIdFilter]);
+  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle, reportScheduleMonthLabel, lang, qrLabelEntityType, reportAssetIdFilter]);
   const reportTypeGuideText = useMemo(() => {
     const guides: Record<ReportType, string> =
       lang === "km"
@@ -38394,6 +38703,7 @@ export default function App() {
             asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
             furniture_control: "សង្ខេបកៅអី និងតុតាមសាខា ហើយបង្ហាញគ្រឿងសង្ហារឹមផ្សេងៗក្នុងថ្នាក់រៀនតាមចំនួនសិស្សបច្ចុប្បន្ន។",
             inventory_balance: "បោះពុម្ពសមតុល្យស្តុកតាមវត្ថុ និងទីតាំងស្តុកបច្ចុប្បន្ន។",
+            schedule_calendar: "បង្ហាញ និងបោះពុម្ពប្រតិទិនកាលវិភាគថែទាំប្រចាំខែ តាមសាខា និងក្រុមថែទាំ។",
             overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
             transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
             staff_borrowing: "ទ្រព្យដែលសាលាបានចាត់តាំងឱ្យបុគ្គលិកប្រើប្រាស់ និងអ្នកទទួលខុសត្រូវបច្ចុប្បន្ន។",
@@ -38409,6 +38719,7 @@ export default function App() {
             asset_by_location: "Summary count by campus and location.",
             furniture_control: "Chair and table totals by campus with classroom furniture details based on current students.",
             inventory_balance: "Standard stock balance report with current stock by item and campus.",
+            schedule_calendar: "Show and print the monthly maintenance calendar grouped by campus and maintenance group.",
             overdue: "Show assets that are overdue for maintenance.",
             transfer: "Transfer history between campuses and locations.",
             staff_borrowing: "Assets currently assigned to staff with accountability records.",
@@ -38422,6 +38733,11 @@ export default function App() {
   const selectedReportDisplayGuide = useMemo(() => {
     if (reportType === "asset_master") {
       return `${lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of"}: ${assetMasterItemTitle}`;
+    }
+    if (reportType === "schedule_calendar") {
+      return lang === "km"
+        ? "បោះពុម្ពប្រតិទិនកាលវិភាគថែទាំប្រចាំខែ ជាទម្រង់ផ្លូវការ សម្រាប់ដាក់របាយការណ៍។"
+        : "Print the monthly maintenance calendar in an official format for reporting and submission.";
     }
     if (reportType === "asset_full_record") {
       return reportAssetIdFilter
@@ -38450,10 +38766,30 @@ export default function App() {
       maintenanceCompletionSummaryChips.forEach((chip) => {
         if (chip) chips.push(chip);
       });
+    } else if (reportType === "schedule_calendar") {
+      chips.push(`${lang === "km" ? "ខែ" : "Month"}: ${reportScheduleMonthLabel}`);
+      chips.push(
+        `${lang === "km" ? "សាខា" : "Campus"}: ${
+          reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)
+        }`
+      );
+      chips.push(`${lang === "km" ? "ក្រុម" : "Group"}: ${reportScheduleGroupLabel(reportScheduleGroupFilter)}`);
     }
     if (reportAssetFilterLabel) chips.push(reportAssetFilterLabel);
     return chips;
-  }, [maintenanceCompletionSummaryChips, reportAssetFilterLabel, reportType, selectedReportTypeLabel]);
+  }, [
+    lang,
+    maintenanceCompletionSummaryChips,
+    reportAssetFilterLabel,
+    reportScheduleCampusFilter,
+    reportScheduleGroupFilter,
+    reportScheduleGroupLabel,
+    reportScheduleMonthLabel,
+    reportType,
+    reportCampusName,
+    selectedReportTypeLabel,
+    t.allCampuses,
+  ]);
   const reportFiltersCollapsedDesktop =
     reportType === "maintenance_completion" ? maintenanceReportFiltersCollapsed : reportDesktopFiltersCollapsed;
   const hasReportFilters = useMemo(
@@ -38464,6 +38800,7 @@ export default function App() {
       reportType === "asset_by_location" ||
       reportType === "furniture_control" ||
       reportType === "inventory_balance" ||
+      reportType === "schedule_calendar" ||
       reportType === "maintenance_completion" ||
       reportType === "verification_summary" ||
       reportType === "qr_labels" ||
@@ -38544,6 +38881,12 @@ export default function App() {
       ]);
       setMaintenanceReportExpandedRows({});
       setMaintenanceReportFiltersCollapsed(false);
+      return;
+    }
+    if (reportType === "schedule_calendar") {
+      setReportScheduleMonth(toYmd(new Date()).slice(0, 7));
+      setReportScheduleCampusFilter("ALL");
+      setReportScheduleGroupFilter("ALL");
       return;
     }
     if (reportType === "inventory_balance") {
@@ -40008,6 +40351,12 @@ export default function App() {
       rows = reportInventoryRows.map((row) => [
         ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
       ]);
+    } else if (reportType === "schedule_calendar") {
+      title = `Maintenance Schedule Calendar - ${reportScheduleMonthLabel}${
+        reportScheduleCampusFilter === "ALL" ? "" : ` - ${reportCampusName(reportScheduleCampusFilter)}`
+      }`;
+      columns = [];
+      rows = [];
     } else if (reportType === "overdue") {
       title = "Overdue Maintenance Report";
       columns = ["Next Date", "Asset ID", "Campus", "Status", "Schedule Note"];
@@ -40419,6 +40768,18 @@ export default function App() {
               { label: lang === "km" ? "សរុបទំនិញ" : "Total Items", value: reportInventoryRows.length },
               { label: lang === "km" ? "ស្តុកទាប" : "Low Stock", value: reportInventoryRows.filter((row) => row.lowStock).length },
             ])
+        : reportType === "schedule_calendar"
+        ? buildPrintSummaryGrid([
+            { label: lang === "km" ? "ខែ" : "Month", value: reportScheduleMonthLabel || "-" },
+            {
+              label: lang === "km" ? "សាខា" : "Campus",
+              value: reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter),
+            },
+            { label: lang === "km" ? "ក្រុម" : "Group", value: reportScheduleGroupLabel(reportScheduleGroupFilter) },
+            { label: lang === "km" ? "ថ្ងៃមានកាលវិភាគ" : "Scheduled Days", value: reportScheduleCalendarSummary.totalDays },
+            { label: lang === "km" ? "ក្រុមការងារ" : "Calendar Entries", value: reportScheduleCalendarSummary.totalGroups },
+            { label: lang === "km" ? "ទ្រព្យសរុប" : "Total Assets", value: reportScheduleCalendarSummary.totalAssets },
+          ])
         : reportType === "staff_borrowing"
         ? buildPrintSummaryGrid([
             { label: lang === "km" ? "ទ្រព្យដែលខ្ចី/ប្រគល់" : "Borrowed / Assigned Assets", value: sortedStaffBorrowingRows.length },
@@ -40635,6 +40996,12 @@ export default function App() {
           : `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Mode: ${escapeHtml(reportInventoryModeLabel)} | Group: ${escapeHtml(
               reportInventoryGroupFilterLabel
             )} | Campus: ${escapeHtml(reportInventoryCampusFilterLabel)}</p>`
+        : reportType === "schedule_calendar"
+        ? `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
+            lang === "km" ? "ខែ" : "Month"
+          )}: ${escapeHtml(reportScheduleMonthLabel)} | ${escapeHtml(lang === "km" ? "សាខា" : "Campus")}: ${escapeHtml(
+            reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)
+          )} | ${escapeHtml(lang === "km" ? "ក្រុម" : "Group")}: ${escapeHtml(reportScheduleGroupLabel(reportScheduleGroupFilter))}</p>`
         : `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
             lang === "km" ? "តម្រងសាខា" : "Campus Filter"
           )}: ${escapeHtml(filterLabel)}</p>`;
@@ -40949,6 +41316,82 @@ export default function App() {
               </tbody>
             </table>
           </div>`
+        : reportType === "schedule_calendar"
+        ? (() => {
+            const weekdayHeaders = (lang === "km"
+              ? ["អាទិត្យ", "ចន្ទ", "អង្គារ", "ពុធ", "ព្រហស្បតិ៍", "សុក្រ", "សៅរ៍"]
+              : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
+              .map((label, index) => `<div class="schedule-calendar-weekday${index === 0 ? " is-sun" : index === 6 ? " is-sat" : ""}">${escapeHtml(label)}</div>`)
+              .join("");
+            const dayCells = reportScheduleCalendarDays
+              .map((day) => {
+                const entryBlocks = day.entries.length
+                  ? day.entries
+                      .map((entry) => {
+                        const color = scheduleCalendarCampusColor(entry.campus);
+                        const campusText = reportCampusName(entry.campus);
+                        const lineTwo = entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup);
+                        const lineThree =
+                          entry.assetCount > 1
+                            ? `${entry.assetCount} ${lang === "km" ? "ទ្រព្យ" : "assets"}`
+                            : `${entry.assetCount} ${lang === "km" ? "ទ្រព្យ" : "asset"}`;
+                        return `<div class="schedule-calendar-entry" style="background:${escapeHtml(color)};">
+                          <strong>${escapeHtml(campusText)}</strong>
+                          <span>${escapeHtml(lineTwo)}</span>
+                          <span>${escapeHtml(lineThree)}</span>
+                        </div>`;
+                      })
+                      .join("")
+                  : `<div class="schedule-calendar-entry-empty"></div>`;
+                return `<div class="schedule-calendar-day${day.inMonth ? "" : " is-out"}${day.weekday === 0 ? " is-sun" : day.weekday === 6 ? " is-sat" : ""}">
+                  <div class="schedule-calendar-day-number">${day.day}</div>
+                  <div class="schedule-calendar-day-body">${entryBlocks}</div>
+                </div>`;
+              })
+              .join("");
+            const legendItems = reportScheduleCampusOptions
+              .map((campus) => `<div class="schedule-calendar-legend-item"><span class="schedule-calendar-legend-swatch" style="background:${escapeHtml(
+                scheduleCalendarCampusColor(campus)
+              )};"></span><span>${escapeHtml(reportCampusName(campus))}</span></div>`)
+              .join("");
+            const detailRows = reportScheduleCalendarRows.length
+              ? reportScheduleCalendarRows
+                  .map(
+                    (row, index) => `<tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(formatDate(row.date))}</td>
+                      <td>${escapeHtml(reportCampusName(row.campus))}</td>
+                      <td>${escapeHtml(reportScheduleGroupLabel(row.scheduleGroup))}</td>
+                      <td>${escapeHtml(row.scheduleNote || "-")}</td>
+                      <td>${row.assetCount}</td>
+                      <td>${escapeHtml(row.locations.join(", ") || "-")}</td>
+                    </tr>`
+                  )
+                  .join("")
+              : `<tr><td colspan="7">${escapeHtml(lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month.")}</td></tr>`;
+            return `<div class="schedule-calendar-print">
+              <div class="schedule-calendar-grid-wrap">
+                <div class="schedule-calendar-grid">${weekdayHeaders}${dayCells}</div>
+              </div>
+              <div class="schedule-calendar-legend">${legendItems}</div>
+              <div class="preview-table-wrap" style="margin-top:16px;">
+                <table class="preview-report-table">
+                  <thead>
+                    <tr>
+                      <th>No.</th>
+                      <th>${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}</th>
+                      <th>${escapeHtml(lang === "km" ? "សាខា" : "Campus")}</th>
+                      <th>${escapeHtml(lang === "km" ? "ក្រុម" : "Group")}</th>
+                      <th>${escapeHtml(lang === "km" ? "សម្គាល់" : "Schedule Note")}</th>
+                      <th>${escapeHtml(lang === "km" ? "ចំនួនទ្រព្យ" : "Assets")}</th>
+                      <th>${escapeHtml(lang === "km" ? "ទីតាំង" : "Locations")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>${detailRows}</tbody>
+                </table>
+              </div>
+            </div>`;
+          })()
         : reportType === "inventory_balance" && reportInventorySplitByCategoryPages
         ? reportInventoryToolPages.length
           ? reportInventoryToolPages
@@ -41324,6 +41767,83 @@ export default function App() {
           .preview-furniture-qty-label { font-size: 10px; font-weight: 700; color: #4d5f54; margin-bottom: 2px; }
           .preview-furniture-qty-item { margin: 1px 0; }
           .preview-furniture-qty-empty { color: #6f7d73; }
+          .schedule-calendar-grid-wrap {
+            border: 1px solid #cdb998;
+            border-radius: 18px;
+            overflow: hidden;
+            background: #fffdf8;
+          }
+          .schedule-calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+          }
+          .schedule-calendar-weekday {
+            border-right: 1px solid #cdb998;
+            border-bottom: 1px solid #cdb998;
+            background: #f5ecdc;
+            padding: 8px 6px;
+            text-align: center;
+            font-size: 11px;
+            font-weight: 800;
+            color: #3e4d43;
+          }
+          .schedule-calendar-weekday:nth-child(7n) { border-right: 0; }
+          .schedule-calendar-weekday.is-sun { color: #bb3f3f; }
+          .schedule-calendar-weekday.is-sat { color: #7a5ea8; }
+          .schedule-calendar-day {
+            min-height: 118px;
+            border-right: 1px solid #d9ccb3;
+            border-bottom: 1px solid #d9ccb3;
+            padding: 6px;
+            background: #fff;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 6px;
+          }
+          .schedule-calendar-day:nth-child(7n) { border-right: 0; }
+          .schedule-calendar-day.is-out { background: #f7f2e8; color: #8f8a7f; }
+          .schedule-calendar-day-number { font-size: 12px; font-weight: 800; }
+          .schedule-calendar-day-body {
+            display: grid;
+            align-content: start;
+            gap: 5px;
+          }
+          .schedule-calendar-entry {
+            border-radius: 10px;
+            padding: 5px 6px;
+            color: #223128;
+            min-height: 36px;
+            box-shadow: inset 0 0 0 1px rgba(72, 63, 45, 0.08);
+          }
+          .schedule-calendar-entry strong,
+          .schedule-calendar-entry span {
+            display: block;
+            line-height: 1.2;
+          }
+          .schedule-calendar-entry strong { font-size: 10px; margin-bottom: 2px; }
+          .schedule-calendar-entry span { font-size: 9px; }
+          .schedule-calendar-entry-empty { min-height: 36px; }
+          .schedule-calendar-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px 16px;
+            margin-top: 12px;
+            align-items: center;
+          }
+          .schedule-calendar-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            color: #425347;
+            font-weight: 700;
+          }
+          .schedule-calendar-legend-swatch {
+            width: 18px;
+            height: 12px;
+            border-radius: 4px;
+            border: 1px solid rgba(72, 63, 45, 0.18);
+          }
           .asset-full-print { display: grid; gap: 18px; }
           .asset-full-print-head { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: start; }
           .asset-full-print-photo img, .asset-full-print-photo-empty { width: 180px; height: 180px; object-fit: cover; border-radius: 14px; border: 1px solid #cfded0; background: #fff; display: grid; place-items: center; color: #6f7d73; font-weight: 700; }
@@ -43526,36 +44046,6 @@ function formatTicketRequestSource(value?: string) {
       {!isPhoneView && !hasModalOpen ? (
         <section className="app-top-controls-wrap">
           <div className="top-controls top-controls-grid app-top-controls-grid">
-            <label className="field campus-field">
-              <span>{t.view}</span>
-              {maintenanceQuickMode ? (
-                maintenanceQuickCampusSelectionEnabled ? (
-                  <LocationPicker
-                    value={maintenanceQuickCampusPickerValue}
-                    options={maintenanceQuickCampusPickerOptions}
-                    onChange={handleMaintenanceQuickCampusChange}
-                    placeholder={t.campus}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
-                  />
-                ) : (
-                  <div className="detail-value">{campusLabel(maintenanceQuickActiveCampus)}</div>
-                )
-              ) : (
-                <LocationPicker
-                  value={campusFilter}
-                  options={[
-                    ...(isAdmin ? [{ value: "ALL", label: t.allCampuses }] : []),
-                    ...allowedCampusOptions.map((campus) => ({ value: campus, label: campusLabel(campus) })),
-                  ]}
-                  onChange={setCampusFilter}
-                  placeholder={t.allCampuses}
-                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
-                />
-              )}
-            </label>
-
             <label className="field campus-field">
               <span>{t.language}</span>
               <LocationPicker
@@ -53235,43 +53725,6 @@ function formatTicketRequestSource(value?: string) {
                   {!maintenanceQuickMode ? <div className="detail-value">{toolReviewMonth}</div> : null}
                 </div>
 
-                {!(maintenanceQuickMode && isPhoneView) ? (
-                  <div className="stats-grid" style={{ marginBottom: 16 }}>
-                    <button
-                      type="button"
-                      className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-neutral"
-                      onClick={() => openToolReviewSummaryModal("all")}
-                    >
-                      <div className="stat-label">Tools In Scope</div>
-                      <div className="stat-value">{toolReviewSummary.totalTools}</div>
-                    </button>
-                    <button
-                      type="button"
-                      className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-primary"
-                      onClick={() => openToolReviewSummaryModal("reviewed")}
-                    >
-                      <div className="stat-label">Reviewed</div>
-                      <div className="stat-value">{toolReviewSummary.reviewed}</div>
-                    </button>
-                    <button
-                      type="button"
-                      className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-alert"
-                      onClick={() => openToolReviewSummaryModal("pending")}
-                    >
-                      <div className="stat-label">Pending</div>
-                      <div className="stat-value">{toolReviewSummary.pending}</div>
-                    </button>
-                    <button
-                      type="button"
-                      className="stat-card stat-card-button inventory-admin-stat-card inventory-admin-stat-card-danger"
-                      onClick={() => openToolReviewSummaryModal("issues")}
-                    >
-                      <div className="stat-label">Issues</div>
-                      <div className="stat-value">{toolReviewSummary.issues}</div>
-                    </button>
-                  </div>
-                ) : null}
-
                 <div className="panel-filters" style={{ marginBottom: 16 }}>
                   <label className="field">
                     <span>Review Month</span>
@@ -53401,114 +53854,33 @@ function formatTicketRequestSource(value?: string) {
                   <section className="tool-review-detail-panel">
                     <div className="panel-row">
                       <div>
-                        <h3 className="section-title">Verification Form</h3>
-                        <p className="tiny">Choose one tool card, then confirm amount and condition.</p>
+                        <h3 className="section-title">Easy Verification Flow</h3>
+                        <p className="tiny">Tap one tool card to open a quick popup, choose the easiest action, then save.</p>
                       </div>
-                      {toolReviewSelectedItem ? (
-                        <span className={`tool-review-card-status ${toolReviewExistingEntry ? "is-reviewed" : "is-pending"}`}>
-                          {toolReviewExistingEntry ? "Already Reviewed" : "Waiting Review"}
-                        </span>
-                      ) : null}
                     </div>
-
+                    <div className="tool-review-decision-grid">
+                      <button type="button" className="tool-review-decision-card" onClick={() => toolReviewSelectedItem && setToolReviewModalOpen(true)} disabled={!toolReviewSelectedItem}>
+                        <strong>1. Tap Tool Card</strong>
+                        <span>Open one popup for that tool only.</span>
+                      </button>
+                      <article className="tool-review-decision-card">
+                        <strong>2. Choose Action</strong>
+                        <span>`Good`, `Need Add More`, or `Broken / Take Out`.</span>
+                      </article>
+                      <article className="tool-review-decision-card">
+                        <strong>3. Save Fast</strong>
+                        <span>Adjust amount only if needed, add photo, then submit.</span>
+                      </article>
+                    </div>
                     {toolReviewSelectedItem ? (
-                      <>
-                        <div className="tool-review-selected-hero">
-                          {toolReviewSelectedItem.photo ? (
-                            <img
-                              loading="lazy"
-                              decoding="async"
-                              src={toolReviewSelectedItem.photo}
-                              alt={toolReviewSelectedItem.itemCode}
-                              className="tool-review-selected-photo"
-                            />
-                          ) : (
-                            <div className="tool-review-selected-photo tool-review-selected-photo-empty">🧰</div>
-                          )}
-                          <div className="tool-review-selected-copy">
-                            <strong>{inventoryDisplayName(toolReviewSelectedItem.itemName, lang)}</strong>
-                            <div className="tool-review-selected-info-list">
-                              <div className="tool-review-selected-info-row">
-                                <small>Tool ID</small>
-                                <span>{toolReviewSelectedItem.itemCode}</span>
-                              </div>
-                              <div className="tool-review-selected-info-row">
-                                <small>Campus</small>
-                                <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)}</span>
-                              </div>
-                              <div className="tool-review-selected-info-row">
-                                <small>Location</small>
-                                <span>{toolReviewSelectedItem.location || "-"}</span>
-                              </div>
-                            </div>
-                          </div>
+                      <div className="asset-actions">
+                        <div className="tiny">
+                          Selected: {inventoryDisplayName(toolReviewSelectedItem.itemName, lang)} • {toolReviewSelectedItem.itemCode}
                         </div>
-
-                        <div className="tool-review-meta-grid">
-                          <article className="tool-review-meta-card">
-                            <small>Expected Amount</small>
-                            <strong>{Number(toolReviewSelectedItem.currentStock || 0)} {toolReviewSelectedItem.unit || "pcs"}</strong>
-                          </article>
-                          <article className="tool-review-meta-card">
-                            <small>{isProviderToolOwnerType(toolReviewSelectedItem.ownerType) ? "Provider Company" : "Responsible"}</small>
-                            <strong>{toolReviewSelectedItem.responsibleParty || "-"}</strong>
-                          </article>
-                          <article className="tool-review-meta-card">
-                            <small>Last Update</small>
-                            <strong>{toolReviewExistingEntry?.updated ? formatDateTime(toolReviewExistingEntry.updated) : "Not yet"}</strong>
-                          </article>
-                        </div>
-
-                        <div className="form-grid tool-review-form-grid">
-                          <label className="field">
-                            <span>Counted Amount</span>
-                            <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
-                          </label>
-                          <label className="field">
-                            <span>Condition</span>
-                            <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
-                              {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
-                                <option key={`tool-review-condition-${option}`} value={option}>{option}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="field">
-                            <span>Reviewed By</span>
-                            <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
-                          </label>
-                          <label className="field">
-                            <span>Supervisor</span>
-                            <input className="input" value={toolReviewForm.supervisor} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, supervisor: e.target.value }))} />
-                          </label>
-                          <label className="field field-wide">
-                            <span>Monthly Photo Proof</span>
-                            <input key={`tool-review-photo-${toolReviewPhotoFileKey}`} type="file" accept="image/*" className="input" onChange={onToolReviewPhotoFile} />
-                          </label>
-                          <label className="field field-wide">
-                            <span>Note</span>
-                            <textarea className="textarea" value={toolReviewForm.note} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Missing pieces, damaged parts, borrowed tools, replacement needed..." />
-                          </label>
-                        </div>
-
-                        {toolReviewForm.photo ? (
-                          <div className="tool-review-proof-preview">
-                            <img
-                              src={toolReviewForm.photo}
-                              alt="Tool review proof"
-                              style={{ width: "100%", maxWidth: isPhoneView ? "100%" : 260, borderRadius: 16, border: "1px solid rgba(120,160,220,0.35)", objectFit: "cover" }}
-                            />
-                          </div>
-                        ) : null}
-
-                        <div className="asset-actions">
-                          <div className="tiny">
-                            Save one review per month for each tool item. Saving again in the same month will update that item.
-                          </div>
-                          <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
-                            {toolReviewExistingEntry ? "Update Monthly Review" : "Save Monthly Review"}
-                          </button>
-                        </div>
-                      </>
+                        <button className="btn-primary" onClick={() => setToolReviewModalOpen(true)}>
+                          Open Selected Tool Popup
+                        </button>
+                      </div>
                     ) : (
                       <div className="panel-note">Select a tool card above to start monthly verification.</div>
                     )}
@@ -56483,6 +56855,20 @@ function formatTicketRequestSource(value?: string) {
                   placeholder="Example: FE monthly same-day by campus"
                 />
               </label>
+              <label className="field">
+                <span>{lang === "km" ? "ក្រុមកាលវិភាគ" : "Schedule Group"}</span>
+                <select
+                  className="input"
+                  value={bulkScheduleForm.group}
+                  onChange={(e) => setBulkScheduleForm((f) => ({ ...f, group: e.target.value }))}
+                >
+                  {SCHEDULE_GROUP_PRESET_OPTIONS.map((option) => (
+                    <option key={`bulk-schedule-group-${option.value || "auto"}`} value={option.value}>
+                      {lang === "km" ? option.km : option.en}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <div className="asset-actions">
               <div className="tiny">
@@ -56516,6 +56902,7 @@ function formatTicketRequestSource(value?: string) {
                       assetId,
                       date: asset?.nextMaintenanceDate || "",
                       note: asset?.scheduleNote || "",
+                      group: String(asset?.scheduleGroup || "").trim(),
                       repeatMode: asset?.repeatMode || "NONE",
                       repeatWeekOfMonth: Number(asset?.repeatWeekOfMonth || 1),
                       repeatWeekday: Number(asset?.repeatWeekday || 6),
@@ -56667,6 +57054,20 @@ function formatTicketRequestSource(value?: string) {
                   placeholder="Example: Monthly preventive maintenance"
                 />
               </label>
+              <label className="field">
+                <span>{lang === "km" ? "ក្រុមកាលវិភាគ" : "Schedule Group"}</span>
+                <select
+                  className="input"
+                  value={scheduleForm.group}
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, group: e.target.value }))}
+                >
+                  {SCHEDULE_GROUP_PRESET_OPTIONS.map((option) => (
+                    <option key={`single-schedule-group-${option.value || "auto"}`} value={option.value}>
+                      {lang === "km" ? option.km : option.en}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <div className="asset-actions">
               <div className="tiny">
@@ -56719,6 +57120,24 @@ function formatTicketRequestSource(value?: string) {
                   {calendarNextLabel}
                 </button>
               </div>
+              <div className="form-grid maintenance-schedule-filter-row" style={{ marginBottom: 12 }}>
+                <label className="field">
+                  <span>{lang === "km" ? "ក្រុមកាលវិភាគ" : "Schedule Group"}</span>
+                  <select className="input" value={scheduleGroupFilter} onChange={(e) => setScheduleGroupFilter(e.target.value)}>
+                    <option value="ALL">{lang === "km" ? "គ្រប់ក្រុម" : "All Groups"}</option>
+                    {scheduleGroupOptions.map((group) => (
+                      <option key={`schedule-group-filter-${group}`} value={group}>
+                        {scheduleGroupOptionLabel(group)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="row-actions maintenance-schedule-filter-actions">
+                  <button type="button" className="tab" onClick={() => setScheduleGroupFilter("ALL")}>
+                    {lang === "km" ? "សម្អាត Filter" : "Clear Filter"}
+                  </button>
+                </div>
+              </div>
               <CalendarGridTemplate
                 weekdayLabels={calendarWeekdayLabels}
                 days={calendarGridDays}
@@ -56749,6 +57168,7 @@ function formatTicketRequestSource(value?: string) {
                           <div>{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
                           <div className="schedule-mobile-card-meta">
                             <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
+                            <div>{lang === "km" ? "ក្រុម" : "Group"}: {assetScheduleGroupLabel(asset)}</div>
                             <div>{campusLabel(asset.campus)}</div>
                             <div>{t.status}: {assetStatusLabel(asset.status)}</div>
                             <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
@@ -56793,6 +57213,7 @@ function formatTicketRequestSource(value?: string) {
                         <th>{t.assetId}</th>
                         <th>{t.photo}</th>
                         <th>{t.campus}</th>
+                        <th>{lang === "km" ? "ក្រុម" : "Group"}</th>
                         <th>{t.status}</th>
                         <th>Schedule Note</th>
                         <th>{t.actions}</th>
@@ -56814,6 +57235,7 @@ function formatTicketRequestSource(value?: string) {
                             </td>
                             <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
                             <td>{campusLabel(asset.campus)}</td>
+                            <td>{assetScheduleGroupLabel(asset)}</td>
                             <td>{assetStatusLabel(asset.status)}</td>
                             <td>{asset.scheduleNote || "-"}</td>
                             <td>
@@ -56846,7 +57268,7 @@ function formatTicketRequestSource(value?: string) {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={7}>No schedule on {selectedCalendarDate}.</td>
+                          <td colSpan={8}>No schedule on {selectedCalendarDate}.</td>
                         </tr>
                       )}
                     </tbody>
@@ -56858,8 +57280,8 @@ function formatTicketRequestSource(value?: string) {
               </h4>
               {isPhoneView ? (
                 <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
-                  {scheduleListRows.length ? (
-                    scheduleListRows.map((asset) => (
+                  {filteredScheduleListRows.length ? (
+                    filteredScheduleListRows.map((asset) => (
                       <article key={`schedule-list-mobile-${asset.id}`} className={`schedule-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
                         <div className="schedule-mobile-card-head">
                           <strong>{asset.assetId}</strong>
@@ -56868,6 +57290,7 @@ function formatTicketRequestSource(value?: string) {
                         <div className="schedule-mobile-card-meta">
                           <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
                           <div>{campusLabel(asset.campus)} | {asset.location || "-"}</div>
+                          <div>{lang === "km" ? "ក្រុម" : "Group"}: {assetScheduleGroupLabel(asset)}</div>
                           <div>
                             {lang === "km" ? "របៀប" : "Mode"}:{" "}
                             {maintenanceRepeatLabel(
@@ -56913,20 +57336,22 @@ function formatTicketRequestSource(value?: string) {
                         <th>{t.campus}</th>
                         <th>{t.location}</th>
                         <th>{t.date}</th>
+                        <th>{lang === "km" ? "ក្រុម" : "Group"}</th>
                         <th>{lang === "km" ? "របៀប" : "Mode"}</th>
                         <th>{t.scheduleNote}</th>
                         <th>{t.actions}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {scheduleListRows.length ? (
-                        scheduleListRows.map((asset) => (
+                      {filteredScheduleListRows.length ? (
+                        filteredScheduleListRows.map((asset) => (
                           <tr key={`schedule-list-row-${asset.id}`}>
                             <td><strong>{asset.assetId}</strong></td>
                             <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
                             <td>{campusLabel(asset.campus)}</td>
                             <td>{asset.location || "-"}</td>
                             <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
+                            <td>{assetScheduleGroupLabel(asset)}</td>
                             <td>
                               {maintenanceRepeatLabel(
                                 String(asset.repeatMode || "NONE"),
@@ -56960,7 +57385,7 @@ function formatTicketRequestSource(value?: string) {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={8}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
+                          <td colSpan={9}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
                         </tr>
                       )}
                     </tbody>
@@ -63384,6 +63809,40 @@ function formatTicketRequestSource(value?: string) {
                   />
                 </>
               ) : null}
+              {reportType === "schedule_calendar" ? (
+                <>
+                  <input
+                    className="input"
+                    type="month"
+                    value={reportScheduleMonth}
+                    onChange={(e) => setReportScheduleMonth(e.target.value)}
+                  />
+                  <select
+                    className="input"
+                    value={reportScheduleCampusFilter}
+                    onChange={(e) => setReportScheduleCampusFilter(e.target.value)}
+                  >
+                    <option value="ALL">{t.allCampuses}</option>
+                    {reportScheduleCampusOptions.map((campus) => (
+                      <option key={`report-schedule-campus-${campus}`} value={campus}>
+                        {reportCampusName(campus)}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={reportScheduleGroupFilter}
+                    onChange={(e) => setReportScheduleGroupFilter(e.target.value)}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់ក្រុម" : "All Groups"}</option>
+                    {reportScheduleGroupOptions.map((group) => (
+                      <option key={`report-schedule-group-${group}`} value={group}>
+                        {reportScheduleGroupLabel(group)}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
               {reportType === "inventory_balance" ? (
                 <>
                   <LocationPicker
@@ -64372,6 +64831,170 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 )}
               </>
+            )}
+
+            {reportType === "schedule_calendar" && (
+              <div style={{ display: "grid", gap: 16 }}>
+                <div
+                  style={{
+                    border: "1px solid rgba(215, 204, 184, 0.42)",
+                    borderRadius: 20,
+                    background: "linear-gradient(180deg, rgba(248,242,230,0.94) 0%, rgba(244,236,221,0.98) 100%)",
+                    padding: 16,
+                    boxShadow: "0 18px 42px rgba(79, 60, 32, 0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "center",
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div>
+                      <div className="tiny" style={{ letterSpacing: "0.14em", textTransform: "uppercase", color: "#8a6f47", fontWeight: 800 }}>
+                        {lang === "km" ? "ប្រតិទិនកាលវិភាគផ្លូវការ" : "Official Calendar Preview"}
+                      </div>
+                      <strong style={{ fontSize: 24, color: "#1f2e26" }}>{selectedReportDisplayTitle}</strong>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                      {reportScheduleCampusOptions.map((campus) => (
+                        <span
+                          key={`schedule-legend-${campus}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            background: "rgba(255,255,255,0.72)",
+                            border: "1px solid rgba(202, 164, 104, 0.28)",
+                            color: "#425347",
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 14,
+                              height: 14,
+                              borderRadius: 4,
+                              background: scheduleCalendarCampusColor(campus),
+                              border: "1px solid rgba(72, 63, 45, 0.18)",
+                            }}
+                          />
+                          {reportCampusName(campus)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+                      border: "1px solid rgba(151, 124, 85, 0.3)",
+                      borderRadius: 18,
+                      overflow: "hidden",
+                      background: "#fffdf8",
+                    }}
+                  >
+                    {calendarWeekdayLabels.map((weekday, index) => (
+                      <div
+                        key={`report-schedule-head-${weekday}`}
+                        style={{
+                          padding: "10px 8px",
+                          textAlign: "center",
+                          fontWeight: 800,
+                          fontSize: 12,
+                          background: "#f5ecdc",
+                          borderRight: index === 6 ? "0" : "1px solid rgba(151, 124, 85, 0.24)",
+                          borderBottom: "1px solid rgba(151, 124, 85, 0.3)",
+                          color: index === 0 ? "#bb3f3f" : index === 6 ? "#7a5ea8" : "#3e4d43",
+                        }}
+                      >
+                        {weekday}
+                      </div>
+                    ))}
+                    {reportScheduleCalendarDays.map((day) => (
+                      <div
+                        key={`report-schedule-day-${day.ymd}`}
+                        style={{
+                          minHeight: 132,
+                          padding: 8,
+                          background: day.inMonth ? "#fff" : "#f7f2e8",
+                          borderRight: day.weekday === 6 ? "0" : "1px solid rgba(151, 124, 85, 0.18)",
+                          borderBottom: "1px solid rgba(151, 124, 85, 0.18)",
+                          display: "grid",
+                          gridTemplateRows: "auto 1fr",
+                          gap: 6,
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 800, color: day.weekday === 0 ? "#bb3f3f" : "#33443a" }}>{day.day}</div>
+                        <div style={{ display: "grid", gap: 6, alignContent: "start" }}>
+                          {day.entries.map((entry) => (
+                            <div
+                              key={entry.key}
+                              style={{
+                                borderRadius: 10,
+                                padding: "6px 7px",
+                                background: scheduleCalendarCampusColor(entry.campus),
+                                boxShadow: "inset 0 0 0 1px rgba(72, 63, 45, 0.08)",
+                                color: "#223128",
+                              }}
+                            >
+                              <div style={{ fontSize: 10, fontWeight: 800, lineHeight: 1.2 }}>{reportCampusName(entry.campus)}</div>
+                              <div style={{ fontSize: 10, lineHeight: 1.2 }}>{entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
+                              <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.82 }}>
+                                {entry.assetCount} {entry.assetCount > 1 ? (lang === "km" ? "ទ្រព្យ" : "assets") : (lang === "km" ? "ទ្រព្យ" : "asset")}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="table-wrap report-table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>No.</th>
+                        <th>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</th>
+                        <th>{t.campus}</th>
+                        <th>{lang === "km" ? "ក្រុម" : "Group"}</th>
+                        <th>{lang === "km" ? "សម្គាល់" : "Schedule Note"}</th>
+                        <th>{lang === "km" ? "ចំនួនទ្រព្យ" : "Assets"}</th>
+                        <th>{lang === "km" ? "ទីតាំង" : "Locations"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportScheduleCalendarRows.length ? (
+                        reportScheduleCalendarRows.map((row, index) => (
+                          <tr key={`report-schedule-row-${row.key}`}>
+                            <td>{index + 1}</td>
+                            <td>{formatDate(row.date)}</td>
+                            <td>{reportCampusName(row.campus)}</td>
+                            <td>{reportScheduleGroupLabel(row.scheduleGroup)}</td>
+                            <td>{row.scheduleNote || "-"}</td>
+                            <td>{row.assetCount}</td>
+                            <td>{row.locations.join(", ") || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7}>
+                            {lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month."}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
 
             {reportType === "overdue" && (
@@ -70135,6 +70758,7 @@ function formatTicketRequestSource(value?: string) {
                         ...f,
                         assetId,
                         note: asset?.scheduleNote || f.note,
+                        group: String(asset?.scheduleGroup || "").trim(),
                       }));
                     }}
                     placeholder={lang === "km" ? "ជ្រើស Asset តាមតម្រង" : "Select filtered asset"}
@@ -70264,6 +70888,20 @@ function formatTicketRequestSource(value?: string) {
                     disabled={scheduleQuickForm.repeatMode === "WDP_FILTER_CYCLE"}
                     placeholder="Example: Monthly preventive maintenance"
                   />
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ក្រុមកាលវិភាគ" : "Schedule Group"}</span>
+                  <select
+                    className="input"
+                    value={scheduleQuickForm.group}
+                    onChange={(e) => setScheduleQuickForm((f) => ({ ...f, group: e.target.value }))}
+                  >
+                    {SCHEDULE_GROUP_PRESET_OPTIONS.map((option) => (
+                      <option key={`quick-schedule-group-${option.value || "auto"}`} value={option.value}>
+                        {lang === "km" ? option.km : option.en}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
               <div className="asset-actions">
@@ -71123,108 +71761,6 @@ function formatTicketRequestSource(value?: string) {
           </div>
         ) : null}
 
-        {toolReviewSummaryModal ? (
-          <div className="modal-backdrop quick-count-assets-backdrop" onClick={() => setToolReviewSummaryModal(null)}>
-            <section className="panel modal-panel quick-count-assets-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="panel-row">
-                <h2>{toolReviewSummaryModal.title}</h2>
-                <button className="tab" onClick={() => setToolReviewSummaryModal(null)}>{t.close}</button>
-              </div>
-              {isPhoneView ? (
-                <div className="quick-count-mobile-list">
-                  {toolReviewSummaryModal.items.length ? (
-                    toolReviewSummaryModal.items.map((item) => (
-                      <article key={`tool-review-summary-mobile-${item.id}`} className="quick-count-mobile-card">
-                        <div className="quick-count-mobile-head">
-                          <strong>{item.itemCode}</strong>
-                          <span>{item.condition || "Pending"}</span>
-                        </div>
-                        <div className="quick-count-mobile-body">
-                          <div>
-                            {item.photo ? (
-                              <img loading="lazy" decoding="async" src={item.photo} alt={item.itemCode} className="table-photo" />
-                            ) : (
-                              <div className="asset-gallery-photo-empty">No photo</div>
-                            )}
-                          </div>
-                          <div className="quick-count-mobile-meta">
-                            <div>{item.itemName}</div>
-                            <div>{t.campus}: {inventoryCampusLabel(item.campus)}</div>
-                            <div>{t.location}: {item.location || "-"}</div>
-                            <div>Amount: {item.currentStock} {item.unit}</div>
-                            <div>{item.reviewedBy ? `Reviewed By: ${item.reviewedBy}` : "Waiting Review"}</div>
-                          </div>
-                        </div>
-                        <div className="asset-actions" style={{ marginTop: 10 }}>
-                          <button
-                            className="tab btn-small"
-                            onClick={() => {
-                              const selectedRow = toolReviewItemOptions.find((row) => Number(row.id) === item.id);
-                              if (!selectedRow) return;
-                              openToolReviewItem(selectedRow, toolReviewMonthReportByItemId.get(String(item.id)) || null);
-                              setToolReviewSummaryModal(null);
-                            }}
-                          >
-                            Open Tool
-                          </button>
-                        </div>
-                      </article>
-                    ))
-                  ) : (
-                    <div className="panel-note">No tool items found.</div>
-                  )}
-                </div>
-              ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Tool ID</th>
-                        <th>{t.photo}</th>
-                        <th>{t.campus}</th>
-                        <th>{t.name}</th>
-                        <th>{t.location}</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Reviewed By</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {toolReviewSummaryModal.items.length ? (
-                        toolReviewSummaryModal.items.map((item) => (
-                          <tr
-                            key={`tool-review-summary-row-${item.id}`}
-                            onClick={() => {
-                              const selectedRow = toolReviewItemOptions.find((row) => Number(row.id) === item.id);
-                              if (!selectedRow) return;
-                              openToolReviewItem(selectedRow, toolReviewMonthReportByItemId.get(String(item.id)) || null);
-                              setToolReviewSummaryModal(null);
-                            }}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <td><strong>{item.itemCode}</strong></td>
-                            <td>{item.photo ? <img loading="lazy" decoding="async" src={item.photo} alt={item.itemCode} className="table-photo" /> : <span className="tiny">No photo</span>}</td>
-                            <td>{inventoryCampusLabel(item.campus)}</td>
-                            <td>{item.itemName}</td>
-                            <td>{item.location || "-"}</td>
-                            <td>{item.currentStock} {item.unit}</td>
-                            <td>{item.condition || "Pending"}</td>
-                            <td>{item.reviewedBy || "-"}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={8}>No tool items found.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </div>
-        ) : null}
-
         {latestMaintenanceDetailRow ? (
           <div className="modal-backdrop" onClick={() => setLatestMaintenanceDetailRowId(null)}>
             <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
@@ -71473,8 +72009,8 @@ function formatTicketRequestSource(value?: string) {
           </div>
         )}
 
-        {maintenanceQuickMode && toolReviewModalOpen && toolReviewSelectedItem ? (
-          <div className="modal-backdrop" onClick={() => setToolReviewModalOpen(false)}>
+        {toolReviewModalOpen && toolReviewSelectedItem ? (
+          <div className="modal-backdrop tool-review-modal-backdrop" onClick={() => setToolReviewModalOpen(false)}>
             <section className="panel modal-panel tool-review-modal-panel" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
                 <div>
@@ -71485,166 +72021,228 @@ function formatTicketRequestSource(value?: string) {
                       : "Check real amount, take latest photo, then submit."}
                   </div>
                 </div>
-                <button className="tab" onClick={() => setToolReviewModalOpen(false)}>{t.close}</button>
+                <button
+                  type="button"
+                  className="tool-review-modal-close"
+                  aria-label={t.close}
+                  onClick={() => setToolReviewModalOpen(false)}
+                >
+                  ×
+                </button>
               </div>
 
-              <div className="tool-review-selected-head">
-                <strong>{inventoryDisplayName(toolReviewSelectedItem.itemName, lang)}</strong>
-                <div className="tool-review-selected-hero tool-review-selected-hero-modal">
-                  {toolReviewSelectedItem.photo ? (
-                    <img
-                      loading="lazy"
-                      decoding="async"
-                      src={toolReviewSelectedItem.photo}
-                      alt={toolReviewSelectedItem.itemCode}
-                      className="tool-review-selected-photo"
-                    />
-                  ) : (
-                    <div className="tool-review-selected-photo tool-review-selected-photo-empty">🧰</div>
-                  )}
-                  <div className="tool-review-selected-copy">
-                    <div className="tool-review-selected-info-list">
-                      <div className="tool-review-selected-info-row">
-                        <small>{lang === "km" ? "លេខសម្គាល់ឧបករណ៍" : "Tool ID"}</small>
-                        <span>{toolReviewSelectedItem.itemCode}</span>
+              <div className="tool-review-selected-head tool-review-selected-head-compact">
+                <div className="tool-review-selected-topline">
+                  <div className="tool-review-selected-hero tool-review-selected-hero-modal">
+                    {toolReviewSelectedItem.photo ? (
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={toolReviewSelectedItem.photo}
+                        alt={toolReviewSelectedItem.itemCode}
+                        className="tool-review-selected-photo"
+                      />
+                    ) : (
+                      <div className="tool-review-selected-photo tool-review-selected-photo-empty">🧰</div>
+                    )}
+                    <div className="tool-review-selected-copy">
+                      <div className="tool-review-selected-data-list">
+                        <div className="tool-review-selected-data-row">
+                          <small>{lang === "km" ? "ឈ្មោះ" : "Name"}</small>
+                          <strong className="tool-review-selected-title">{inventoryDisplayName(toolReviewSelectedItem.itemName, lang)}</strong>
+                        </div>
+                        <div className="tool-review-selected-data-row">
+                          <small>{lang === "km" ? "លេខសម្គាល់" : "ID"}</small>
+                          <span>{toolReviewSelectedItem.itemCode}</span>
+                        </div>
+                        <div className="tool-review-selected-data-row">
+                          <small>{lang === "km" ? "សាខា" : "Campus"}</small>
+                          <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)}</span>
+                        </div>
+                        <div className="tool-review-selected-data-row">
+                          <small>{lang === "km" ? "ទីតាំង" : "Location"}</small>
+                          <span>{toolReviewSelectedItem.location || "-"}</span>
+                        </div>
                       </div>
-                      <div className="tool-review-selected-info-row">
-                        <small>{lang === "km" ? "សាខា" : "Campus"}</small>
-                        <span>{inventoryCampusLabel(toolReviewSelectedItem.campus)}</span>
-                      </div>
-                      <div className="tool-review-selected-info-row">
-                        <small>{lang === "km" ? "ទីតាំង" : "Location"}</small>
-                        <span>{toolReviewSelectedItem.location || "-"}</span>
-                      </div>
+                    </div>
+                  </div>
+                  <div className="tool-review-selected-side">
+                    <div className="tool-review-selected-side-card">
+                      <small>{lang === "km" ? "ចំនួន" : "Amount"}</small>
+                      <strong>{Number(toolReviewSelectedItem.currentStock || 0)} {toolReviewSelectedItem.unit || "pcs"}</strong>
+                    </div>
+                    <div className={`tool-review-selected-side-card tool-review-selected-side-card-status ${toolReviewExistingEntry ? "is-done" : "is-pending"}`}>
+                      <small>{lang === "km" ? "ស្ថានភាព" : "Status"}</small>
+                      <strong>{toolReviewExistingEntry ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}</strong>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="tool-review-meta-grid tool-review-meta-grid-compact">
-                <article className="tool-review-meta-card">
-                  <small>{lang === "km" ? "ចំនួនដែលរំពឹង" : "Expected Amount"}</small>
-                  <strong>{Number(toolReviewSelectedItem.currentStock || 0)} {toolReviewSelectedItem.unit || "pcs"}</strong>
-                </article>
-                <article className={`tool-review-meta-card tool-review-status-card ${toolReviewExistingEntry ? "is-done" : "is-pending"}`}>
-                  <small>{lang === "km" ? "ស្ថានភាព" : "Status"}</small>
-                  <strong>{toolReviewExistingEntry ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}</strong>
-                </article>
-              </div>
-
-              <div className="form-grid tool-review-form-grid">
-                <div className="tool-review-compact-row">
-                  <label className="field tool-review-field-centered">
-                    <span>{lang === "km" ? "ចំនួនពិត" : "Real Amount"}</span>
-                    <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
-                  </label>
-                  <label className="field tool-review-field-centered">
-                    <span>{lang === "km" ? "ស្ថានភាព" : "Condition"}</span>
-                    <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
-                      {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
-                        <option key={`tool-review-modal-condition-${option}`} value={option}>
-                          {lang === "km"
-                            ? ({
-                                Good: "ល្អ",
-                                Fair: "មធ្យម",
-                                Damaged: "ខូច",
-                                Missing: "បាត់",
-                                "Need Replacement": "ត្រូវប្តូរ",
-                              } as Record<string, string>)[option] || option
-                            : option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="tool-review-compact-row">
-                  <label className="field tool-review-field-centered">
-                    <span>{lang === "km" ? "ពិនិត្យដោយ" : "Reviewed By"}</span>
-                    <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
-                  </label>
-                  <label className="field tool-review-field-centered">
-                    <span>{lang === "km" ? "រូបថ្មី" : "New Photo"}</span>
-                    <div className="tool-review-upload-control">
-                      <input
-                        id={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
-                        key={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
-                        type="file"
-                        accept="image/*"
-                        className="tool-review-upload-native"
-                        onChange={onToolReviewPhotoFile}
-                      />
-                      <label
-                        htmlFor={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
-                        className="tool-review-upload-trigger"
-                      >
-                        {lang === "km" ? "បញ្ចូលរូប" : "Upload Photo"}
-                      </label>
-                      <span className={`tool-review-upload-name ${toolReviewPhotoName ? "has-file" : ""}`}>
-                        {toolReviewPhotoName || (lang === "km" ? "មិនទាន់មានរូបថ្មី" : "No new photo yet")}
+              <div className="tool-review-modal-workspace">
+                <div className="tool-review-modal-main">
+                  <div className="tool-review-quick-actions">
+                    <div className="tool-review-quick-actions-head">
+                      <strong>{lang === "km" ? "ជ្រើសរើសលឿន" : "Quick Decision"}</strong>
+                      <span className="tool-review-quick-actions-copy">
+                        {lang === "km"
+                          ? "ជ្រើសប៊ូតុងមួយ មុនពេលកែចំនួន ឬ កំណត់ចំណាំ។"
+                          : "Choose one button first, then only adjust amount or note if needed."}
                       </span>
                     </div>
-                  </label>
+                    <div className="tool-review-quick-actions-grid">
+                      <button
+                        type="button"
+                        className={`tool-review-quick-action-btn is-good ${toolReviewQuickAction === "good" ? "is-active" : ""}`}
+                        onClick={() => applyToolReviewQuickAction("good")}
+                      >
+                        <span className="tool-review-quick-action-icon" aria-hidden="true">✓</span>
+                        <div className="tool-review-quick-action-copy-block">
+                          <strong>{lang === "km" ? "ល្អ" : "Good"}</strong>
+                          <span>{lang === "km" ? "ចំនួនគ្រប់ និង ប្រើបាន" : "Amount is complete and usable."}</span>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className={`tool-review-quick-action-btn is-add-more ${toolReviewQuickAction === "add_more" ? "is-active" : ""}`}
+                        onClick={() => applyToolReviewQuickAction("add_more")}
+                      >
+                        <span className="tool-review-quick-action-icon" aria-hidden="true">+</span>
+                        <div className="tool-review-quick-action-copy-block">
+                          <strong>{lang === "km" ? "ត្រូវបន្ថែម" : "Need Add More"}</strong>
+                          <span>{lang === "km" ? "ខ្វះចំនួន ឬ មិនគ្រប់ប្រើ" : "Missing quantity or not enough to use."}</span>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className={`tool-review-quick-action-btn is-take-out ${toolReviewQuickAction === "take_out" ? "is-active" : ""}`}
+                        onClick={() => applyToolReviewQuickAction("take_out")}
+                      >
+                        <span className="tool-review-quick-action-icon" aria-hidden="true">!</span>
+                        <div className="tool-review-quick-action-copy-block">
+                          <strong>{lang === "km" ? "ខូច / ដកចេញ" : "Broken / Take Out"}</strong>
+                          <span>{lang === "km" ? "ខូច ហើយត្រូវដកចេញពីការប្រើ" : "Damaged and should be removed from use."}</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="form-grid tool-review-form-grid">
+                    <div className="tool-review-compact-row tool-review-compact-row-triple">
+                      <label className="field tool-review-field-centered">
+                        <span>{lang === "km" ? "ចំនួនពិត" : "Real Amount"}</span>
+                        <input className="input" type="number" min="0" value={toolReviewForm.countedQty} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, countedQty: e.target.value }))} />
+                      </label>
+                      <label className="field tool-review-field-centered">
+                        <span>{lang === "km" ? "ស្ថានភាព" : "Condition"}</span>
+                        <select className="input" value={toolReviewForm.condition} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, condition: e.target.value as ToolReviewCondition }))}>
+                          {TOOL_REVIEW_CONDITION_OPTIONS.map((option) => (
+                            <option key={`tool-review-modal-condition-${option}`} value={option}>
+                              {lang === "km"
+                                ? ({
+                                    Good: "ល្អ",
+                                    Fair: "មធ្យម",
+                                    Damaged: "ខូច",
+                                    Missing: "បាត់",
+                                    "Need Replacement": "ត្រូវប្តូរ",
+                                  } as Record<string, string>)[option] || option
+                                : option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field tool-review-field-centered">
+                        <span>{lang === "km" ? "ពិនិត្យដោយ" : "Reviewed By"}</span>
+                        <input className="input" value={toolReviewForm.reviewedBy} onChange={(e) => setToolReviewForm((prev) => ({ ...prev, reviewedBy: e.target.value }))} />
+                      </label>
+                    </div>
+                  </div>
+
                 </div>
+
+                <aside className="tool-review-modal-side">
+                  <div className="tool-review-photo-section tool-review-photo-side-card">
+                    <div className="tool-review-photo-section-head">
+                      <strong>{lang === "km" ? "ប្រៀបធៀបរូបថត" : "Photo Comparison"}</strong>
+                      <span>
+                        {toolReviewPhotoRule.helper}
+                      </span>
+                    </div>
+                    <div className="tool-review-photo-compare tool-review-photo-compare-stack">
+                      <div className={`tool-review-proof-preview tool-review-proof-preview-compare tool-review-proof-preview-upload ${toolReviewPhotoRule.required ? "is-required" : ""}`}>
+                        <small>{toolReviewPhotoRule.required ? (lang === "km" ? "ត្រូវបញ្ចូលរូប" : "Required Upload") : (lang === "km" ? "បញ្ចូលរូប" : "Upload")}</small>
+                        <div className={`tool-review-upload-control tool-review-upload-control-card ${toolReviewPhotoRule.required ? "is-required" : ""}`}>
+                          <input
+                            id={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
+                            key={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
+                            type="file"
+                            accept="image/*"
+                            className="tool-review-upload-native"
+                            onChange={onToolReviewPhotoFile}
+                          />
+                          <label
+                            htmlFor={`tool-review-modal-photo-${toolReviewPhotoFileKey}`}
+                            className="tool-review-upload-trigger"
+                          >
+                            {toolReviewPhotoRule.uploadTitle}
+                          </label>
+                          <span className={`tool-review-upload-name ${toolReviewPhotoName ? "has-file" : ""}`}>
+                            {toolReviewPhotoName || (lang === "km" ? "មិនទាន់មានរូបថ្មី" : "No new photo yet")}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="tool-review-proof-preview tool-review-proof-preview-compare">
+                        <small>{lang === "km" ? "រូបចាស់" : "Last Photo"}</small>
+                        {toolReviewPreviousPhoto ? (
+                          <img
+                            src={toolReviewPreviousPhoto}
+                            alt="Last tool review proof"
+                            className="tool-review-modal-proof"
+                          />
+                        ) : (
+                          <div className="tool-review-modal-proof tool-review-modal-proof-empty">{lang === "km" ? "មិនមានរូបចាស់" : "No previous photo"}</div>
+                        )}
+                      </div>
+                      <div className="tool-review-proof-preview tool-review-proof-preview-compare">
+                        <small>{lang === "km" ? "រូបថ្មី" : "New Photo"}</small>
+                        {toolReviewForm.photo ? (
+                          <img
+                            src={toolReviewForm.photo}
+                            alt="New tool review proof"
+                            className="tool-review-modal-proof"
+                          />
+                        ) : (
+                          <div className="tool-review-modal-proof tool-review-modal-proof-empty">{lang === "km" ? "មិនទាន់មានរូបថ្មី" : "No new photo yet"}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </aside>
               </div>
 
-              <div className="tool-review-photo-section">
-                <div className="tool-review-photo-section-head">
-                  <strong>{lang === "km" ? "ប្រៀបធៀបរូបថត" : "Photo Comparison"}</strong>
-                  <span>
-                    {lang === "km"
-                      ? "ប្រៀបធៀបរូបចាស់ជាមួយរូបថ្មី មុនពេលដាក់ស្នើ។"
-                      : "Compare the previous photo with the new upload before submit."}
-                  </span>
-                </div>
-                <div className="tool-review-photo-compare">
-                  <div className="tool-review-proof-preview tool-review-proof-preview-compare">
-                    <small>{lang === "km" ? "រូបចាស់" : "Last Photo"}</small>
-                    {toolReviewPreviousPhoto ? (
-                      <img
-                        src={toolReviewPreviousPhoto}
-                        alt="Last tool review proof"
-                        className="tool-review-modal-proof"
-                      />
-                    ) : (
-                      <div className="tool-review-modal-proof tool-review-modal-proof-empty">{lang === "km" ? "មិនមានរូបចាស់" : "No previous photo"}</div>
-                    )}
-                  </div>
-                  <div className="tool-review-proof-preview tool-review-proof-preview-compare">
-                    <small>{lang === "km" ? "រូបថ្មី" : "New Photo"}</small>
-                    {toolReviewForm.photo ? (
-                      <img
-                        src={toolReviewForm.photo}
-                        alt="New tool review proof"
-                        className="tool-review-modal-proof"
-                      />
-                    ) : (
-                      <div className="tool-review-modal-proof tool-review-modal-proof-empty">{lang === "km" ? "មិនទាន់មានរូបថ្មី" : "No new photo yet"}</div>
-                    )}
-                  </div>
+              <div className="tool-review-note-submit-row">
+                <label className="field tool-review-note-field">
+                  <span>{lang === "km" ? "កំណត់ចំណាំ" : "Note"}</span>
+                  <textarea
+                    ref={toolReviewNoteRef}
+                    rows={1}
+                    className="textarea tool-review-note-textarea"
+                    value={toolReviewForm.note}
+                    onChange={(e) => {
+                      setToolReviewForm((prev) => ({ ...prev, note: e.target.value }));
+                    }}
+                    placeholder={lang === "km" ? "បាត់គ្រឿងបន្លាស់ ខូច ឬ ត្រូវប្តូរ..." : "Missing pieces, damaged parts, replacement needed..."}
+                  />
+                </label>
+
+                <div className="asset-actions tool-review-modal-actions">
+                  <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
+                    {toolReviewExistingEntry ? (lang === "km" ? "កែប្រែការផ្ទៀងផ្ទាត់" : "Update Verification") : (lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់" : "Submit Verification")}
+                  </button>
                 </div>
               </div>
-
-              <label className="field field-wide">
-                <span>{lang === "km" ? "កំណត់ចំណាំ" : "Note"}</span>
-                <textarea
-                  ref={toolReviewNoteRef}
-                  rows={1}
-                  className="textarea tool-review-note-textarea"
-                  value={toolReviewForm.note}
-                  onChange={(e) => {
-                    e.currentTarget.style.height = "auto";
-                    e.currentTarget.style.height = `${Math.max(e.currentTarget.scrollHeight, 44)}px`;
-                    setToolReviewForm((prev) => ({ ...prev, note: e.target.value }));
-                  }}
-                  placeholder={lang === "km" ? "បាត់គ្រឿងបន្លាស់ ខូច ឬ ត្រូវប្តូរ..." : "Missing pieces, damaged parts, replacement needed..."}
-                />
-              </label>
-
-              <div className="asset-actions tool-review-modal-actions">
-                <div className="tiny">{lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់ប្រចាំខែ សម្រាប់ឧបករណ៍ដែលបានជ្រើស។" : "Submit this month verification for the selected tool."}</div>
-                <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
-                  {toolReviewExistingEntry ? (lang === "km" ? "កែប្រែការផ្ទៀងផ្ទាត់" : "Update Verification") : (lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់" : "Submit Verification")}
-                </button>
+              <div className="tiny tool-review-submit-helper">
+                {lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់ប្រចាំខែ សម្រាប់ឧបករណ៍ដែលបានជ្រើស។" : "Submit this month verification for the selected tool."}
               </div>
             </section>
           </div>

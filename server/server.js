@@ -3873,6 +3873,7 @@ function ensureGeneralMaintenanceAsset(db, campus) {
     nextVerificationDate: "",
     verificationFrequency: "NONE",
     scheduleNote: "",
+    scheduleGroup: "",
     repeatMode: "NONE",
     repeatWeekOfMonth: 0,
     repeatWeekday: 0,
@@ -6018,6 +6019,7 @@ function validateAsset(body, settings) {
   const notes = toText(body.notes);
   const nextMaintenanceDate = toText(body.nextMaintenanceDate);
   const scheduleNote = toText(body.scheduleNote);
+  const scheduleGroup = toText(body.scheduleGroup);
   const repeatMode = toUpper(body.repeatMode) || "NONE";
   const repeatWeekOfMonth = Number(body.repeatWeekOfMonth || 0);
   const repeatWeekday = Number(body.repeatWeekday || 0);
@@ -6091,6 +6093,7 @@ function validateAsset(body, settings) {
     notes,
     nextMaintenanceDate,
     scheduleNote,
+    scheduleGroup,
     repeatMode,
     repeatWeekOfMonth,
     repeatWeekday,
