@@ -1398,6 +1398,21 @@ type CalendarEvent = {
   type: CalendarEventType;
   time?: string;
 };
+type ServiceTaskScheduleType =
+  | "pest_service"
+  | "pool_clean"
+  | "submit_report"
+  | "monthly_submit_request";
+const SERVICE_TASK_SCHEDULE_OPTIONS: Array<{
+  value: ServiceTaskScheduleType;
+  label: string;
+  defaultName: string;
+}> = [
+  { value: "pest_service", label: "Pest Service", defaultName: "Pest Service" },
+  { value: "pool_clean", label: "Pool Clean", defaultName: "Pool Clean" },
+  { value: "submit_report", label: "Submit Report", defaultName: "Submit Report" },
+  { value: "monthly_submit_request", label: "Monthly Submit Request", defaultName: "Monthly Submit Request" },
+];
 type MaintenanceNotification = {
   id: number;
   key: string;
@@ -13366,6 +13381,7 @@ export default function App() {
   const [overdueMonthFilter, setOverdueMonthFilter] = useState("ALL");
   const [overdueCampusFilter, setOverdueCampusFilter] = useState("ALL");
   const [overdueLocationFilter, setOverdueLocationFilter] = useState("ALL");
+  const [bulkScheduleMode, setBulkScheduleMode] = useState<"asset" | "service">("asset");
   const [bulkScheduleForm, setBulkScheduleForm] = useState({
     campus: "ALL",
     category: "SAFETY",
@@ -13377,6 +13393,14 @@ export default function App() {
     repeatWeekOfMonth: 1,
     repeatWeekday: 6,
     repeatCycleStep: 1,
+  });
+  const [bulkServiceScheduleForm, setBulkServiceScheduleForm] = useState({
+    campus: "ALL",
+    type: "pest_service" as ServiceTaskScheduleType,
+    date: toYmd(new Date()),
+    time: "09:00",
+    name: "",
+    note: "",
   });
   const [scheduleScopeModal, setScheduleScopeModal] = useState<null | {
     action: "edit" | "delete";
@@ -30770,6 +30794,75 @@ export default function App() {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save bulk schedule");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveBulkServiceTaskSchedule() {
+    if (!requireAdminAction()) return;
+    const normalizedDate = normalizeYmdInput(bulkServiceScheduleForm.date);
+    const normalizedTime = normalizeCalendarEventTime(bulkServiceScheduleForm.time);
+    if (!normalizedDate) {
+      setError("Please select a valid service/task date.");
+      return;
+    }
+    if (normalizedDate < todayYmd) {
+      setError("Cannot set service/task schedule to a past date.");
+      return;
+    }
+    const option = SERVICE_TASK_SCHEDULE_OPTIONS.find((item) => item.value === bulkServiceScheduleForm.type);
+    if (!option) {
+      setError("Please select a service/task type.");
+      return;
+    }
+    const customName = String(bulkServiceScheduleForm.name || "").trim();
+    const note = String(bulkServiceScheduleForm.note || "").trim();
+    const campusText =
+      bulkServiceScheduleForm.campus !== "ALL"
+        ? campusLabel(bulkServiceScheduleForm.campus)
+        : "All Campuses";
+    const eventName = [
+      customName || option.defaultName,
+      campusText,
+      note,
+    ].filter(Boolean).join(" - ");
+    const nextRows = normalizeCalendarEvents(
+      [
+        ...calendarEvents,
+        {
+          id: Date.now(),
+          date: normalizedDate,
+          time: normalizedTime,
+          type: option.value,
+          name: eventName,
+        },
+      ],
+      defaultCalendarEvents
+    );
+
+    setBusy(true);
+    setError("");
+    try {
+      await saveCalendarEventsToServer(nextRows);
+      setCalendarEvents(nextRows);
+      writeCalendarEventFallback(nextRows);
+      setBulkServiceScheduleForm((form) => ({
+        ...form,
+        date: toYmd(new Date()),
+        time: "09:00",
+        name: "",
+        note: "",
+      }));
+      setSetupMessage(`Service/task schedule added: ${eventName}`);
+      appendUiAudit(
+        "SCHEDULE_SERVICE_CREATE",
+        "calendar_event",
+        `${normalizedDate} ${normalizedTime || ""}`.trim(),
+        `${option.value} | ${eventName}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save service/task schedule");
     } finally {
       setBusy(false);
     }
@@ -56950,7 +57043,25 @@ function formatTicketRequestSource(value?: string) {
 
             {scheduleView === "bulk" && (
               <>
-            <h3 className="section-title">Bulk Campus Schedule (Easy)</h3>
+            <div className="row-actions" style={{ marginBottom: 12 }}>
+              <button
+                className={`tab ${bulkScheduleMode === "asset" ? "tab-active" : ""}`}
+                onClick={() => setBulkScheduleMode("asset")}
+              >
+                Asset Schedule
+              </button>
+              <button
+                className={`tab ${bulkScheduleMode === "service" ? "tab-active" : ""}`}
+                onClick={() => setBulkScheduleMode("service")}
+              >
+                Service / Task Schedule
+              </button>
+            </div>
+            <h3 className="section-title">
+              {bulkScheduleMode === "asset" ? "Bulk Campus Schedule (Easy)" : "Service / Task Schedule"}
+            </h3>
+            {bulkScheduleMode === "asset" ? (
+            <>
             <div className="form-grid transfer-record-grid">
               <label className="field">
                 <span>{t.campus}</span>
@@ -57172,6 +57283,98 @@ function formatTicketRequestSource(value?: string) {
                 Apply Bulk Schedule
               </button>
             </div>
+            </>
+            ) : (
+            <>
+            <div className="form-grid transfer-record-grid">
+              <label className="field">
+                <span>{t.campus}</span>
+                <LocationPicker
+                  value={bulkServiceScheduleForm.campus}
+                  onChange={(value) => setBulkServiceScheduleForm((f) => ({ ...f, campus: value }))}
+                  options={[
+                    { value: "ALL", label: t.allCampuses },
+                    ...campusOptions.map((campus) => ({
+                      value: campus,
+                      label: campusLabel(campus),
+                    })),
+                  ]}
+                  placeholder={t.allCampuses}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                />
+              </label>
+              <label className="field">
+                <span>Service / Task Type</span>
+                <select
+                  className="input"
+                  value={bulkServiceScheduleForm.type}
+                  onChange={(e) =>
+                    setBulkServiceScheduleForm((f) => ({
+                      ...f,
+                      type: e.target.value as ServiceTaskScheduleType,
+                      name: "",
+                    }))
+                  }
+                >
+                  {SERVICE_TASK_SCHEDULE_OPTIONS.map((option) => (
+                    <option key={`service-task-schedule-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>{t.date}</span>
+                <input
+                  type="date"
+                  className="input"
+                  value={bulkServiceScheduleForm.date}
+                  onChange={(e) => setBulkServiceScheduleForm((f) => ({ ...f, date: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Time</span>
+                <input
+                  type="time"
+                  className="input"
+                  value={bulkServiceScheduleForm.time}
+                  onChange={(e) => setBulkServiceScheduleForm((f) => ({ ...f, time: e.target.value }))}
+                />
+              </label>
+              <label className="field field-wide">
+                <span>Display Name</span>
+                <input
+                  className="input"
+                  value={bulkServiceScheduleForm.name}
+                  onChange={(e) => setBulkServiceScheduleForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Optional custom title"
+                />
+              </label>
+              <label className="field field-wide">
+                <span>Note / Area</span>
+                <input
+                  className="input"
+                  value={bulkServiceScheduleForm.note}
+                  onChange={(e) => setBulkServiceScheduleForm((f) => ({ ...f, note: e.target.value }))}
+                  placeholder="Example: Main Pool / Admin report / Building A"
+                />
+              </label>
+            </div>
+            <div className="asset-actions">
+              <div className="tiny">
+                Use this for non-asset schedules like pest service, pool cleaning, submit report, and monthly submit request. It saves to the shared calendar with time.
+              </div>
+              <button
+                className="btn-primary"
+                disabled={busy || !isAdmin || !bulkServiceScheduleForm.date}
+                onClick={saveBulkServiceTaskSchedule}
+              >
+                Save Service / Task Schedule
+              </button>
+            </div>
+            </>
+            )}
               </>
             )}
 
