@@ -23930,6 +23930,14 @@ tr.row-maint-maintenance:hover td {
   gap: 8px;
 }
 
+.maintenance-schedule-action-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .maintenance-schedule-icon-btn {
   width: 40px;
   min-width: 40px;
@@ -23943,6 +23951,18 @@ tr.row-maint-maintenance:hover td {
 
 .maintenance-schedule-icon-btn svg {
   flex: 0 0 auto;
+}
+
+.maintenance-schedule-cell-title {
+  font-weight: 700;
+  color: #20365c;
+}
+
+.maintenance-schedule-cell-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #5c7093;
 }
 
 @media (max-width: 980px) {

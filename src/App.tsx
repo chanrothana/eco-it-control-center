@@ -1403,6 +1403,34 @@ type ServiceTaskScheduleType =
   | "pool_clean"
   | "submit_report"
   | "monthly_submit_request";
+type ScheduleCalendarRow =
+  | {
+      id: string;
+      kind: "asset";
+      date: string;
+      campus: string;
+      title: string;
+      subtitle: string;
+      note: string;
+      groupLabel: string;
+      modeLabel: string;
+      photo: string;
+      asset: Asset;
+    }
+  | {
+      id: string;
+      kind: "service";
+      date: string;
+      campus: string;
+      title: string;
+      subtitle: string;
+      note: string;
+      groupLabel: string;
+      modeLabel: string;
+      photo: string;
+      event: CalendarEvent;
+      serviceType: ServiceTaskScheduleType;
+    };
 const SERVICE_TASK_SCHEDULE_OPTIONS: Array<{
   value: ServiceTaskScheduleType;
   label: string;
@@ -2536,6 +2564,9 @@ const CALENDAR_EVENT_TYPE_OPTIONS: Array<{ value: CalendarEventType; label: stri
 function calendarEventTypeLabel(type: CalendarEventType) {
   return CALENDAR_EVENT_TYPE_OPTIONS.find((opt) => opt.value === type)?.label || type;
 }
+function isServiceTaskCalendarType(type: CalendarEventType | ""): type is ServiceTaskScheduleType {
+  return type === "pest_service" || type === "pool_clean" || type === "submit_report" || type === "monthly_submit_request";
+}
 function calendarEventBadgeLabel(type: CalendarEventType) {
   switch (type) {
     case "public":
@@ -2677,8 +2708,20 @@ function itemSetupAssetCategoryLabel(code: string) {
 }
 const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP", "3.5HP"] as const;
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
-const FAN_TYPE_OPTIONS = ["Wall Fan", "Ceiling Fan", "Exhaust Fan", "Stand Fan"] as const;
+const FAN_TYPE_OPTIONS = ["Wall Mount", "Ceiling Fan", "Exhaust Fan", "Stand Fan"] as const;
 const FAN_TYPE_CODES = ["FAN", "WFN", "CFN", "EFN", "SFN"] as const;
+const FAN_TYPE_CODE_BY_LABEL: Record<(typeof FAN_TYPE_OPTIONS)[number], (typeof FAN_TYPE_CODES)[number]> = {
+  "Wall Mount": "WFN",
+  "Ceiling Fan": "CFN",
+  "Exhaust Fan": "EFN",
+  "Stand Fan": "SFN",
+};
+const FAN_TYPE_LABEL_BY_CODE: Partial<Record<(typeof FAN_TYPE_CODES)[number], (typeof FAN_TYPE_OPTIONS)[number]>> = {
+  WFN: "Wall Mount",
+  CFN: "Ceiling Fan",
+  EFN: "Exhaust Fan",
+  SFN: "Stand Fan",
+};
 const KEYBOARD_PIANO_TYPE_CODE = "KPN";
 
 function shortAirconCapacityLabel(value: string) {
@@ -2827,6 +2870,10 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
     { itemEn: "Fan", itemKm: "កង្ហារ", code: "FAN" },
+    { itemEn: "Wall Mount Fan", itemKm: "កង្ហារព្យួរជញ្ជាំង", code: "WFN" },
+    { itemEn: "Ceiling Fan", itemKm: "កង្ហារពិដាន", code: "CFN" },
+    { itemEn: "Exhaust Fan", itemKm: "កង្ហារបឺតខ្យល់", code: "EFN" },
+    { itemEn: "Stand Fan", itemKm: "កង្ហារឈរ", code: "SFN" },
     { itemEn: "Refrigerator", itemKm: "ទូទឹកកក", code: "RFG" },
     { itemEn: "Microwave", itemKm: "ម៉ាស៊ីនកម្តៅម្ហូប", code: "MWV" },
     { itemEn: "Oven Griller", itemKm: "ឡដុតម្ហូប", code: "OVG" },
@@ -2854,7 +2901,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 
 const NEW_ENTRY_HIDDEN_TYPE_CODES: Record<string, string[]> = {
   IT: ["BAT", "CHB", "MCD", "BAG", "PBG", "RMT", "ADP", "HDC", "WMR"],
-  FACILITY: ["RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "WFN", "CFN", "EFN", "SFN"],
+  FACILITY: ["RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO"],
 };
 
 const WALKIE_TALKIE_TYPE_CODE = "WTK";
@@ -7797,6 +7844,11 @@ function buildFanSpecs(baseSpecs: string, fanType: string) {
   if (type) out.push(`Fan Type: ${type}`);
   if (normalized.specs) out.push(normalized.specs);
   return out.join("\n").trim();
+}
+
+function fanTypeFromAssetTypeCode(type: string) {
+  const code = String(type || "").trim().toUpperCase() as (typeof FAN_TYPE_CODES)[number];
+  return FAN_TYPE_LABEL_BY_CODE[code] || "";
 }
 
 function parseWalkieTalkieSpecs(specsRaw: string) {
@@ -13402,6 +13454,7 @@ export default function App() {
     name: "",
     note: "",
   });
+  const [editingBulkServiceScheduleId, setEditingBulkServiceScheduleId] = useState<number | null>(null);
   const [scheduleScopeModal, setScheduleScopeModal] = useState<null | {
     action: "edit" | "delete";
     assetId: number;
@@ -14649,6 +14702,58 @@ export default function App() {
       searchText: `${campus} ${CAMPUS_CODE[campus] || ""} ${campusLabel(campus)} ${rentalPrinterCampusLabel(campus)}`,
     }),
     [campusLabel, lang, rentalPrinterCampusLabel]
+  );
+  const buildDefaultBulkServiceScheduleForm = useCallback(
+    () => ({
+      campus: "ALL",
+      type: "pest_service" as ServiceTaskScheduleType,
+      date: toYmd(new Date()),
+      time: "09:00",
+      name: "",
+      note: "",
+    }),
+    []
+  );
+  const parseServiceScheduleEvent = useCallback(
+    (row: CalendarEvent) => {
+      const serviceType = normalizeCalendarEventType(row.type) as ServiceTaskScheduleType;
+      const defaultName =
+        SERVICE_TASK_SCHEDULE_OPTIONS.find((option) => option.value === serviceType)?.defaultName ||
+        calendarEventTypeLabel(serviceType);
+      const parts = String(row.name || "")
+        .split(" - ")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const knownAllCampusLabels = new Set(["ALL", "All Campuses", t.allCampuses]);
+      let campus = "ALL";
+      let campusPartIndex = -1;
+      for (let index = 1; index < parts.length; index += 1) {
+        const part = parts[index];
+        if (knownAllCampusLabels.has(part)) {
+          campus = "ALL";
+          campusPartIndex = index;
+          break;
+        }
+        const matchedCampus = campusOptions.find((item) => item === part || campusLabel(item) === part);
+        if (matchedCampus) {
+          campus = matchedCampus;
+          campusPartIndex = index;
+          break;
+        }
+      }
+      const title = parts[0] || defaultName;
+      const note = parts
+        .filter((_, index) => index > 0 && index !== campusPartIndex)
+        .join(" - ");
+      return {
+        serviceType,
+        title,
+        campus,
+        note,
+        customName: title !== defaultName ? title : "",
+      };
+    },
+    [campusLabel, campusOptions, t.allCampuses]
   );
   const maintenanceQuickCampusPickerOptions = useMemo(
     () => [
@@ -19086,6 +19191,13 @@ export default function App() {
       return { ...prev, fanType: "" };
     });
   }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
+    if (!isFanAsset(assetForm.category, assetForm.type)) return;
+    const suggestedType = fanTypeFromAssetTypeCode(assetForm.type);
+    if (suggestedType && suggestedType !== String(assetForm.fanType || "").trim()) {
+      setAssetForm((prev) => ({ ...prev, fanType: suggestedType }));
+    }
+  }, [assetForm.category, assetForm.type, assetForm.fanType]);
   useEffect(() => {
     setAssetForm((prev) => {
       if (String(prev.type || "").trim().toUpperCase() === "TAB") return prev;
@@ -30827,11 +30939,15 @@ export default function App() {
       campusText,
       note,
     ].filter(Boolean).join(" - ");
+    const baseRows =
+      editingBulkServiceScheduleId === null
+        ? calendarEvents
+        : calendarEvents.filter((row) => row.id !== editingBulkServiceScheduleId);
     const nextRows = normalizeCalendarEvents(
       [
-        ...calendarEvents,
+        ...baseRows,
         {
-          id: Date.now(),
+          id: editingBulkServiceScheduleId || Date.now(),
           date: normalizedDate,
           time: normalizedTime,
           type: option.value,
@@ -30847,22 +30963,63 @@ export default function App() {
       await saveCalendarEventsToServer(nextRows);
       setCalendarEvents(nextRows);
       writeCalendarEventFallback(nextRows);
-      setBulkServiceScheduleForm((form) => ({
-        ...form,
-        date: toYmd(new Date()),
-        time: "09:00",
-        name: "",
-        note: "",
-      }));
-      setSetupMessage(`Service/task schedule added: ${eventName}`);
+      setBulkServiceScheduleForm(buildDefaultBulkServiceScheduleForm());
+      setEditingBulkServiceScheduleId(null);
+      setSetupMessage(
+        editingBulkServiceScheduleId === null
+          ? `Service/task schedule added: ${eventName}`
+          : `Service/task schedule updated: ${eventName}`
+      );
       appendUiAudit(
-        "SCHEDULE_SERVICE_CREATE",
+        editingBulkServiceScheduleId === null ? "SCHEDULE_SERVICE_CREATE" : "SCHEDULE_SERVICE_UPDATE",
         "calendar_event",
         `${normalizedDate} ${normalizedTime || ""}`.trim(),
         `${option.value} | ${eventName}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save service/task schedule");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startEditBulkServiceSchedule(row: CalendarEvent) {
+    const parsed = parseServiceScheduleEvent(row);
+    setBulkScheduleMode("service");
+    setScheduleView("bulk");
+    setEditingBulkServiceScheduleId(row.id);
+    setBulkServiceScheduleForm({
+      campus: parsed.campus,
+      type: parsed.serviceType,
+      date: normalizeYmdInput(row.date),
+      time: normalizeCalendarEventTime(row.time),
+      name: parsed.customName,
+      note: parsed.note,
+    });
+  }
+
+  function cancelEditBulkServiceSchedule() {
+    setEditingBulkServiceScheduleId(null);
+    setBulkServiceScheduleForm(buildDefaultBulkServiceScheduleForm());
+  }
+
+  async function deleteBulkServiceSchedule(id: number) {
+    if (!requireAdminAction()) return;
+    if (!window.confirm("Delete this service/task schedule?")) return;
+    const nextRows = calendarEvents.filter((row) => row.id !== id);
+    setBusy(true);
+    setError("");
+    try {
+      await saveCalendarEventsToServer(nextRows);
+      setCalendarEvents(nextRows);
+      writeCalendarEventFallback(nextRows);
+      if (editingBulkServiceScheduleId === id) {
+        cancelEditBulkServiceSchedule();
+      }
+      setSetupMessage("Service/task schedule deleted.");
+      appendUiAudit("SCHEDULE_SERVICE_DELETE", "calendar_event", String(id), "Service/task schedule deleted");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete service/task schedule");
     } finally {
       setBusy(false);
     }
@@ -36329,6 +36486,88 @@ export default function App() {
       return true;
     });
   }, [scheduleListRows, scheduleListMonthFilter, scheduleListCampusFilter, scheduleListLocationFilter]);
+  const filteredScheduleCalendarRows = useMemo<ScheduleCalendarRow[]>(() => {
+    const assetRows: ScheduleCalendarRow[] = filteredScheduleListRows.map((asset) => ({
+      id: `asset-${asset.id}`,
+      kind: "asset",
+      date: String(asset.nextMaintenanceDate || ""),
+      campus: asset.campus,
+      title: asset.assetId,
+      subtitle: assetItemName(asset.category, asset.type, asset.pcType || ""),
+      note: asset.scheduleNote || "",
+      groupLabel: assetScheduleGroupLabel(asset),
+      modeLabel: maintenanceRepeatLabel(
+        String(asset.repeatMode || "NONE"),
+        Number(asset.repeatWeekOfMonth || 1),
+        Number(asset.repeatWeekday || 6)
+      ),
+      photo: asset.photo || "",
+      asset,
+    }));
+    const serviceRows: ScheduleCalendarRow[] = calendarEvents
+      .filter((row) => isServiceTaskCalendarType(normalizeCalendarEventType(row.type)))
+      .map((row) => {
+        const parsed = parseServiceScheduleEvent(row);
+        return {
+          id: `service-${row.id}`,
+          kind: "service" as const,
+          date: String(row.date || ""),
+          campus: parsed.campus,
+          title: parsed.title,
+          subtitle:
+            parsed.campus === "ALL"
+              ? t.allCampuses
+              : campusLabel(parsed.campus),
+          note: parsed.note,
+          groupLabel: calendarEventTypeLabel(parsed.serviceType),
+          modeLabel: normalizeCalendarEventTime(row.time) || (lang === "km" ? "គ្មានម៉ោង" : "No time"),
+          photo: "",
+          event: row,
+          serviceType: parsed.serviceType,
+        };
+      })
+      .filter((row) => {
+        const monthKey = String(row.date || "").slice(0, 7);
+        if (scheduleListMonthFilter !== "ALL" && monthKey !== scheduleListMonthFilter) return false;
+        if (scheduleListCampusFilter !== "ALL" && row.campus !== "ALL" && row.campus !== scheduleListCampusFilter) return false;
+        if (scheduleListCampusFilter !== "ALL" && row.campus === "ALL") return false;
+        if (scheduleListLocationFilter !== "ALL") return false;
+        if (scheduleGroupFilter !== "ALL") return false;
+        return true;
+      });
+    return [...assetRows, ...serviceRows].sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      if (a.kind !== b.kind) return a.kind === "service" ? -1 : 1;
+      return a.title.localeCompare(b.title);
+    });
+  }, [
+    assetItemName,
+    assetScheduleGroupLabel,
+    calendarEvents,
+    campusLabel,
+    filteredScheduleListRows,
+    lang,
+    maintenanceRepeatLabel,
+    parseServiceScheduleEvent,
+    scheduleGroupFilter,
+    scheduleListCampusFilter,
+    scheduleListLocationFilter,
+    scheduleListMonthFilter,
+    t.allCampuses,
+  ]);
+  const scheduleCalendarByDate = useMemo(() => {
+    const map = new Map<string, ScheduleCalendarRow[]>();
+    for (const row of filteredScheduleCalendarRows) {
+      if (!row.date) continue;
+      if (!map.has(row.date)) map.set(row.date, []);
+      map.get(row.date)?.push(row);
+    }
+    return map;
+  }, [filteredScheduleCalendarRows]);
+  const selectedDateScheduleRows = useMemo(
+    () => scheduleCalendarByDate.get(selectedCalendarDate) || [],
+    [scheduleCalendarByDate, selectedCalendarDate]
+  );
   useEffect(() => {
     if (scheduleListCampusFilter !== "ALL" && !scheduleListCampusOptions.includes(scheduleListCampusFilter)) {
       setScheduleListCampusFilter("ALL");
@@ -53606,18 +53845,20 @@ function formatTicketRequestSource(value?: string) {
                 <div className="panel-filters inventory-item-filter-bar" style={{ marginTop: 12 }}>
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={inventoryItemFilterCampus}
-                      onChange={(e) => setInventoryItemFilterCampus(e.target.value)}
-                    >
-                      <option value="ALL">All Campuses</option>
-                      {inventoryItemCampusOptions.map((campus) => (
-                        <option key={`inventory-item-filter-campus-${campus}`} value={campus}>
-                          {inventoryCampusLabel(campus)}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setInventoryItemFilterCampus}
+                      options={[
+                        { value: "ALL", label: lang === "km" ? "គ្រប់សាខា" : "All Campuses" },
+                        ...inventoryItemCampusOptions.map((campus) => ({
+                          value: campus,
+                          label: inventoryCampusLabel(campus),
+                        })),
+                      ]}
+                      placeholder={lang === "km" ? "គ្រប់សាខា" : "All Campuses"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>Group</span>
@@ -53973,18 +54214,20 @@ function formatTicketRequestSource(value?: string) {
                 <div className="panel-filters inventory-tool-list-filter-bar">
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={inventoryItemFilterCampus}
-                      onChange={(e) => setInventoryItemFilterCampus(e.target.value)}
-                    >
-                      <option value="ALL">All Campuses</option>
-                      {inventoryItemCampusOptions.map((campus) => (
-                        <option key={`inventory-tool-list-campus-${campus}`} value={campus}>
-                          {inventoryCampusLabel(campus)}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setInventoryItemFilterCampus}
+                      options={[
+                        { value: "ALL", label: lang === "km" ? "គ្រប់សាខា" : "All Campuses" },
+                        ...inventoryItemCampusOptions.map((campus) => ({
+                          value: campus,
+                          label: inventoryCampusLabel(campus),
+                        })),
+                      ]}
+                      placeholder={lang === "km" ? "គ្រប់សាខា" : "All Campuses"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>{t.location}</span>
@@ -54469,18 +54712,20 @@ function formatTicketRequestSource(value?: string) {
                   </label>
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={inventoryStockFilterCampus}
-                      onChange={(e) => setInventoryStockFilterCampus(e.target.value)}
-                    >
-                      <option value="ALL">All Campuses</option>
-                      {inventoryStockCampusOptions.map((campus) => (
-                        <option key={`inventory-stock-filter-campus-${campus}`} value={campus}>
-                          {inventoryCampusLabel(campus)}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setInventoryStockFilterCampus}
+                      options={[
+                        { value: "ALL", label: lang === "km" ? "គ្រប់សាខា" : "All Campuses" },
+                        ...inventoryStockCampusOptions.map((campus) => ({
+                          value: campus,
+                          label: inventoryCampusLabel(campus),
+                        })),
+                      ]}
+                      placeholder={lang === "km" ? "គ្រប់សាខា" : "All Campuses"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>Type</span>
@@ -57365,13 +57610,25 @@ function formatTicketRequestSource(value?: string) {
               <div className="tiny">
                 Use this for non-asset schedules like pest service, pool cleaning, submit report, and monthly submit request. It saves to the shared calendar with time.
               </div>
-              <button
-                className="btn-primary"
-                disabled={busy || !isAdmin || !bulkServiceScheduleForm.date}
-                onClick={saveBulkServiceTaskSchedule}
-              >
-                Save Service / Task Schedule
-              </button>
+              <div className="row-actions">
+                {editingBulkServiceScheduleId !== null ? (
+                  <button
+                    type="button"
+                    className="tab"
+                    disabled={busy}
+                    onClick={cancelEditBulkServiceSchedule}
+                  >
+                    Cancel Edit
+                  </button>
+                ) : null}
+                <button
+                  className="btn-primary"
+                  disabled={busy || !isAdmin || !bulkServiceScheduleForm.date}
+                  onClick={saveBulkServiceTaskSchedule}
+                >
+                  {editingBulkServiceScheduleId === null ? "Save Service / Task Schedule" : "Update Service / Task Schedule"}
+                </button>
+              </div>
             </div>
             </>
             )}
@@ -57650,45 +57907,65 @@ function formatTicketRequestSource(value?: string) {
               />
               {isPhoneView ? (
                 <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
-                  {selectedDateItems.length ? (
-                    selectedDateItems.map((asset) => (
-                      <article key={`selected-mobile-${asset.id}`} className={`schedule-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
+                  {selectedDateScheduleRows.length ? (
+                    selectedDateScheduleRows.map((row) => (
+                      <article
+                        key={`selected-mobile-${row.id}`}
+                        className={`schedule-mobile-card ${row.kind === "asset" ? assetStatusRowClass(row.asset.status || "") : ""}`}
+                      >
                         <div className="schedule-mobile-card-head">
-                          <strong>{asset.assetId}</strong>
-                          <span>{formatDate(asset.nextMaintenanceDate || "-")}</span>
+                          <strong>{row.title}</strong>
+                          <span>{formatDate(row.date || "-")}</span>
                         </div>
-                        <div className="schedule-mobile-card-body">
-                          <div>{renderAssetPhoto(asset.photo || "", asset.assetId)}</div>
-                          <div className="schedule-mobile-card-meta">
-                            <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
-                            <div>{lang === "km" ? "ក្រុម" : "Group"}: {assetScheduleGroupLabel(asset)}</div>
-                            <div>{campusLabel(asset.campus)}</div>
-                            <div>{t.status}: {assetStatusLabel(asset.status)}</div>
-                            <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
+                        <div className="schedule-mobile-card-meta">
+                          <div>{row.subtitle}</div>
+                          <div>{lang === "km" ? "ក្រុម" : "Group"}: {row.groupLabel}</div>
+                          <div>
+                            {row.campus === "ALL" ? t.allCampuses : campusLabel(row.campus)}
+                            {row.kind === "asset" ? ` | ${row.asset.location || "-"}` : ""}
                           </div>
+                          <div>{lang === "km" ? "របៀប" : "Mode"}: {row.modeLabel}</div>
+                          <div>{t.scheduleNote}: {row.note || "-"}</div>
                         </div>
-                        <div className="row-actions">
+                        <div className="maintenance-schedule-action-row">
+                          {row.kind === "asset" ? (
+                            <button
+                              className="btn-primary btn-small maintenance-schedule-icon-btn"
+                              disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                              onClick={() => openMaintenanceRecordFromScheduleAsset(row.asset, row.date)}
+                              title="Record"
+                              aria-label="Record"
+                            >
+                              <ClipboardList size={16} />
+                            </button>
+                          ) : null}
                           <button
-                            className="btn-primary btn-small"
-                            disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                            onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
-                          >
-                            Record
-                          </button>
-                          <button
-                            className="tab btn-small"
+                            className="tab btn-small maintenance-schedule-icon-btn"
                             disabled={!isAdmin}
-                            onClick={() => editScheduleForAsset(asset)}
+                            onClick={() =>
+                              row.kind === "asset"
+                                ? handleScheduleRowAction(row.asset, "edit")
+                                : startEditBulkServiceSchedule(row.event)
+                            }
+                            title={t.edit}
+                            aria-label={t.edit}
                           >
-                            {t.edit}
+                            <Pencil size={16} />
                           </button>
                           <button
-                            className="btn-danger"
+                            className="btn-danger maintenance-schedule-icon-btn"
                             disabled={!isAdmin || busy}
-                            onClick={() => clearScheduleForAsset(asset.id)}
+                            onClick={() => {
+                              if (row.kind === "asset") {
+                                void handleScheduleRowAction(row.asset, "delete");
+                                return;
+                              }
+                              void deleteBulkServiceSchedule(row.event.id);
+                            }}
                             title={t.delete}
+                            aria-label={t.delete}
                           >
-                            X
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </article>
@@ -57699,61 +57976,81 @@ function formatTicketRequestSource(value?: string) {
                 </div>
               ) : (
                 <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
-                  <table>
+                  <table className="maintenance-schedule-table">
                     <thead>
                       <tr>
                         <th>Date</th>
-                        <th>{t.assetId}</th>
-                        <th>{t.photo}</th>
-                        <th>{t.campus}</th>
-                        <th>{lang === "km" ? "ក្រុម" : "Group"}</th>
-                        <th>{t.status}</th>
+                        <th>{lang === "km" ? "ធាតុ / កិច្ចការ" : "Item / Task"}</th>
+                        <th>{lang === "km" ? "សាខា / ព័ត៌មាន" : "Campus / Details"}</th>
+                        <th>{lang === "km" ? "កាលវិភាគ" : "Schedule"}</th>
                         <th>Schedule Note</th>
                         <th>{t.actions}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedDateItems.length ? (
-                        selectedDateItems.map((asset) => (
-                          <tr key={`selected-${asset.id}`}>
-                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
+                      {selectedDateScheduleRows.length ? (
+                        selectedDateScheduleRows.map((row) => (
+                          <tr key={`selected-${row.id}`}>
+                            <td>{formatDate(row.date || "-")}</td>
                             <td>
-                              <button
-                                className="tab btn-small"
-                                disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                                onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
-                              >
-                                <strong>{asset.assetId}</strong>
-                              </button>
+                              <div className="maintenance-schedule-cell-title">{row.title}</div>
+                              <div className="maintenance-schedule-cell-subtitle">{row.subtitle}</div>
                             </td>
-                            <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
-                            <td>{campusLabel(asset.campus)}</td>
-                            <td>{assetScheduleGroupLabel(asset)}</td>
-                            <td>{assetStatusLabel(asset.status)}</td>
-                            <td>{asset.scheduleNote || "-"}</td>
                             <td>
-                              <div className="row-actions">
+                              <div className="maintenance-schedule-cell-title">
+                                {row.campus === "ALL" ? t.allCampuses : campusLabel(row.campus)}
+                              </div>
+                              <div className="maintenance-schedule-cell-subtitle">
+                                {row.kind === "asset" ? row.asset.location || "-" : row.modeLabel}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="maintenance-schedule-cell-title">{row.groupLabel}</div>
+                              <div className="maintenance-schedule-cell-subtitle">
+                                {row.kind === "asset" ? row.modeLabel : calendarEventTypeLabel(row.serviceType)}
+                              </div>
+                            </td>
+                            <td>{row.note || "-"}</td>
+                            <td>
+                              <div className="maintenance-schedule-action-row">
+                                {row.kind === "asset" ? (
+                                  <button
+                                    className="btn-primary btn-small maintenance-schedule-icon-btn"
+                                    disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                                    onClick={() => openMaintenanceRecordFromScheduleAsset(row.asset, row.date)}
+                                    title="Record"
+                                    aria-label="Record"
+                                  >
+                                    <ClipboardList size={16} />
+                                  </button>
+                                ) : null}
                                 <button
-                                  className="btn-primary btn-small"
-                                  disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                                  onClick={() => openMaintenanceRecordFromScheduleAsset(asset, selectedCalendarDate)}
-                                >
-                                  Record
-                                </button>
-                                <button
-                                  className="tab btn-small"
+                                  className="tab btn-small maintenance-schedule-icon-btn"
                                   disabled={!isAdmin}
-                                  onClick={() => editScheduleForAsset(asset)}
+                                  onClick={() =>
+                                    row.kind === "asset"
+                                      ? handleScheduleRowAction(row.asset, "edit")
+                                      : startEditBulkServiceSchedule(row.event)
+                                  }
+                                  title={t.edit}
+                                  aria-label={t.edit}
                                 >
-                                  {t.edit}
+                                  <Pencil size={16} />
                                 </button>
                                 <button
-                                  className="btn-danger"
+                                  className="btn-danger maintenance-schedule-icon-btn"
                                   disabled={!isAdmin || busy}
-                                  onClick={() => clearScheduleForAsset(asset.id)}
+                                  onClick={() => {
+                                    if (row.kind === "asset") {
+                                      void handleScheduleRowAction(row.asset, "delete");
+                                      return;
+                                    }
+                                    void deleteBulkServiceSchedule(row.event.id);
+                                  }}
                                   title={t.delete}
+                                  aria-label={t.delete}
                                 >
-                                  X
+                                  <Trash2 size={16} />
                                 </button>
                               </div>
                             </td>
@@ -57761,7 +58058,7 @@ function formatTicketRequestSource(value?: string) {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={8}>No schedule on {selectedCalendarDate}.</td>
+                          <td colSpan={6}>No schedule on {selectedCalendarDate}.</td>
                         </tr>
                       )}
                     </tbody>
@@ -57773,44 +58070,65 @@ function formatTicketRequestSource(value?: string) {
               </h4>
               {isPhoneView ? (
                 <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
-                  {filteredScheduleListRows.length ? (
-                    filteredScheduleListRows.map((asset) => (
-                      <article key={`schedule-list-mobile-${asset.id}`} className={`schedule-mobile-card ${assetStatusRowClass(asset.status || "")}`}>
+                  {filteredScheduleCalendarRows.length ? (
+                    filteredScheduleCalendarRows.map((row) => (
+                      <article
+                        key={`schedule-list-mobile-${row.id}`}
+                        className={`schedule-mobile-card ${row.kind === "asset" ? assetStatusRowClass(row.asset.status || "") : ""}`}
+                      >
                         <div className="schedule-mobile-card-head">
-                          <strong>{asset.assetId}</strong>
-                          <span>{formatDate(asset.nextMaintenanceDate || "-")}</span>
+                          <strong>{row.title}</strong>
+                          <span>{formatDate(row.date || "-")}</span>
                         </div>
                         <div className="schedule-mobile-card-meta">
-                          <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
-                          <div>{campusLabel(asset.campus)} | {asset.location || "-"}</div>
-                          <div>{lang === "km" ? "ក្រុម" : "Group"}: {assetScheduleGroupLabel(asset)}</div>
+                          <div>{row.subtitle}</div>
                           <div>
-                            {lang === "km" ? "របៀប" : "Mode"}:{" "}
-                            {maintenanceRepeatLabel(
-                              String(asset.repeatMode || "NONE"),
-                              Number(asset.repeatWeekOfMonth || 1),
-                              Number(asset.repeatWeekday || 6)
-                            )}
+                            {row.campus === "ALL" ? t.allCampuses : campusLabel(row.campus)}
+                            {row.kind === "asset" ? ` | ${row.asset.location || "-"}` : ""}
                           </div>
-                          <div>{t.scheduleNote}: {asset.scheduleNote || "-"}</div>
+                          <div>{lang === "km" ? "ក្រុម" : "Group"}: {row.groupLabel}</div>
+                          <div>{lang === "km" ? "របៀប" : "Mode"}: {row.modeLabel}</div>
+                          <div>{t.scheduleNote}: {row.note || "-"}</div>
                         </div>
-                        <div className="row-actions">
+                        <div className="maintenance-schedule-action-row">
+                          {row.kind === "asset" ? (
+                            <button
+                              className="btn-primary btn-small maintenance-schedule-icon-btn"
+                              disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                              onClick={() => openMaintenanceRecordFromScheduleAsset(row.asset, row.date)}
+                              title="Record"
+                              aria-label="Record"
+                            >
+                              <ClipboardList size={16} />
+                            </button>
+                          ) : null}
                           <button
-                            className="tab btn-small"
+                            className="tab btn-small maintenance-schedule-icon-btn"
                             disabled={!isAdmin}
-                            onClick={() => handleScheduleRowAction(asset, "edit")}
+                            onClick={() =>
+                              row.kind === "asset"
+                                ? handleScheduleRowAction(row.asset, "edit")
+                                : startEditBulkServiceSchedule(row.event)
+                            }
+                            title={t.edit}
+                            aria-label={t.edit}
                           >
-                            {t.edit}
+                            <Pencil size={16} />
                           </button>
                           <button
-                            className="btn-danger"
+                            className="btn-danger maintenance-schedule-icon-btn"
                             disabled={!isAdmin || busy}
                             onClick={() => {
-                              void handleScheduleRowAction(asset, "delete");
+                              if (row.kind === "asset") {
+                                void handleScheduleRowAction(row.asset, "delete");
+                                return;
+                              }
+                              void deleteBulkServiceSchedule(row.event.id);
                             }}
                             title={t.delete}
+                            aria-label={t.delete}
                           >
-                            X
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </article>
@@ -57821,56 +58139,81 @@ function formatTicketRequestSource(value?: string) {
                 </div>
               ) : (
                 <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
-                  <table>
+                  <table className="maintenance-schedule-table">
                     <thead>
                       <tr>
-                        <th>{t.assetId}</th>
-                        <th>{t.name}</th>
-                        <th>{t.campus}</th>
-                        <th>{t.location}</th>
                         <th>{t.date}</th>
-                        <th>{lang === "km" ? "ក្រុម" : "Group"}</th>
-                        <th>{lang === "km" ? "របៀប" : "Mode"}</th>
+                        <th>{lang === "km" ? "ធាតុ / កិច្ចការ" : "Item / Task"}</th>
+                        <th>{lang === "km" ? "សាខា / ព័ត៌មាន" : "Campus / Details"}</th>
+                        <th>{lang === "km" ? "កាលវិភាគ" : "Schedule"}</th>
                         <th>{t.scheduleNote}</th>
                         <th>{t.actions}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredScheduleListRows.length ? (
-                        filteredScheduleListRows.map((asset) => (
-                          <tr key={`schedule-list-row-${asset.id}`}>
-                            <td><strong>{asset.assetId}</strong></td>
-                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
-                            <td>{campusLabel(asset.campus)}</td>
-                            <td>{asset.location || "-"}</td>
-                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
-                            <td>{assetScheduleGroupLabel(asset)}</td>
+                      {filteredScheduleCalendarRows.length ? (
+                        filteredScheduleCalendarRows.map((row) => (
+                          <tr key={`schedule-list-row-${row.id}`}>
+                            <td>{formatDate(row.date || "-")}</td>
                             <td>
-                              {maintenanceRepeatLabel(
-                                String(asset.repeatMode || "NONE"),
-                                Number(asset.repeatWeekOfMonth || 1),
-                                Number(asset.repeatWeekday || 6)
-                              )}
+                              <div className="maintenance-schedule-cell-title">{row.title}</div>
+                              <div className="maintenance-schedule-cell-subtitle">{row.subtitle}</div>
                             </td>
-                            <td>{asset.scheduleNote || "-"}</td>
                             <td>
-                              <div className="row-actions">
+                              <div className="maintenance-schedule-cell-title">
+                                {row.campus === "ALL" ? t.allCampuses : campusLabel(row.campus)}
+                              </div>
+                              <div className="maintenance-schedule-cell-subtitle">
+                                {row.kind === "asset" ? row.asset.location || "-" : row.modeLabel}
+                              </div>
+                            </td>
+                            <td>
+                              <div className="maintenance-schedule-cell-title">{row.groupLabel}</div>
+                              <div className="maintenance-schedule-cell-subtitle">
+                                {row.kind === "asset" ? row.modeLabel : calendarEventTypeLabel(row.serviceType)}
+                              </div>
+                            </td>
+                            <td>{row.note || "-"}</td>
+                            <td>
+                              <div className="maintenance-schedule-action-row">
+                                {row.kind === "asset" ? (
+                                  <button
+                                    className="btn-primary btn-small maintenance-schedule-icon-btn"
+                                    disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                                    onClick={() => openMaintenanceRecordFromScheduleAsset(row.asset, row.date)}
+                                    title="Record"
+                                    aria-label="Record"
+                                  >
+                                    <ClipboardList size={16} />
+                                  </button>
+                                ) : null}
                                 <button
-                                  className="tab btn-small"
+                                  className="tab btn-small maintenance-schedule-icon-btn"
                                   disabled={!isAdmin}
-                                  onClick={() => handleScheduleRowAction(asset, "edit")}
+                                  onClick={() =>
+                                    row.kind === "asset"
+                                      ? handleScheduleRowAction(row.asset, "edit")
+                                      : startEditBulkServiceSchedule(row.event)
+                                  }
+                                  title={t.edit}
+                                  aria-label={t.edit}
                                 >
-                                  {t.edit}
+                                  <Pencil size={16} />
                                 </button>
                                 <button
-                                  className="btn-danger"
+                                  className="btn-danger maintenance-schedule-icon-btn"
                                   disabled={!isAdmin || busy}
                                   onClick={() => {
-                                    void handleScheduleRowAction(asset, "delete");
+                                    if (row.kind === "asset") {
+                                      void handleScheduleRowAction(row.asset, "delete");
+                                      return;
+                                    }
+                                    void deleteBulkServiceSchedule(row.event.id);
                                   }}
                                   title={t.delete}
+                                  aria-label={t.delete}
                                 >
-                                  X
+                                  <Trash2 size={16} />
                                 </button>
                               </div>
                             </td>
@@ -57878,7 +58221,7 @@ function formatTicketRequestSource(value?: string) {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={9}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
+                          <td colSpan={6}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
                         </tr>
                       )}
                     </tbody>
@@ -59246,21 +59589,23 @@ function formatTicketRequestSource(value?: string) {
                 </label>
                 <label className="field">
                   <span>{t.campus}</span>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={scheduleListCampusFilter}
-                    onChange={(e) => {
-                      setScheduleListCampusFilter(e.target.value);
+                    onChange={(value) => {
+                      setScheduleListCampusFilter(value);
                       setScheduleListLocationFilter("ALL");
                     }}
-                  >
-                    <option value="ALL">{lang === "km" ? "គ្រប់សាខា" : "All Campuses"}</option>
-                    {scheduleListCampusOptions.map((campus) => (
-                      <option key={`schedule-list-campus-${campus}`} value={campus}>
-                        {campusLabel(campus)}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "គ្រប់សាខា" : "All Campuses" },
+                      ...scheduleListCampusOptions.map((campus) => ({
+                        value: campus,
+                        label: campusLabel(campus),
+                      })),
+                    ]}
+                    placeholder={lang === "km" ? "គ្រប់សាខា" : "All Campuses"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
+                  />
                 </label>
                 <label className="field">
                   <span>{t.location}</span>
@@ -59600,21 +59945,23 @@ function formatTicketRequestSource(value?: string) {
                 </label>
                 <label className="field">
                   <span>{t.campus}</span>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={overdueCampusFilter}
-                    onChange={(e) => {
-                      setOverdueCampusFilter(e.target.value);
+                    onChange={(value) => {
+                      setOverdueCampusFilter(value);
                       setOverdueLocationFilter("ALL");
                     }}
-                  >
-                    <option value="ALL">{lang === "km" ? "គ្រប់សាខា" : "All Campuses"}</option>
-                    {overdueCampusOptions.map((campus) => (
-                      <option key={`overdue-campus-${campus}`} value={campus}>
-                        {campusLabel(campus)}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "គ្រប់សាខា" : "All Campuses" },
+                      ...overdueCampusOptions.map((campus) => ({
+                        value: campus,
+                        label: campusLabel(campus),
+                      })),
+                    ]}
+                    placeholder={lang === "km" ? "គ្រប់សាខា" : "All Campuses"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
+                  />
                 </label>
                 <label className="field">
                   <span>{t.location}</span>
@@ -60835,18 +61182,20 @@ function formatTicketRequestSource(value?: string) {
               <h2>{lang === "km" ? "ប្រវត្តិថែទាំ" : "Maintenance History"}</h2>
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
-              <select
-                className="input"
+              <LocationPicker
                 value={maintenanceCampusFilter}
-                onChange={(e) => setMaintenanceCampusFilter(e.target.value)}
-              >
-                <option value="ALL">{t.allCampuses}</option>
-                {maintenanceCampusOptions.map((campus) => (
-                  <option key={`maintenance-campus-filter-${campus}`} value={campus}>
-                    {campusLabel(campus)}
-                  </option>
-                ))}
-              </select>
+                onChange={setMaintenanceCampusFilter}
+                options={[
+                  { value: "ALL", label: t.allCampuses },
+                  ...maintenanceCampusOptions.map((campus) => ({
+                    value: campus,
+                    label: campusLabel(campus),
+                  })),
+                ]}
+                placeholder={t.allCampuses}
+                searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
+              />
               <details className="filter-menu">
                 <summary>
                   {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
