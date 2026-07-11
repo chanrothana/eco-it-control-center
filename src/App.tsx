@@ -7851,6 +7851,11 @@ function fanTypeFromAssetTypeCode(type: string) {
   return FAN_TYPE_LABEL_BY_CODE[code] || "";
 }
 
+function fanTypeCodeFromLabel(label: string) {
+  const normalized = String(label || "").trim() as (typeof FAN_TYPE_OPTIONS)[number];
+  return FAN_TYPE_CODE_BY_LABEL[normalized] || "";
+}
+
 function parseWalkieTalkieSpecs(specsRaw: string) {
   const specs = String(specsRaw || "").trim();
   if (!specs) {
@@ -31683,6 +31688,10 @@ export default function App() {
       by: transferForm.by.trim(),
       note: transferForm.note.trim(),
     };
+    const campusTransferRemark =
+      transferEntry.note ||
+      transferEntry.reason ||
+      `Transfer from ${transferEntry.fromCampus} / ${transferEntry.fromLocation} to ${transferEntry.toCampus} / ${transferEntry.toLocation}`;
     const custodyEntry: CustodyEntry | null = !groupedFurniture && assignmentChanged
       ? {
           id: Date.now() + 1,
@@ -31736,6 +31745,7 @@ export default function App() {
                 location: transferEntry.toLocation,
                 assignedTo: "",
                 custodyStatus: "IN_STOCK",
+                campusChangeRemark: campusTransferRemark,
                 transferHistory: movedAsset.transferHistory || [],
                 custodyHistory: current.custodyHistory || [],
               }),
@@ -31916,6 +31926,7 @@ export default function App() {
             location: transferEntry.toLocation,
             assignedTo: toUser,
             custodyStatus: toUser ? "ASSIGNED" : "IN_STOCK",
+            campusChangeRemark: campusTransferRemark,
             transferHistory: [transferEntry, ...(current.transferHistory || [])],
             custodyHistory: custodyEntry ? [custodyEntry, ...(current.custodyHistory || [])] : (current.custodyHistory || []),
           }),
@@ -48774,7 +48785,43 @@ function formatTicketRequestSource(value?: string) {
                       </label>
                     </>
                   ) : null}
-                  {!isFurnitureAsset(assetForm.category) && !isAirconAsset(assetForm.category, assetForm.type) ? (
+                  {isFanAsset(assetForm.category, assetForm.type) ? (
+                    <div className="field field-wide">
+                      <span>Fan Type / Vendor</span>
+                      <div className="aircon-inline-triple">
+                        <select
+                          className="input"
+                          value={assetForm.fanType}
+                          onChange={(e) =>
+                            setAssetForm((f) => ({
+                              ...f,
+                              fanType: e.target.value,
+                              type:
+                                fanTypeCodeFromLabel(e.target.value) ||
+                                f.type,
+                            }))
+                          }
+                        >
+                          <option value="">Select fan type</option>
+                          {FAN_TYPE_OPTIONS.map((option) => (
+                            <option key={`asset-fan-type-${option}`} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="input"
+                          value={assetForm.vendor}
+                          onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))}
+                          placeholder="Vendor"
+                        />
+                        <div className="tiny" style={{ display: "flex", alignItems: "center", padding: "0 8px" }}>
+                          Type Code: {String(assetForm.type || "").trim().toUpperCase() || "FAN"}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  {!isFurnitureAsset(assetForm.category) && !isAirconAsset(assetForm.category, assetForm.type) && !isFanAsset(assetForm.category, assetForm.type) ? (
                     <label className="field">
                       <span>{t.vendor}</span>
                       <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
@@ -50337,7 +50384,9 @@ function formatTicketRequestSource(value?: string) {
                       </label>
                       </div>
                     ) : null}
-                    {!isFurnitureAsset(editingAsset?.category || "") && !isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
+                    {!isFurnitureAsset(editingAsset?.category || "") &&
+                    !isAirconAsset(editingAsset?.category || "", editingAsset?.type || "") &&
+                    !isFanAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
                       <label className="field">
                         <span>Vendor</span>
                         <input className="input" value={assetEditForm.vendor} onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))} />
@@ -50699,6 +50748,42 @@ function formatTicketRequestSource(value?: string) {
                           </div>
                         </label>
                       </>
+                    ) : null}
+                    {isFanAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
+                      <div className="field field-wide">
+                        <span>Fan Type / Vendor</span>
+                        <div className="aircon-inline-triple">
+                          <select
+                            className="input"
+                            value={assetEditForm.fanType}
+                            onChange={(e) =>
+                              setAssetEditForm((f) => ({
+                                ...f,
+                                fanType: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Select fan type</option>
+                            {FAN_TYPE_OPTIONS.map((option) => (
+                              <option key={`edit-fan-type-${option}`} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            className="input"
+                            value={fanTypeCodeFromLabel(assetEditForm.fanType) || String(editingAsset?.type || "").trim().toUpperCase()}
+                            readOnly
+                            placeholder="Type Code"
+                          />
+                          <input
+                            className="input"
+                            value={assetEditForm.vendor}
+                            onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))}
+                            placeholder="Vendor"
+                          />
+                        </div>
+                      </div>
                     ) : null}
                     {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field">

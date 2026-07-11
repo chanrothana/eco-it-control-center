@@ -339,7 +339,7 @@ const TYPE_CODES = {
     "FGP",
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "RFG", "MWV", "OVG", "WCL", "WDP", "WTK", "RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "KPN"],
+  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "SFN", "RFG", "MWV", "OVG", "WCL", "WDP", "WTK", "RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "KPN"],
   FURNITURE: ["TBL", "CHR", "DSK", "CAB", "NBD"],
 };
 const TYPE_LABELS = {
@@ -378,6 +378,7 @@ const TYPE_LABELS = {
   WFN: "Wall Fan",
   CFN: "Ceiling Fan",
   EFN: "Exhaust Fan",
+  SFN: "Stand Fan",
   RFG: "Refrigerator",
   MWV: "Microwave",
   OVG: "Oven Griller",
