@@ -17403,6 +17403,23 @@ label.backup-action-btn {
   justify-items: stretch;
 }
 
+.inventory-tool-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inventory-tool-card-actions .btn-danger {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
 .inventory-tool-card-qty {
   display: grid;
   gap: 2px;
@@ -17555,6 +17572,10 @@ label.backup-action-btn {
     grid-column: 1 / -1;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .inventory-tool-card-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 768px) {
@@ -17589,6 +17610,10 @@ label.backup-action-btn {
   .inventory-tool-card-side {
     grid-template-columns: 1fr;
     width: 100%;
+  }
+
+  .inventory-tool-card-actions {
+    justify-content: flex-start;
   }
 }
 

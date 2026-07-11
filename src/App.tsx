@@ -1386,12 +1386,17 @@ type CalendarEventType =
   | "term_start"
   | "camp"
   | "celebration"
-  | "break";
+  | "break"
+  | "pest_service"
+  | "pool_clean"
+  | "submit_report"
+  | "monthly_submit_request";
 type CalendarEvent = {
   id: number;
   date: string;
   name: string;
   type: CalendarEventType;
+  time?: string;
 };
 type MaintenanceNotification = {
   id: number;
@@ -2508,6 +2513,10 @@ const CALENDAR_EVENT_TYPE_OPTIONS: Array<{ value: CalendarEventType; label: stri
   { value: "camp", label: "Camp" },
   { value: "celebration", label: "Celebration" },
   { value: "break", label: "Break" },
+  { value: "pest_service", label: "Pest Service" },
+  { value: "pool_clean", label: "Pool Clean" },
+  { value: "submit_report", label: "Submit Report" },
+  { value: "monthly_submit_request", label: "Monthly Submit Request" },
 ];
 function calendarEventTypeLabel(type: CalendarEventType) {
   return CALENDAR_EVENT_TYPE_OPTIONS.find((opt) => opt.value === type)?.label || type;
@@ -2528,6 +2537,14 @@ function calendarEventBadgeLabel(type: CalendarEventType) {
       return "Event";
     case "break":
       return "Break";
+    case "pest_service":
+      return "Pest";
+    case "pool_clean":
+      return "Pool";
+    case "submit_report":
+      return "Report";
+    case "monthly_submit_request":
+      return "Monthly";
     default:
       return "Holiday";
   }
@@ -5861,6 +5878,28 @@ function buildInventoryItemCode(
   return `${campusCode}-${catCode}-${pad4(seq)}`;
 }
 
+function buildClonedInventoryItemCode(
+  list: InventoryItem[],
+  sourceItemCode: string,
+  targetCampus: string,
+  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL"
+) {
+  const campusCode = inventoryRecordCampusCode(targetCampus);
+  const catCode = inventoryCategoryCode(category);
+  const rawCode = String(sourceItemCode || "").trim().toUpperCase();
+  const matched = rawCode.match(/-(\d{1,6})$/);
+  if (matched) {
+    const preferredCode = `${campusCode}-${catCode}-${pad4(Number(matched[1] || 0))}`;
+    const exists = list.some(
+      (item) =>
+        inventoryRecordCampusCode(item.campus) === campusCode &&
+        String(item.itemCode || "").trim().toUpperCase() === preferredCode
+    );
+    if (!exists) return preferredCode;
+  }
+  return buildInventoryItemCode(list, targetCampus, category);
+}
+
 function defaultTypeForCategory(category: string) {
   return visibleNewEntryTypeOptions(TYPE_OPTIONS, category)[0] || (TYPE_OPTIONS[category] || TYPE_OPTIONS.IT)[0];
 }
@@ -6098,10 +6137,44 @@ function buildDefaultCalendarEvents() {
 
 function normalizeCalendarEventType(value: unknown): CalendarEventType {
   const type = String(value || "").trim().toLowerCase();
-  if (["public", "ptc", "term_end", "term_start", "camp", "celebration", "break"].includes(type)) {
+  if (
+    [
+      "public",
+      "ptc",
+      "term_end",
+      "term_start",
+      "camp",
+      "celebration",
+      "break",
+      "pest_service",
+      "pool_clean",
+      "submit_report",
+      "monthly_submit_request",
+    ].includes(type)
+  ) {
     return type as CalendarEventType;
   }
   return "public";
+}
+
+function normalizeCalendarEventTime(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return "";
+  }
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function formatCalendarEventDisplayName(row: Pick<CalendarEvent, "name" | "time">) {
+  const name = String(row.name || "").trim();
+  const time = normalizeCalendarEventTime(row.time);
+  if (!name) return "";
+  return time ? `${time} • ${name}` : name;
 }
 
 function normalizeCalendarEvents(input: unknown, fallback: CalendarEvent[] = []) {
@@ -6112,8 +6185,9 @@ function normalizeCalendarEvents(input: unknown, fallback: CalendarEvent[] = [])
     const row = rows[i] as Partial<CalendarEvent> | undefined;
     const date = String(row?.date || "").trim();
     const name = String(row?.name || "").trim();
+    const time = normalizeCalendarEventTime(row?.time);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) continue;
-    const key = `${date}::${name.toLowerCase()}`;
+    const key = `${date}::${time}::${name.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const parsedId = Number(row?.id);
@@ -6122,10 +6196,13 @@ function normalizeCalendarEvents(input: unknown, fallback: CalendarEvent[] = [])
       date,
       name,
       type: normalizeCalendarEventType((row as { type?: unknown })?.type || classifyHolidayEvent(name)),
+      time,
     });
   }
   return out.sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const timeCompare = normalizeCalendarEventTime(a.time).localeCompare(normalizeCalendarEventTime(b.time));
+    if (timeCompare !== 0) return timeCompare;
     return a.name.localeCompare(b.name);
   });
 }
@@ -13123,6 +13200,7 @@ export default function App() {
     date: "",
     name: "",
     type: "public" as CalendarEventType,
+    time: "",
   });
   const [editingCalendarEventId, setEditingCalendarEventId] = useState<number | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -16713,7 +16791,7 @@ export default function App() {
     for (const event of calendarEvents) {
       const ymd = normalizeYmdInput(event.date);
       if (!ymd) continue;
-      const name = String(event.name || "").trim();
+      const name = formatCalendarEventDisplayName(event);
       const type = normalizeCalendarEventType(event.type);
       if (!eventByDate.has(ymd)) {
         eventByDate.set(ymd, { name, type });
@@ -17203,7 +17281,7 @@ export default function App() {
     for (const event of calendarEvents) {
       const ymd = normalizeYmdInput(event.date);
       if (!ymd) continue;
-      const name = String(event.name || "").trim();
+      const name = formatCalendarEventDisplayName(event);
       const type = normalizeCalendarEventType(event.type);
       if (!eventByDate.has(ymd)) {
         eventByDate.set(ymd, { name, type });
@@ -17615,7 +17693,7 @@ export default function App() {
     if (!date) return { name: "", type: "" };
     const matches = holidayLookup.get(date) || [];
     if (!matches.length) return { name: "", type: "" };
-    const names = Array.from(new Set(matches.map((row) => String(row.name || "").trim()).filter(Boolean)));
+    const names = Array.from(new Set(matches.map((row) => formatCalendarEventDisplayName(row)).filter(Boolean)));
     const name = names.join(" | ");
     const type = matches[0]?.type || classifyHolidayEvent(names[0] || "");
     return { name, type: normalizeCalendarEventType(type) };
@@ -17702,6 +17780,10 @@ export default function App() {
         term_start: "ចាប់ផ្តើមឆមាស",
         camp: "ជំរំ",
         celebration: "ព្រឹត្តិការណ៍",
+        pest_service: "សេវាកម្ចាត់សត្វល្អិត",
+        pool_clean: "សម្អាតអាងទឹក",
+        submit_report: "ដាក់របាយការណ៍",
+        monthly_submit_request: "ដាក់សំណើប្រចាំខែ",
       };
       const typeLabel = lang === "km"
         ? kmTypeLabel[normalizeCalendarEventType(holiday.type)]
@@ -17929,6 +18011,10 @@ export default function App() {
         term_start: "ចាប់ផ្តើមឆមាស",
         camp: "ជំរំ",
         celebration: "ព្រឹត្តិការណ៍",
+        pest_service: "សេវាកម្ចាត់សត្វល្អិត",
+        pool_clean: "សម្អាតអាងទឹក",
+        submit_report: "ដាក់របាយការណ៍",
+        monthly_submit_request: "ដាក់សំណើប្រចាំខែ",
       };
       const typeLabel = lang === "km"
         ? kmTypeLabel[normalizeCalendarEventType(holiday.type)]
@@ -24132,6 +24218,7 @@ export default function App() {
     if (!requireAdminAction()) return;
     const date = normalizeYmdInput(calendarEventForm.date);
     const name = String(calendarEventForm.name || "").trim();
+    const time = normalizeCalendarEventTime(calendarEventForm.time);
     if (!date || !name) {
       setError("Calendar event date and name are required.");
       return;
@@ -24148,6 +24235,7 @@ export default function App() {
           date,
           name,
           type: normalizedType,
+          time,
         },
       ],
       defaultCalendarEvents
@@ -24158,14 +24246,14 @@ export default function App() {
       await saveCalendarEventsToServer(nextRows);
       setCalendarEvents(nextRows);
       writeCalendarEventFallback(nextRows);
-      setCalendarEventForm({ date: "", name: "", type: "public" });
+      setCalendarEventForm({ date: "", name: "", type: "public", time: "" });
       setEditingCalendarEventId(null);
       setSetupMessage(editingCalendarEventId === null ? "Calendar event added." : "Calendar event updated.");
       appendUiAudit(
         editingCalendarEventId === null ? "CREATE" : "UPDATE",
         "calendar_event",
         `${date}`,
-        `${name} | ${normalizedType}`
+        `${time || "No time"} | ${name} | ${normalizedType}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save calendar event");
@@ -24180,12 +24268,13 @@ export default function App() {
       date: row.date,
       name: row.name,
       type: normalizeCalendarEventType(row.type),
+      time: normalizeCalendarEventTime(row.time),
     });
   }
 
   function cancelEditCalendarEvent() {
     setEditingCalendarEventId(null);
-    setCalendarEventForm({ date: "", name: "", type: "public" });
+    setCalendarEventForm({ date: "", name: "", type: "public", time: "" });
   }
 
   async function deleteCalendarEvent(id: number) {
@@ -25971,11 +26060,17 @@ export default function App() {
     try {
       for (const targetCampus of targetCampuses) {
         for (const sourceRow of inventoryCloneRowsToCopy) {
+          const nextItemCode = buildClonedInventoryItemCode(
+            nextItems,
+            sourceRow.itemCode,
+            targetCampus,
+            sourceRow.category
+          );
           const duplicateExists = nextItems.some(
             (item) =>
               inventoryRecordCampusCode(item.campus) === inventoryRecordCampusCode(targetCampus) &&
               String(item.itemCode || "").trim().toUpperCase() ===
-                String(sourceRow.itemCode || "").trim().toUpperCase()
+                String(nextItemCode || "").trim().toUpperCase()
           );
           if (duplicateExists) {
             skippedCount += 1;
@@ -25985,6 +26080,7 @@ export default function App() {
             ...sourceRow,
             id: Date.now() + createdCount + skippedCount + 1,
             campus: targetCampus,
+            itemCode: nextItemCode,
             created: timestamp,
           };
           try {
@@ -25993,7 +26089,7 @@ export default function App() {
               body: JSON.stringify({
                 campus: targetCampus,
                 category: sourceRow.category,
-                itemCode: sourceRow.itemCode,
+                itemCode: nextItemCode,
                 itemName: sourceRow.itemName,
                 unit: sourceRow.unit,
                 openingQty: Math.max(0, Number(sourceRow.openingQty || 0)),
@@ -53174,14 +53270,6 @@ function formatTicketRequestSource(value?: string) {
               <section className={`panel ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
                 <div className="panel-row">
                   <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
-                  <div className="panel-filters">
-                    <input
-                      className="input"
-                      placeholder={`Search ${inventoryBusinessGroupLabel(inventoryDashboardGroup)}...`}
-                      value={inventorySearch}
-                      onChange={(e) => setInventorySearch(e.target.value)}
-                    />
-                  </div>
                 </div>
               </section>
             ) : null}
@@ -53833,15 +53921,6 @@ function formatTicketRequestSource(value?: string) {
                       <option value="ZERO">Zero Available</option>
                     </select>
                   </label>
-                  <label className="field field-wide">
-                    <span>Search</span>
-                    <input
-                      className="input"
-                      placeholder="Search code, tool name, location, vendor..."
-                      value={inventoryItemFilterQuery}
-                      onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
-                    />
-                  </label>
                 </div>
 
                 <div className="inventory-tool-list-cards">
@@ -53880,13 +53959,26 @@ function formatTicketRequestSource(value?: string) {
                               <span>Min</span>
                               <strong>{row.minStock}</strong>
                             </div>
-                            <button
-                              className="tab btn-small"
-                              disabled={!isAdmin}
-                              onClick={() => startEditInventoryItem(row)}
-                            >
-                              Edit Setup
-                            </button>
+                            <div className="inventory-tool-card-actions">
+                              <button
+                                className="btn-icon-edit"
+                                disabled={!isAdmin}
+                                title="Edit Setup"
+                                aria-label="Edit Setup"
+                                onClick={() => startEditInventoryItem(row)}
+                              >
+                                <Pencil size={16} strokeWidth={2.2} />
+                              </button>
+                              <button
+                                className="btn-danger"
+                                disabled={busy || !isAdmin}
+                                title="Delete"
+                                aria-label="Delete"
+                                onClick={() => void deleteInventoryItem(row)}
+                              >
+                                <Trash2 size={16} strokeWidth={2.2} />
+                              </button>
+                            </div>
                           </div>
                         </article>
                       );
@@ -69129,7 +69221,7 @@ function formatTicketRequestSource(value?: string) {
           {tab === "setup" && setupView === "calendar" && canAccessMenu("setup.calendar", "setup") && (
           <section className="panel">
             <h2>Calendar Event Setup</h2>
-            <p className="tiny">Manage holidays and school events from here. Changes apply to all calendar views.</p>
+            <p className="tiny">Manage holidays, service visits, report reminders, and school events from here. Changes apply to all calendar views.</p>
             <div className="form-grid">
               <label className="field">
                 <span>{t.date}</span>
@@ -69138,6 +69230,15 @@ function formatTicketRequestSource(value?: string) {
                   className="input"
                   value={calendarEventForm.date}
                   onChange={(e) => setCalendarEventForm((f) => ({ ...f, date: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Time</span>
+                <input
+                  type="time"
+                  className="input"
+                  value={calendarEventForm.time}
+                  onChange={(e) => setCalendarEventForm((f) => ({ ...f, time: e.target.value }))}
                 />
               </label>
               <label className="field">
@@ -69172,12 +69273,12 @@ function formatTicketRequestSource(value?: string) {
                   className="input"
                   value={calendarEventForm.name}
                   onChange={(e) => setCalendarEventForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Example: PTC for Term 3"
+                  placeholder="Example: Pest Service at Main Building"
                 />
               </label>
             </div>
             <div className="asset-actions">
-              <div className="tiny">Use this for holiday, PTC, term dates, camp, and school events.</div>
+              <div className="tiny">Use this for holidays, PTC, term dates, pest service, pool clean, submit report, monthly submit request, and other school events.</div>
               <div style={{ display: "flex", gap: 8 }}>
                 {editingCalendarEventId !== null ? (
                   <button className="tab" onClick={cancelEditCalendarEvent}>Cancel</button>
@@ -69192,6 +69293,7 @@ function formatTicketRequestSource(value?: string) {
                 <thead>
                   <tr>
                     <th>{t.date}</th>
+                    <th>Time</th>
                     <th>Type</th>
                     <th>Name</th>
                     <th>{t.edit}</th>
@@ -69203,6 +69305,7 @@ function formatTicketRequestSource(value?: string) {
                     calendarEvents.map((row) => (
                       <tr key={`calendar-event-${row.id}`}>
                         <td>{formatDate(row.date)}</td>
+                        <td>{normalizeCalendarEventTime(row.time) || "-"}</td>
                         <td>
                           <span className={`calendar-type-badge calendar-type-${normalizeCalendarEventType(row.type)}`}>
                             {calendarEventTypeLabel(normalizeCalendarEventType(row.type))}
@@ -69221,7 +69324,7 @@ function formatTicketRequestSource(value?: string) {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5}>No calendar events yet.</td>
+                      <td colSpan={6}>No calendar events yet.</td>
                     </tr>
                   )}
                 </tbody>

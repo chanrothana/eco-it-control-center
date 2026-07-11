@@ -190,7 +190,7 @@ function formatTelegramAlertSnapshot(date = new Date()) {
 
 function formatMaintenanceTelegramDateTime(entry) {
   const chosenDate = toText(entry && entry.date) || "-";
-  const displayAtRaw = toText(entry && entry.updatedAt) || toText(entry && entry.createdAt);
+  const displayAtRaw = toText(entry && entry.createdAt) || toText(entry && entry.updatedAt);
   if (!displayAtRaw) return chosenDate;
   const displayAt = new Date(displayAtRaw);
   if (Number.isNaN(displayAt.getTime())) return chosenDate;
@@ -210,6 +210,17 @@ function formatMaintenanceTelegramDateTime(entry) {
     }
   } catch {}
   return chosenDate;
+}
+
+function normalizeMaintenanceEntryCreatedAt(value, fallbackDate = "") {
+  const raw = toText(value);
+  if (raw) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  const ymd = toText(fallbackDate);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return `${ymd}T00:00:00.000Z`;
+  return new Date().toISOString();
 }
 const DEFAULT_ADMIN_PASSWORD = String(
   process.env.BOOTSTRAP_ADMIN_PASSWORD || (!IS_PROD ? "EcoAdmin@2026!" : "")
@@ -6170,10 +6181,37 @@ function normalizeStaffUsers(input) {
 
 function normalizeCalendarEventType(value) {
   const type = toText(value).toLowerCase();
-  if (["public", "ptc", "term_end", "term_start", "camp", "celebration", "break"].includes(type)) {
+  if (
+    [
+      "public",
+      "ptc",
+      "term_end",
+      "term_start",
+      "camp",
+      "celebration",
+      "break",
+      "pest_service",
+      "pool_clean",
+      "submit_report",
+      "monthly_submit_request",
+    ].includes(type)
+  ) {
     return type;
   }
   return "public";
+}
+
+function normalizeCalendarEventTime(value) {
+  const raw = toText(value);
+  if (!raw) return "";
+  const match = raw.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return "";
+  }
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
 function isNonWorkingCalendarEventType(type) {
@@ -6208,8 +6246,9 @@ function normalizeCalendarEvents(input) {
     if (!row || typeof row !== "object") continue;
     const date = toText(row.date);
     const name = toText(row.name);
+    const time = normalizeCalendarEventTime(row.time);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) continue;
-    const key = `${date}::${name.toLowerCase()}`;
+    const key = `${date}::${time}::${name.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const parsedId = Number(row.id);
@@ -6219,10 +6258,13 @@ function normalizeCalendarEvents(input) {
       date,
       name,
       type: normalizeCalendarEventType(row.type),
+      time,
     });
   }
   return out.sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const timeCompare = normalizeCalendarEventTime(a.time).localeCompare(normalizeCalendarEventTime(b.time));
+    if (timeCompare !== 0) return timeCompare;
     return a.name.localeCompare(b.name);
   });
 }
@@ -10081,11 +10123,12 @@ const server = http.createServer(async (req, res) => {
       }
       const telegramAlertMode = toText(body && body.telegramAlertMode);
       const scheduleSourceDate = normalizeLooseDateToYmd(body && body.scheduleSourceDate);
+      const createdAt = normalizeMaintenanceEntryCreatedAt(body && body.createdAt, date);
 
       const entry = {
         id: Date.now(),
         date,
-        createdAt: new Date().toISOString(),
+        createdAt,
         type,
         completion,
         condition,
@@ -10204,11 +10247,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: "General maintenance campus is required" });
         return;
       }
+      const createdAt = normalizeMaintenanceEntryCreatedAt(body && body.createdAt, date);
 
       const entry = {
         id: Date.now(),
         date,
-        createdAt: new Date().toISOString(),
+        createdAt,
         type,
         completion,
         condition,
