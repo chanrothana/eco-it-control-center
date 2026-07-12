@@ -64614,17 +64614,21 @@ function formatTicketRequestSource(value?: string) {
                     <div className="report-inventory-mobile-toolbar-controls">
                       <label className="field report-inventory-mobile-campus-field">
                         <span>{t.campus}</span>
-                        <LocationPicker
-                          value={reportInventoryCampusFilter}
-                          onChange={(value) => setReportInventoryCampusFilter(value)}
-                          options={[
-                            { value: "ALL", label: t.allCampuses },
-                            ...reportInventoryCampusOptions.map((campus) => ({
-                              value: campus,
-                              label: inventoryCampusLabel(campus),
-                            })),
-                          ]}
-                          placeholder={lang === "km" ? "ជ្រើសសាខា" : "Select campus"}
+                        <SearchableMultiSelectPicker
+                          summary={
+                            reportInventoryCampusFilter === "ALL"
+                              ? t.allCampuses
+                              : inventoryCampusLabel(reportInventoryCampusFilter)
+                          }
+                          options={reportInventoryCampusOptions.map((campus) => ({
+                            value: campus,
+                            label: inventoryCampusLabel(campus),
+                          }))}
+                          selectedValues={reportInventoryCampusFilter === "ALL" ? ["ALL"] : [reportInventoryCampusFilter]}
+                          allOptionLabel={t.allCampuses}
+                          allOptionChecked={reportInventoryCampusFilter === "ALL"}
+                          onToggleAllOption={() => setReportInventoryCampusFilter("ALL")}
+                          onToggleValue={(value, checked) => setReportInventoryCampusFilter(checked ? value : "ALL")}
                           searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                           emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                         />
@@ -64813,18 +64817,20 @@ function formatTicketRequestSource(value?: string) {
                     value={reportDateTo}
                     onChange={(e) => setReportDateTo(e.target.value)}
                   />
-                  <select
-                    className="input"
-                    value={reportMaintenanceCampusFilter}
-                    onChange={(e) => setReportMaintenanceCampusFilter(e.target.value)}
-                  >
-                    <option value="ALL">{t.allCampuses}</option>
-                    {campusOptions.map((campus) => (
-                      <option key={`report-maint-campus-${campus}`} value={campus}>
-                        {reportCampusName(campus)}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableMultiSelectPicker
+                    summary={reportMaintenanceCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportMaintenanceCampusFilter)}
+                    options={campusOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    }))}
+                    selectedValues={reportMaintenanceCampusFilter === "ALL" ? ["ALL"] : [reportMaintenanceCampusFilter]}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={reportMaintenanceCampusFilter === "ALL"}
+                    onToggleAllOption={() => setReportMaintenanceCampusFilter("ALL")}
+                    onToggleValue={(value, checked) => setReportMaintenanceCampusFilter(checked ? value : "ALL")}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
                   <select
                     className="input"
                     value={reportMaintenanceCategoryFilter}
@@ -64888,18 +64894,20 @@ function formatTicketRequestSource(value?: string) {
                     value={reportScheduleMonth}
                     onChange={(e) => setReportScheduleMonth(e.target.value)}
                   />
-                  <select
-                    className="input"
-                    value={reportScheduleCampusFilter}
-                    onChange={(e) => setReportScheduleCampusFilter(e.target.value)}
-                  >
-                    <option value="ALL">{t.allCampuses}</option>
-                    {reportScheduleCampusOptions.map((campus) => (
-                      <option key={`report-schedule-campus-${campus}`} value={campus}>
-                        {reportCampusName(campus)}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableMultiSelectPicker
+                    summary={reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)}
+                    options={reportScheduleCampusOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    }))}
+                    selectedValues={reportScheduleCampusFilter === "ALL" ? ["ALL"] : [reportScheduleCampusFilter]}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={reportScheduleCampusFilter === "ALL"}
+                    onToggleAllOption={() => setReportScheduleCampusFilter("ALL")}
+                    onToggleValue={(value, checked) => setReportScheduleCampusFilter(checked ? value : "ALL")}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
                   <select
                     className="input"
                     value={reportScheduleGroupFilter}
@@ -64927,17 +64935,21 @@ function formatTicketRequestSource(value?: string) {
                     searchPlaceholder={lang === "km" ? "ស្វែងរករបៀប..." : "Search mode..."}
                     emptyText={lang === "km" ? "មិនមានជម្រើស" : "No mode found."}
                   />
-                  <LocationPicker
-                    value={reportInventoryCampusFilter}
-                    onChange={(value) => setReportInventoryCampusFilter(value)}
-                    options={[
-                      { value: "ALL", label: t.allCampuses },
-                      ...reportInventoryCampusOptions.map((campus) => ({
-                        value: campus,
-                        label: inventoryCampusLabel(campus),
-                      })),
-                    ]}
-                    placeholder={lang === "km" ? "ជ្រើសសាខា" : "Filter Campus"}
+                  <SearchableMultiSelectPicker
+                    summary={
+                      reportInventoryCampusFilter === "ALL"
+                        ? t.allCampuses
+                        : inventoryCampusLabel(reportInventoryCampusFilter)
+                    }
+                    options={reportInventoryCampusOptions.map((campus) => ({
+                      value: campus,
+                      label: inventoryCampusLabel(campus),
+                    }))}
+                    selectedValues={reportInventoryCampusFilter === "ALL" ? ["ALL"] : [reportInventoryCampusFilter]}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={reportInventoryCampusFilter === "ALL"}
+                    onToggleAllOption={() => setReportInventoryCampusFilter("ALL")}
+                    onToggleValue={(value, checked) => setReportInventoryCampusFilter(checked ? value : "ALL")}
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                   />
