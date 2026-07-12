@@ -61,6 +61,13 @@ try {
   Tesseract = null;
 }
 
+let sharp;
+try {
+  sharp = require("sharp");
+} catch {
+  sharp = null;
+}
+
 function readPackageVersion() {
   try {
     const pkgPath = path.join(__dirname, "..", "package.json");
@@ -120,6 +127,11 @@ const ALLOW_DEV_AUTH_BYPASS =
   !IS_PROD &&
   String(process.env.ALLOW_DEV_AUTH_BYPASS || "false").toLowerCase() === "true";
 const APP_TIME_ZONE = "Asia/Phnom_Penh";
+const IMAGE_UPLOAD_MAX_DIMENSION = Math.max(640, Number(process.env.IMAGE_UPLOAD_MAX_DIMENSION || 1600));
+const IMAGE_UPLOAD_JPEG_QUALITY = Math.max(40, Math.min(90, Number(process.env.IMAGE_UPLOAD_JPEG_QUALITY || 76)));
+const IMAGE_UPLOAD_PNG_QUALITY = Math.max(40, Math.min(90, Number(process.env.IMAGE_UPLOAD_PNG_QUALITY || 80)));
+const IMAGE_UPLOAD_WEBP_QUALITY = Math.max(40, Math.min(90, Number(process.env.IMAGE_UPLOAD_WEBP_QUALITY || 76)));
+const COMPRESSIBLE_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
 
 function getAppDateTimeParts(date = new Date()) {
   try {
@@ -4058,6 +4070,120 @@ function extFromMime(mime) {
   }
 }
 
+function isCompressibleImageMime(mime) {
+  return mime === "image/jpeg" || mime === "image/png" || mime === "image/webp";
+}
+
+function isCompressibleImageExtension(ext) {
+  return COMPRESSIBLE_IMAGE_EXTENSIONS.has(toText(ext).replace(/^\./, "").toLowerCase());
+}
+
+async function optimizeImageBuffer(buffer, format) {
+  if (!sharp || !Buffer.isBuffer(buffer) || buffer.length === 0) return buffer;
+  const normalizedFormat = toText(format).replace(/^\./, "").toLowerCase();
+  if (!isCompressibleImageExtension(normalizedFormat)) return buffer;
+  try {
+    let pipeline = sharp(buffer, { failOn: "none", animated: false })
+      .rotate()
+      .resize({
+        width: IMAGE_UPLOAD_MAX_DIMENSION,
+        height: IMAGE_UPLOAD_MAX_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+    if (normalizedFormat === "jpg" || normalizedFormat === "jpeg") {
+      pipeline = pipeline.jpeg({
+        quality: IMAGE_UPLOAD_JPEG_QUALITY,
+        mozjpeg: true,
+        progressive: true,
+      });
+    } else if (normalizedFormat === "png") {
+      pipeline = pipeline.png({
+        compressionLevel: 9,
+        palette: true,
+        quality: IMAGE_UPLOAD_PNG_QUALITY,
+      });
+    } else if (normalizedFormat === "webp") {
+      pipeline = pipeline.webp({
+        quality: IMAGE_UPLOAD_WEBP_QUALITY,
+        effort: 5,
+      });
+    }
+    const optimized = await pipeline.toBuffer();
+    return optimized.length > 0 && optimized.length < buffer.length ? optimized : buffer;
+  } catch {
+    return buffer;
+  }
+}
+
+async function optimizeUploadedPhotoBuffer(buffer, mime) {
+  const ext = extFromMime(mime);
+  if (!isCompressibleImageMime(mime) || !isCompressibleImageExtension(ext)) return buffer;
+  return optimizeImageBuffer(buffer, ext);
+}
+
+async function collectFilesRecursive(dir) {
+  const out = [];
+  let entries = [];
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...(await collectFilesRecursive(abs)));
+    } else if (entry.isFile()) {
+      out.push(abs);
+    }
+  }
+  return out;
+}
+
+async function recompressExistingUploads({ dryRun = false } = {}) {
+  await ensureUploadsDir();
+  const files = await collectFilesRecursive(UPLOADS_DIR);
+  const summary = {
+    scanned: 0,
+    optimized: 0,
+    skipped: 0,
+    errors: 0,
+    bytesBefore: 0,
+    bytesAfter: 0,
+    savedBytes: 0,
+  };
+  for (const filePath of files) {
+    const ext = path.extname(filePath).replace(/^\./, "").toLowerCase();
+    if (!isCompressibleImageExtension(ext)) {
+      summary.skipped += 1;
+      continue;
+    }
+    try {
+      const original = await fs.readFile(filePath);
+      summary.scanned += 1;
+      summary.bytesBefore += original.length;
+      const optimized = await optimizeImageBuffer(original, ext);
+      summary.bytesAfter += optimized.length;
+      if (!Buffer.isBuffer(optimized) || optimized.length >= original.length) {
+        summary.skipped += 1;
+        continue;
+      }
+      if (!dryRun) {
+        await fs.writeFile(filePath, optimized);
+      }
+      summary.optimized += 1;
+      summary.savedBytes += original.length - optimized.length;
+    } catch {
+      summary.errors += 1;
+    }
+  }
+  if (dryRun) {
+    summary.bytesAfter = summary.bytesBefore - summary.savedBytes;
+  }
+  return summary;
+}
+
 async function saveDataUrlPhoto(dataUrl, group = "assets") {
   const raw = toText(dataUrl);
   const m = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
@@ -4065,13 +4191,15 @@ async function saveDataUrlPhoto(dataUrl, group = "assets") {
   const mime = m[1].toLowerCase();
   const base64 = m[2];
   const ext = extFromMime(mime);
+  const originalBuffer = Buffer.from(base64, "base64");
+  const imageBuffer = await optimizeUploadedPhotoBuffer(originalBuffer, mime);
   const folder = toText(group).replace(/[^a-z0-9_-]/gi, "").toLowerCase() || "assets";
   await ensureUploadsDir();
   const folderPath = path.join(UPLOADS_DIR, folder);
   await fs.mkdir(folderPath, { recursive: true });
   const fileName = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
   const abs = path.join(folderPath, fileName);
-  await fs.writeFile(abs, Buffer.from(base64, "base64"));
+  await fs.writeFile(abs, imageBuffer);
   return `/uploads/${folder}/${fileName}`;
 }
 
@@ -7719,6 +7847,31 @@ const server = http.createServer(async (req, res) => {
       );
       await writeDb(db);
       sendJson(res, 201, { photo });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/admin/recompress-uploads") {
+      const admin = requireSuperAdmin(req, res);
+      if (!admin) return;
+      const body = await parseBody(req);
+      const dryRun = body && body.dryRun === true;
+      const summary = await recompressExistingUploads({ dryRun });
+      const db = await readDb();
+      appendAuditLog(
+        db,
+        admin,
+        dryRun ? "RECOMPRESS_UPLOADS_DRY_RUN" : "RECOMPRESS_UPLOADS",
+        "uploads",
+        "all",
+        `optimized=${summary.optimized} savedBytes=${summary.savedBytes}`
+      );
+      await writeDb(db);
+      sendJson(res, 200, {
+        ok: true,
+        dryRun,
+        sharpEnabled: Boolean(sharp),
+        summary,
+      });
       return;
     }
 

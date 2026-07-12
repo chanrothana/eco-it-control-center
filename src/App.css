@@ -8193,6 +8193,69 @@ label.backup-action-btn {
   gap: 8px;
 }
 
+.backup-storage-panel {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(103, 131, 171, 0.24);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(31, 51, 78, 0.94), rgba(24, 40, 62, 0.94));
+  display: grid;
+  gap: 10px;
+}
+
+.backup-storage-head {
+  display: grid;
+  gap: 4px;
+}
+
+.backup-storage-head strong {
+  color: #f3f7ff;
+  font-size: 15px;
+}
+
+.backup-storage-head span {
+  color: #8ea6c7;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.backup-storage-actions {
+  justify-content: flex-start;
+}
+
+.backup-storage-summary {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(120, 150, 198, 0.18);
+  border-radius: 14px;
+  background: rgba(11, 20, 34, 0.28);
+}
+
+.backup-storage-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.backup-storage-summary-grid small {
+  display: block;
+  color: #8ea6c7;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.backup-storage-summary-grid strong {
+  color: #f3f7ff;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .backup-storage-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .backup-mobile-details {
   border-top: 1px solid rgba(103, 131, 171, 0.2);
   padding-top: 8px;
@@ -12688,6 +12751,12 @@ label.backup-action-btn {
   line-height: 1.08;
 }
 
+.tool-review-modal-panel .panel-row > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .tool-review-selected-hero-modal {
   margin-top: 2px;
   grid-template-columns: 170px minmax(0, 1fr);
@@ -12783,13 +12852,14 @@ label.backup-action-btn {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
+  line-height: 1.25;
   text-transform: uppercase;
 }
 
 .tool-review-selected-data-row span {
   color: #d7e5fb;
   font-size: 14px;
-  line-height: 1.25;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
@@ -13018,6 +13088,144 @@ label.backup-action-btn {
 .app-shell.theme-warm .tool-review-upload-control {
   border-color: rgba(205, 148, 95, 0.4);
   background: linear-gradient(180deg, rgba(255, 249, 242, 0.98), rgba(255, 241, 227, 0.95));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel {
+  border-color: rgba(205, 148, 95, 0.36);
+  background:
+    radial-gradient(circle at top right, rgba(228, 138, 61, 0.12), rgba(228, 138, 61, 0) 34%),
+    linear-gradient(180deg, rgba(255, 250, 244, 0.99), rgba(255, 243, 229, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 20px 38px rgba(130, 82, 35, 0.16);
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .panel-row {
+  background: linear-gradient(180deg, rgba(255, 248, 240, 0.98), rgba(255, 240, 226, 0.94));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel h2,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-actions-head strong,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-photo-section-head strong,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-selected-title,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-selected-side-card strong,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn strong,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-upload-name.has-file,
+.app-shell.theme-warm .tool-review-modal-panel .input,
+.app-shell.theme-warm .tool-review-modal-panel .detail-value,
+.app-shell.theme-warm .tool-review-modal-panel .textarea,
+.app-shell.theme-warm .tool-review-modal-panel select {
+  color: #5a3412;
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tiny,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-actions-copy,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-photo-section-head span,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-selected-data-row span,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn span,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-upload-name,
+.app-shell.theme-warm .tool-review-modal-proof-empty {
+  color: #7f5938;
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-selected-data-row small,
+.app-shell.theme-warm .tool-review-modal-panel .field > span,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-proof-preview small,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-selected-side-card small {
+  color: #805126;
+}
+
+.app-shell.theme-warm .tool-review-modal-close {
+  border-color: rgba(205, 148, 95, 0.4);
+  background: linear-gradient(180deg, rgba(255, 250, 245, 0.96), rgba(255, 238, 220, 0.92));
+  color: #8a5628;
+}
+
+.app-shell.theme-warm .tool-review-modal-close:hover {
+  background: linear-gradient(180deg, rgba(255, 244, 233, 0.98), rgba(255, 230, 205, 0.94));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-selected-side-card,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-photo-side-card,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-proof-preview,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-upload-control,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn {
+  border-color: rgba(205, 148, 95, 0.28);
+  background: rgba(255, 250, 244, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .input,
+.app-shell.theme-warm .tool-review-modal-panel .detail-value,
+.app-shell.theme-warm .tool-review-modal-panel .textarea,
+.app-shell.theme-warm .tool-review-modal-panel select {
+  border-color: rgba(205, 148, 95, 0.38);
+  background: linear-gradient(180deg, rgba(255, 254, 251, 0.98), rgba(255, 243, 229, 0.96));
+  -webkit-text-fill-color: #5a3412;
+  caret-color: #5a3412;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 8px 18px rgba(130, 82, 35, 0.07);
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .textarea::placeholder,
+.app-shell.theme-warm .tool-review-modal-panel .input::placeholder {
+  color: #a3764f;
+  -webkit-text-fill-color: #a3764f;
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn:hover,
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-active {
+  transform: none;
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-good {
+  border-color: rgba(77, 146, 98, 0.42);
+  background: linear-gradient(180deg, rgba(244, 252, 246, 0.98), rgba(227, 243, 232, 0.95));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-good.is-active {
+  border-color: rgba(52, 127, 77, 0.72);
+  background: linear-gradient(180deg, rgba(220, 245, 228, 0.98), rgba(191, 228, 203, 0.96));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-add-more {
+  border-color: rgba(176, 122, 29, 0.44);
+  background: linear-gradient(180deg, rgba(255, 249, 236, 0.98), rgba(247, 231, 193, 0.95));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-add-more.is-active {
+  border-color: rgba(156, 101, 16, 0.74);
+  background: linear-gradient(180deg, rgba(247, 229, 180, 0.98), rgba(235, 208, 143, 0.96));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-take-out {
+  border-color: rgba(173, 79, 79, 0.42);
+  background: linear-gradient(180deg, rgba(255, 246, 246, 0.98), rgba(245, 226, 226, 0.95));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-take-out.is-active {
+  border-color: rgba(154, 59, 59, 0.72);
+  background: linear-gradient(180deg, rgba(247, 224, 224, 0.98), rgba(235, 194, 194, 0.96));
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-good .tool-review-quick-action-icon {
+  color: #2f7b4d;
+  background: rgba(80, 154, 104, 0.18);
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-add-more .tool-review-quick-action-icon {
+  color: #9a5f0f;
+  background: rgba(196, 140, 36, 0.18);
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-take-out .tool-review-quick-action-icon {
+  color: #a14646;
+  background: rgba(194, 86, 86, 0.18);
+}
+
+.app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn strong {
+  color: #5b3415;
 }
 
 .app-shell.theme-warm .tool-review-upload-trigger {
@@ -13256,6 +13464,12 @@ label.backup-action-btn {
 }
 
 @media (max-width: 480px) {
+  .app-shell.theme-warm .tool-review-modal-panel {
+    background:
+      radial-gradient(circle at top right, rgba(208, 118, 36, 0.14), rgba(208, 118, 36, 0) 36%),
+      linear-gradient(180deg, rgba(255, 250, 244, 0.995), rgba(255, 242, 226, 0.99));
+  }
+
   .tool-review-modal-backdrop {
     place-items: stretch;
     padding: 0;
@@ -13266,17 +13480,25 @@ label.backup-action-btn {
     max-height: 100dvh;
     min-height: 100dvh;
     border-radius: 0;
-    padding: calc(10px + env(safe-area-inset-top, 0px)) 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 10px calc(10px + env(safe-area-inset-bottom, 0px));
   }
 
   .tool-review-modal-panel .panel-row {
     position: sticky;
     top: 0;
     z-index: 4;
-    padding-top: 0;
+    padding-top: 6px;
     padding-right: 44px;
-    padding-bottom: 6px;
+    padding-bottom: 12px;
     background: linear-gradient(180deg, rgba(25, 43, 69, 0.98), rgba(25, 43, 69, 0.92));
+  }
+
+  .app-shell.theme-warm .tool-review-modal-panel .panel-row {
+    background: linear-gradient(180deg, rgba(255, 248, 240, 0.995), rgba(255, 238, 220, 0.985));
+  }
+
+  .tool-review-modal-panel .panel-row > div:first-child {
+    gap: 8px;
   }
 
   .tool-review-modal-close {
@@ -13322,12 +13544,28 @@ label.backup-action-btn {
 
   .tool-review-modal-panel .tool-review-selected-title {
     font-size: 13px;
-    line-height: 1.15;
+    line-height: 1.2;
+  }
+
+  .tool-review-modal-panel h2 {
+    line-height: 1.12;
+  }
+
+  .tool-review-selected-data-list {
+    gap: 8px 12px;
+  }
+
+  .tool-review-selected-data-row {
+    gap: 5px;
   }
 
   .tool-review-selected-data-row span {
     font-size: 12px;
-    line-height: 1.2;
+    line-height: 1.35;
+  }
+
+  .tool-review-selected-data-row small {
+    line-height: 1.3;
   }
 
   .tool-review-selected-side {
@@ -13346,12 +13584,12 @@ label.backup-action-btn {
 
   .tool-review-modal-panel .tool-review-quick-actions-copy {
     font-size: 11px;
-    line-height: 1.35;
+    line-height: 1.45;
   }
 
   .tool-review-modal-panel .tool-review-quick-actions-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    gap: 8px;
   }
 
   .tool-review-modal-panel .tool-review-note-submit-row {
@@ -13368,16 +13606,18 @@ label.backup-action-btn {
 
   .tool-review-modal-panel .tool-review-quick-action-btn {
     min-height: 0;
-    padding: 10px;
-    gap: 8px;
+    padding: 10px 8px;
+    gap: 7px;
     align-items: center;
     justify-items: center;
     text-align: center;
+    border-width: 1.5px;
+    box-shadow: 0 6px 14px rgba(137, 92, 37, 0.08);
   }
 
   .tool-review-quick-action-icon {
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     font-size: 13px;
   }
 
@@ -13443,6 +13683,36 @@ label.backup-action-btn {
   .tool-review-modal-panel .tool-review-upload-name {
     font-size: 10px;
     line-height: 1.3;
+  }
+
+  .app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-good {
+    border-color: rgba(53, 122, 74, 0.58);
+    background: linear-gradient(180deg, rgba(217, 241, 224, 0.98), rgba(188, 224, 198, 0.97));
+  }
+
+  .app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-add-more {
+    border-color: rgba(149, 95, 13, 0.6);
+    background: linear-gradient(180deg, rgba(245, 225, 176, 0.98), rgba(228, 198, 126, 0.97));
+  }
+
+  .app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-take-out {
+    border-color: rgba(144, 54, 54, 0.58);
+    background: linear-gradient(180deg, rgba(245, 219, 219, 0.98), rgba(229, 184, 184, 0.97));
+  }
+
+  .app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-good .tool-review-quick-action-icon {
+    color: #25663e;
+    background: rgba(53, 122, 74, 0.22);
+  }
+
+  .app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-add-more .tool-review-quick-action-icon {
+    color: #7d4a08;
+    background: rgba(149, 95, 13, 0.2);
+  }
+
+  .app-shell.theme-warm .tool-review-modal-panel .tool-review-quick-action-btn.is-take-out .tool-review-quick-action-icon {
+    color: #8d3434;
+    background: rgba(144, 54, 54, 0.2);
   }
 
   .tool-review-modal-proof {

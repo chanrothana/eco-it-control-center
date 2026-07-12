@@ -469,7 +469,20 @@ type InventoryReportColumnKey =
   | "current"
   | "min"
   | "alert";
-type EdAssetTemplate = "ALL" | "computer" | "ipad" | "speaker" | "tv" | "aircon" | "monitor" | "walkie" | "peripheral";
+type EdAssetTemplate =
+  | "ALL"
+  | "computer"
+  | "ipad"
+  | "speaker"
+  | "tv"
+  | "aircon"
+  | "monitor"
+  | "walkie"
+  | "peripheral"
+  | "safety"
+  | "fan"
+  | "music"
+  | "furniture";
 
 type Ticket = {
   id: number;
@@ -951,6 +964,21 @@ type AuthSessionLog = {
     displayName?: string;
     role?: string;
   };
+};
+type UploadCompressionSummary = {
+  scanned: number;
+  optimized: number;
+  skipped: number;
+  errors: number;
+  bytesBefore: number;
+  bytesAfter: number;
+  savedBytes: number;
+};
+type UploadCompressionResponse = {
+  ok: boolean;
+  dryRun: boolean;
+  sharpEnabled: boolean;
+  summary?: UploadCompressionSummary;
 };
 type InventoryApprovalRouteEntry = {
   campus: string;
@@ -3673,6 +3701,20 @@ function maintenanceRepeatLabel(mode: string, weekOfMonth: number, weekday: numb
 
 function getWdpFilterCycleNote(step: number) {
   return Number(step || 1) === 2 ? "Change all 4 filters" : "Change 2 filters";
+}
+
+function formatStorageBytes(bytes: number) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const decimals = size >= 100 || unitIndex === 0 ? 0 : size >= 10 ? 1 : 2;
+  return `${size.toFixed(decimals)} ${units[unitIndex]}`;
 }
 
 async function requestJson<T>(url: string, init?: ApiRequestInit): Promise<T> {
@@ -10943,7 +10985,7 @@ export default function App() {
     key: "assignedTo",
     direction: "asc",
   });
-  const [staffBorrowingCampusFilter, setStaffBorrowingCampusFilter] = useState("ALL");
+  const [staffBorrowingCampusFilter, setStaffBorrowingCampusFilter] = useState<string[]>(["ALL"]);
   const [staffBorrowingAssignedToFilter, setStaffBorrowingAssignedToFilter] = useState("ALL");
   const [staffBorrowingLocationFilter, setStaffBorrowingLocationFilter] = useState("ALL");
   const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState<string[]>(["ALL"]);
@@ -10982,7 +11024,7 @@ export default function App() {
   const [qrItemFilter, setQrItemFilter] = useState<string[]>(["ALL"]);
   const [qrLabelEntityType, setQrLabelEntityType] = useState<QrLabelEntityType>("asset");
   const [qrLabelSize, setQrLabelSize] = useState<"2cm" | "4cm" | "6cm">("2cm");
-  const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState("ALL");
+  const [assetByLocationCampusFilter, setAssetByLocationCampusFilter] = useState<string[]>(["ALL"]);
   const [assetByLocationLocationFilter, setAssetByLocationLocationFilter] = useState("ALL");
   const [dashboardSupplyHoveredItemKey, setDashboardSupplyHoveredItemKey] = useState<string | null>(null);
   const [furnitureControlCampusFilter, setFurnitureControlCampusFilter] = useState<string[]>(["ALL"]);
@@ -13280,6 +13322,9 @@ export default function App() {
   const [backupImportKey, setBackupImportKey] = useState(0);
   const [backupSessionMobileLimit, setBackupSessionMobileLimit] = useState(8);
   const [backupAuditMobileLimit, setBackupAuditMobileLimit] = useState(8);
+  const [uploadCompressionSummary, setUploadCompressionSummary] = useState<UploadCompressionSummary | null>(null);
+  const [uploadCompressionDryRun, setUploadCompressionDryRun] = useState(true);
+  const [uploadCompressionCheckedAt, setUploadCompressionCheckedAt] = useState("");
   const [userForm, setUserForm] = useState({
     fullName: "",
     position: "",
@@ -15789,6 +15834,16 @@ export default function App() {
     }
     return Array.from(campuses).sort((a, b) => inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b)));
   }, [inventoryBalanceRows, inventoryCampusLabel]);
+  const toolReviewCampusPickerOptions = useMemo(() => {
+    const campusList = canViewAllInventoryCampuses ? campusOptions : allowedCampusOptions;
+    return [
+      ...(campusList.length > 1 ? [{ value: "ALL", label: t.allCampuses }] : []),
+      ...campusList.map((campus) => ({
+        value: campus,
+        label: rentalPrinterCampusLabel(campus),
+      })),
+    ];
+  }, [allowedCampusOptions, campusOptions, canViewAllInventoryCampuses, rentalPrinterCampusLabel, t.allCampuses]);
   const inventoryCloneSourceCampusOptions = useMemo(() => {
     if (!isInventoryToolCategory(inventoryItemForm.category)) return [];
     return allowedCampusOptions.filter((campus) =>
@@ -16016,6 +16071,20 @@ export default function App() {
       setToolReviewLocationFilter("ALL");
     }
   }, [toolReviewLocationFilter, toolReviewLocationOptions]);
+  useEffect(() => {
+    const campusValues = toolReviewCampusPickerOptions
+      .map((option) => option.value)
+      .filter((value) => value !== "ALL");
+    if (toolReviewCampusFilter === "ALL") {
+      if (campusValues.length <= 1) {
+        setToolReviewCampusFilter(campusValues[0] || "ALL");
+      }
+      return;
+    }
+    if (!campusValues.includes(toolReviewCampusFilter)) {
+      setToolReviewCampusFilter(campusValues[0] || "ALL");
+    }
+  }, [toolReviewCampusFilter, toolReviewCampusPickerOptions]);
   const inventoryToolListRows = useMemo(() => {
     return inventoryItemRows.filter((row) => {
       if (inventoryToolListAreaFilter !== "ALL" && String(row.area || "").trim() !== inventoryToolListAreaFilter) {
@@ -24802,6 +24871,45 @@ export default function App() {
       setBusy(false);
       setBackupImportKey((k) => k + 1);
       if (e.target) e.target.value = "";
+    }
+  }
+
+  async function runUploadCompression(dryRun: boolean) {
+    if (!requireSuperAdminAction()) return;
+    setBusy(true);
+    setError("");
+    setUploadCompressionDryRun(dryRun);
+    setSetupMessage(
+      dryRun
+        ? "Checking how much upload storage can be reduced..."
+        : "Compressing stored uploads now. Please wait..."
+    );
+    try {
+      const res = await requestJson<UploadCompressionResponse>("/api/admin/recompress-uploads", {
+        method: "POST",
+        body: JSON.stringify({ dryRun }),
+        timeoutMs: dryRun ? 60000 : 180000,
+      });
+      const summary = res.summary || null;
+      setUploadCompressionSummary(summary);
+      setUploadCompressionCheckedAt(new Date().toISOString());
+      if (summary) {
+        const savedLabel = formatStorageBytes(summary.savedBytes);
+        setSetupMessage(
+          dryRun
+            ? `Storage check complete. Estimated saving: ${savedLabel} across ${summary.optimized} image(s).`
+            : `Upload compression complete. Saved ${savedLabel} across ${summary.optimized} image(s).`
+        );
+      } else {
+        setSetupMessage(dryRun ? "Storage check complete." : "Upload compression complete.");
+      }
+      await loadAuditLogs();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : dryRun ? "Failed to estimate upload compression." : "Failed to compress uploads.";
+      setError(msg);
+      setSetupMessage(dryRun ? `Storage check failed: ${msg}` : `Upload compression failed: ${msg}`);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -37213,7 +37321,11 @@ export default function App() {
       .filter((asset) => String(asset.assignedTo || "").trim())
       .filter((asset) => (reportAssetIdFilter ? String(asset.assetId || "").trim() === reportAssetIdFilter : true))
       .filter((asset) =>
-        staffBorrowingCampusFilter === "ALL" ? true : String(asset.campus || "").trim() === staffBorrowingCampusFilter
+        !staffBorrowingCampusFilter.length
+          ? false
+          : staffBorrowingCampusFilter.includes("ALL")
+            ? true
+            : staffBorrowingCampusFilter.includes(String(asset.campus || "").trim())
       )
       .filter((asset) =>
         staffBorrowingAssignedToFilter === "ALL"
@@ -37276,7 +37388,11 @@ export default function App() {
           assets
             .filter((asset) => String(asset.assignedTo || "").trim())
             .filter((asset) =>
-              staffBorrowingCampusFilter === "ALL" ? true : String(asset.campus || "").trim() === staffBorrowingCampusFilter
+              !staffBorrowingCampusFilter.length
+                ? false
+                : staffBorrowingCampusFilter.includes("ALL")
+                  ? true
+                  : staffBorrowingCampusFilter.includes(String(asset.campus || "").trim())
             )
             .filter((asset) =>
               staffBorrowingAssignedToFilter === "ALL"
@@ -37623,9 +37739,9 @@ export default function App() {
   }, [locationAssetSummaryRows, campusLabel]);
   const assetByLocationLocationFilterOptions = useMemo(() => {
     const source =
-      assetByLocationCampusFilter === "ALL"
+      assetByLocationCampusFilter.includes("ALL")
         ? locationAssetSummaryRows
-        : locationAssetSummaryRows.filter((row) => row.campus === assetByLocationCampusFilter);
+        : locationAssetSummaryRows.filter((row) => assetByLocationCampusFilter.includes(row.campus));
     const options = Array.from(new Set(source.map((row) => String(row.location || "").trim()).filter(Boolean)));
     return options.sort((a, b) => a.localeCompare(b));
   }, [locationAssetSummaryRows, assetByLocationCampusFilter]);
@@ -37637,7 +37753,8 @@ export default function App() {
   }, [assetByLocationLocationFilter, assetByLocationLocationFilterOptions]);
   const filteredLocationAssetSummaryRows = useMemo(() => {
     return locationAssetSummaryRows.filter((row) => {
-      if (assetByLocationCampusFilter !== "ALL" && row.campus !== assetByLocationCampusFilter) return false;
+      if (!assetByLocationCampusFilter.length) return false;
+      if (!assetByLocationCampusFilter.includes("ALL") && !assetByLocationCampusFilter.includes(row.campus)) return false;
       if (assetByLocationLocationFilter !== "ALL" && row.location !== assetByLocationLocationFilter) return false;
       return true;
     });
@@ -38933,6 +39050,10 @@ export default function App() {
             { value: "monitor", label: "Monitor List" },
             { value: "walkie", label: "Walkie Talkie List" },
             { value: "peripheral", label: "Computer Peripheral List" },
+            { value: "safety", label: "Safety Equipment List" },
+            { value: "fan", label: "Fan List" },
+            { value: "music", label: "Music Equipment List" },
+            { value: "furniture", label: "Furniture List" },
           ]
         : [
             { value: "ALL", label: "ED Template: All Assets" },
@@ -38944,6 +39065,10 @@ export default function App() {
             { value: "monitor", label: "Monitor List" },
             { value: "walkie", label: "Walkie Talkie List" },
             { value: "peripheral", label: "Computer Peripheral List" },
+            { value: "safety", label: "Safety Equipment List" },
+            { value: "fan", label: "Fan List" },
+            { value: "music", label: "Music Equipment List" },
+            { value: "furniture", label: "Furniture List" },
           ],
     [lang]
   );
@@ -38952,6 +39077,8 @@ export default function App() {
     if (edAssetTemplate === "ALL") return sortedAssetMasterRows;
     return sortedAssetMasterRows.filter((row) => {
       const item = String(row.itemName || "").toLowerCase();
+      const type = String(row.type || "").trim().toUpperCase();
+      const category = String(row.category || "").trim().toUpperCase();
       if (edAssetTemplate === "computer") return item.includes("computer");
       if (edAssetTemplate === "ipad") return item.includes("ipad");
       if (edAssetTemplate === "speaker") return item.includes("speaker");
@@ -38969,6 +39096,16 @@ export default function App() {
           item.includes("webcam") ||
           item.includes("web camera")
         );
+      }
+      if (edAssetTemplate === "safety") return category === "SAFETY";
+      if (edAssetTemplate === "fan") {
+        return ["FAN", "WFN", "CFN", "EFN", "SFN"].includes(type) || item.includes("fan");
+      }
+      if (edAssetTemplate === "music") {
+        return ["PNO", "KPN", "KPS", "KPA"].includes(type) || item.includes("piano");
+      }
+      if (edAssetTemplate === "furniture") {
+        return category === "FURNITURE" || ["TBL", "CHR", "DSK", "CAB", "NBD"].includes(type);
       }
       return true;
     });
@@ -39484,7 +39621,7 @@ export default function App() {
     }
     if (reportType === "staff_borrowing") {
       setReportAssetIdFilter("");
-      setStaffBorrowingCampusFilter("ALL");
+      setStaffBorrowingCampusFilter(["ALL"]);
       setStaffBorrowingAssignedToFilter("ALL");
       setStaffBorrowingLocationFilter("ALL");
       setStaffBorrowingVisibleColumns([
@@ -39577,7 +39714,7 @@ export default function App() {
     }
     if (reportType === "asset_by_location") {
       setReportAssetIdFilter("");
-      setAssetByLocationCampusFilter("ALL");
+      setAssetByLocationCampusFilter(["ALL"]);
       setAssetByLocationLocationFilter("ALL");
       return;
     }
@@ -39595,7 +39732,7 @@ export default function App() {
     setReportSection("asset");
     setReportType("asset_master");
     setReportAssetIdFilter("");
-    setStaffBorrowingCampusFilter("ALL");
+    setStaffBorrowingCampusFilter(["ALL"]);
     setStaffBorrowingAssignedToFilter("ALL");
     setStaffBorrowingLocationFilter("ALL");
     setReportInventoryMode("all");
@@ -39612,7 +39749,7 @@ export default function App() {
     setVaultReportStatusFilter("ALL");
     setVaultReportOwnerFilter("ALL");
     setVaultReportShowSensitive(false);
-    setAssetByLocationCampusFilter("ALL");
+    setAssetByLocationCampusFilter(["ALL"]);
     setAssetByLocationLocationFilter("ALL");
     setFurnitureControlCampusFilter(["ALL"]);
     setFurnitureControlLocationFilter(["ALL"]);
@@ -41423,7 +41560,10 @@ export default function App() {
         : reportType === "staff_borrowing"
         ? buildPrintSummaryGrid([
             { label: lang === "km" ? "ទ្រព្យដែលខ្ចី/ប្រគល់" : "Borrowed / Assigned Assets", value: sortedStaffBorrowingRows.length },
-            { label: lang === "km" ? "សាខា" : "Campus", value: staffBorrowingCampusFilter === "ALL" ? t.allCampuses : reportCampusName(staffBorrowingCampusFilter) },
+            {
+              label: lang === "km" ? "សាខា" : "Campus",
+              value: summarizeMultiFilter(staffBorrowingCampusFilter, t.allCampuses, reportCampusName),
+            },
             {
               label: lang === "km" ? "បុគ្គលិក" : "Staff",
               value:
@@ -41466,7 +41606,7 @@ export default function App() {
                   showAssetMasterItemBreakdown
                     ? `<div class="report-summary-box">
                         <div class="report-summary-box-label">By Item</div>
-                        <div class="report-summary-box-value report-summary-box-value-list">${assetMasterItemBreakdown
+                        <div class="report-summary-box-value report-summary-box-value-list report-summary-box-value-item-grid">${assetMasterItemBreakdown
                           .map(([name, count]) => `<div class="report-summary-entry">${escapeHtml(name)} = ${count}</div>`)
                           .join("")}</div>
                       </div>`
@@ -41561,7 +41701,7 @@ export default function App() {
                   showAssetMasterItemBreakdown
                     ? `<div class="report-summary-box">
                         <div class="report-summary-box-label">${escapeHtml(lang === "km" ? "តាមប្រភេទទំនិញ" : "By Item")}</div>
-                        <div class="report-summary-box-value report-summary-box-value-list">${assetMasterItemBreakdown
+                        <div class="report-summary-box-value report-summary-box-value-list report-summary-box-value-item-grid">${assetMasterItemBreakdown
                           .map(([name, count]) => `<div class="report-summary-entry">${escapeHtml(name)} = ${count}</div>`)
                           .join("")}</div>
                       </div>`
@@ -42285,6 +42425,11 @@ export default function App() {
             display: grid;
             gap: 4px;
           }
+          .report-summary-box-value-item-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px 18px;
+            align-items: start;
+          }
           .report-summary-box-value-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -42589,6 +42734,11 @@ export default function App() {
               background: #fff;
             }
             .report-two-column-summary { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); }
+          }
+          @media (max-width: 1200px) {
+            .report-summary-box-value-item-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
           }
         </style>
       </head>
@@ -54437,14 +54587,8 @@ function formatTicketRequestSource(value?: string) {
                     <LocationPicker
                       value={toolReviewCampusFilter}
                       onChange={setToolReviewCampusFilter}
-                      options={[
-                        { value: "ALL", label: "All Campuses" },
-                        ...CAMPUS_LIST.sort(compareCampusByCode).map((campus) => ({
-                          value: campus,
-                          label: rentalPrinterCampusLabel(campus),
-                        })),
-                      ]}
-                      placeholder="All Campuses"
+                      options={toolReviewCampusPickerOptions}
+                      placeholder={toolReviewCampusPickerOptions.find((option) => option.value === "ALL")?.label || rentalPrinterCampusLabel(allowedCampusOptions[0] || "")}
                       searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                       emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                     />
@@ -65099,17 +65243,25 @@ function formatTicketRequestSource(value?: string) {
               ) : null}
               {reportType === "asset_by_location" ? (
                 <>
-                  <LocationPicker
-                    value={assetByLocationCampusFilter}
-                    onChange={setAssetByLocationCampusFilter}
-                    options={[
-                      { value: "ALL", label: t.allCampuses },
-                      ...assetByLocationCampusFilterOptions.map((campus) => ({
-                        value: campus,
-                        label: reportCampusName(campus),
-                      })),
-                    ]}
-                    placeholder={t.allCampuses}
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(assetByLocationCampusFilter, t.allCampuses, reportCampusName)}
+                    options={assetByLocationCampusFilterOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    }))}
+                    selectedValues={assetByLocationCampusFilter}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={assetByLocationCampusFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setAssetByLocationCampusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", assetByLocationCampusFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setAssetByLocationCampusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, assetByLocationCampusFilterOptions)
+                      )
+                    }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                   />
@@ -65128,17 +65280,25 @@ function formatTicketRequestSource(value?: string) {
               ) : null}
               {reportType === "staff_borrowing" ? (
                 <>
-                  <LocationPicker
-                    value={staffBorrowingCampusFilter}
-                    onChange={setStaffBorrowingCampusFilter}
-                    options={[
-                      { value: "ALL", label: t.allCampuses },
-                      ...staffBorrowingCampusFilterOptions.map((campus) => ({
-                        value: campus,
-                        label: reportCampusName(campus),
-                      })),
-                    ]}
-                    placeholder={t.allCampuses}
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(staffBorrowingCampusFilter, t.allCampuses, reportCampusName)}
+                    options={staffBorrowingCampusFilterOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    }))}
+                    selectedValues={staffBorrowingCampusFilter}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={staffBorrowingCampusFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setStaffBorrowingCampusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", staffBorrowingCampusFilterOptions)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setStaffBorrowingCampusFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, staffBorrowingCampusFilterOptions)
+                      )
+                    }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                   />
@@ -68993,6 +69153,44 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 </article>
                 {isSuperAdmin ? (
+                  <article className="backup-mobile-group">
+                    <div className="backup-mobile-group-head">
+                      <strong>Upload Storage Saver</strong>
+                      <span>Estimate image savings first, then compress older stored uploads in place.</span>
+                    </div>
+                    <div className="backup-mobile-group-grid">
+                      <button
+                        className="tab backup-action-btn"
+                        disabled={busy}
+                        onClick={() => void runUploadCompression(true)}
+                      >
+                        Check Savings
+                      </button>
+                      <button
+                        className="tab backup-action-btn"
+                        disabled={busy}
+                        onClick={() => void runUploadCompression(false)}
+                      >
+                        Compress Uploads
+                      </button>
+                    </div>
+                    {uploadCompressionSummary ? (
+                      <div className="backup-storage-summary">
+                        <div className="backup-storage-summary-grid">
+                          <div><small>Saved</small><strong>{formatStorageBytes(uploadCompressionSummary.savedBytes)}</strong></div>
+                          <div><small>Optimized</small><strong>{uploadCompressionSummary.optimized}</strong></div>
+                          <div><small>Scanned</small><strong>{uploadCompressionSummary.scanned}</strong></div>
+                          <div><small>Skipped</small><strong>{uploadCompressionSummary.skipped}</strong></div>
+                        </div>
+                        <div className="tiny">
+                          {uploadCompressionDryRun ? "Estimate only." : "Applied to stored uploads."}
+                          {uploadCompressionCheckedAt ? ` Checked ${formatDateTime(uploadCompressionCheckedAt)}.` : ""}
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                ) : null}
+                {isSuperAdmin ? (
                   <article className="backup-mobile-group backup-mobile-group-danger">
                     <div className="backup-mobile-group-head">
                       <strong>Danger Zone</strong>
@@ -69039,6 +69237,47 @@ function formatTicketRequestSource(value?: string) {
                     </button>
                   ) : null}
                 </div>
+                {isSuperAdmin ? (
+                  <div className="backup-storage-panel">
+                    <div className="backup-storage-head">
+                      <strong>Upload Storage Saver</strong>
+                      <span>Check estimated image savings first, then compress existing stored uploads.</span>
+                    </div>
+                    <div className="backup-action-row backup-storage-actions">
+                      <button
+                        className="tab backup-action-btn"
+                        disabled={busy}
+                        onClick={() => void runUploadCompression(true)}
+                      >
+                        Check Savings
+                      </button>
+                      <button
+                        className="tab backup-action-btn"
+                        disabled={busy}
+                        onClick={() => void runUploadCompression(false)}
+                      >
+                        Compress Uploads
+                      </button>
+                    </div>
+                    {uploadCompressionSummary ? (
+                      <div className="backup-storage-summary">
+                        <div className="backup-storage-summary-grid">
+                          <div><small>Saved</small><strong>{formatStorageBytes(uploadCompressionSummary.savedBytes)}</strong></div>
+                          <div><small>Optimized</small><strong>{uploadCompressionSummary.optimized}</strong></div>
+                          <div><small>Scanned</small><strong>{uploadCompressionSummary.scanned}</strong></div>
+                          <div><small>Skipped</small><strong>{uploadCompressionSummary.skipped}</strong></div>
+                          <div><small>Before</small><strong>{formatStorageBytes(uploadCompressionSummary.bytesBefore)}</strong></div>
+                          <div><small>After</small><strong>{formatStorageBytes(uploadCompressionSummary.bytesAfter)}</strong></div>
+                        </div>
+                        <div className="tiny">
+                          {uploadCompressionDryRun ? "Estimate only." : "Applied to stored uploads."}
+                          {uploadCompressionCheckedAt ? ` Checked ${formatDateTime(uploadCompressionCheckedAt)}.` : ""}
+                          {uploadCompressionSummary.errors ? ` ${uploadCompressionSummary.errors} file(s) had errors.` : ""}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )}
             {setupMessage ? <p className="tiny" style={{ marginTop: 8 }}>{setupMessage}</p> : null}
