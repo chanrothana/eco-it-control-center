@@ -8585,6 +8585,7 @@ type SearchableMultiSelectPickerProps = {
   onToggleAllOption?: (checked: boolean) => void;
   placeholder?: string;
   disabled?: boolean;
+  className?: string;
   searchPlaceholder?: string;
   emptyText?: string;
 };
@@ -8997,6 +8998,7 @@ function SearchableMultiSelectPicker({
   onToggleAllOption,
   placeholder = "Select options",
   disabled,
+  className,
   searchPlaceholder = "Search...",
   emptyText = "No option found.",
 }: SearchableMultiSelectPickerProps) {
@@ -9031,7 +9033,10 @@ function SearchableMultiSelectPicker({
   }, [options, deferredSearch]);
 
   return (
-    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div
+      className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""} ${className || ""}`.trim()}
+      ref={wrapRef}
+    >
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -39273,9 +39278,20 @@ export default function App() {
     (lang === "km" ? "របាយការណ៍" : "Report");
   const reportCampusName = useCallback(
     (campus: string) => {
-      return campusLabel(campus);
+      const raw = String(campus || "").trim();
+      if (!raw) return "-";
+      if (lang === "km") {
+        if (raw === "Samdach Pan Campus" || raw === "C1") return `សាខា 1 | ${campusLabel("Samdach Pan Campus")}`;
+        if (raw === "Chaktomuk Campus" || raw === "C2" || raw === "C2.1") return `សាខា 2.1 | ${campusLabel("Chaktomuk Campus")}`;
+        if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") {
+          return `សាខា 2.2 | ${campusLabel("Chaktomuk Campus (C2.2)")}`;
+        }
+        if (raw === "Boeung Snor Campus" || raw === "C3") return `សាខា 3 | ${campusLabel("Boeung Snor Campus")}`;
+        if (raw === "Veng Sreng Campus" || raw === "C4") return `សាខា 4 | ${campusLabel("Veng Sreng Campus")}`;
+      }
+      return rentalPrinterCampusLabel(raw);
     },
-    [campusLabel]
+    [campusLabel, lang, rentalPrinterCampusLabel]
   );
   const maintenanceReportColumnDefs = useMemo(
     () => [
@@ -64615,6 +64631,7 @@ function formatTicketRequestSource(value?: string) {
                       <label className="field report-inventory-mobile-campus-field">
                         <span>{t.campus}</span>
                         <SearchableMultiSelectPicker
+                          className="report-campus-picker"
                           summary={
                             reportInventoryCampusFilter === "ALL"
                               ? t.allCampuses
@@ -64818,6 +64835,7 @@ function formatTicketRequestSource(value?: string) {
                     onChange={(e) => setReportDateTo(e.target.value)}
                   />
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={reportMaintenanceCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportMaintenanceCampusFilter)}
                     options={campusOptions.map((campus) => ({
                       value: campus,
@@ -64895,6 +64913,7 @@ function formatTicketRequestSource(value?: string) {
                     onChange={(e) => setReportScheduleMonth(e.target.value)}
                   />
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)}
                     options={reportScheduleCampusOptions.map((campus) => ({
                       value: campus,
@@ -64936,6 +64955,7 @@ function formatTicketRequestSource(value?: string) {
                     emptyText={lang === "km" ? "មិនមានជម្រើស" : "No mode found."}
                   />
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={
                       reportInventoryCampusFilter === "ALL"
                         ? t.allCampuses
@@ -65114,6 +65134,7 @@ function formatTicketRequestSource(value?: string) {
               {reportType === "qr_labels" || reportType === "asset_full_record" ? (
                 <>
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={summarizeMultiFilter(qrCampusFilter, t.allCampuses, reportCampusName)}
                     options={Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean))).map((campus) => ({
                       value: campus,
@@ -65256,6 +65277,7 @@ function formatTicketRequestSource(value?: string) {
               {reportType === "asset_by_location" ? (
                 <>
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={summarizeMultiFilter(assetByLocationCampusFilter, t.allCampuses, reportCampusName)}
                     options={assetByLocationCampusFilterOptions.map((campus) => ({
                       value: campus,
@@ -65293,6 +65315,7 @@ function formatTicketRequestSource(value?: string) {
               {reportType === "staff_borrowing" ? (
                 <>
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={summarizeMultiFilter(staffBorrowingCampusFilter, t.allCampuses, reportCampusName)}
                     options={staffBorrowingCampusFilterOptions.map((campus) => ({
                       value: campus,
@@ -65365,6 +65388,7 @@ function formatTicketRequestSource(value?: string) {
               {reportType === "furniture_control" ? (
                 <>
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={summarizeMultiFilter(furnitureControlCampusFilter, t.allCampuses, reportCampusName)}
                     options={furnitureControlCampusFilterOptions.map((campus) => ({
                       value: campus,
@@ -65455,6 +65479,7 @@ function formatTicketRequestSource(value?: string) {
                     emptyText={lang === "km" ? "មិនមាន ED Template" : "No ED Template found."}
                   />
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={campusFilterSummary}
                     options={assetMasterCampusFilterOptions.map((campus) => ({
                       value: campus,
