@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeftRight,
   BarChart3,
@@ -11688,6 +11689,7 @@ export default function App() {
   const maintenanceRecordSaveLockRef = useRef(false);
   const [maintenanceRecordSaving, setMaintenanceRecordSaving] = useState(false);
   const [maintenanceRecordMessage, setMaintenanceRecordMessage] = useState("");
+  const [scheduleMaintenanceRecordModalOpen, setScheduleMaintenanceRecordModalOpen] = useState(false);
   const [maintenanceQuickGeneralTask, setMaintenanceQuickGeneralTask] = useState(true);
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
@@ -31645,7 +31647,11 @@ export default function App() {
             : (lang === "km"
               ? "បានរក្សាទុកកំណត់ត្រារួចរាល់។"
               : "Maintenance record saved.");
-      if (maintenanceQuickMode) {
+      if (scheduleMaintenanceRecordModalOpen) {
+        setMaintenanceRecordMessage(successMessage);
+        setSetupMessage(successMessage);
+        setScheduleMaintenanceRecordModalOpen(false);
+      } else if (maintenanceQuickMode) {
         setMaintenanceRecordMessage(successMessage);
       } else {
         if (telegramAlertSent === false) {
@@ -33491,6 +33497,17 @@ export default function App() {
     setMaintenanceView("record");
     setMaintenanceRecordScheduleJumpMode(true);
     setMaintenanceRecordForm(createMaintenanceRecordForm(asset, preferredDate, currentOperatorName, preferredDate));
+  }
+
+  function openScheduleMaintenanceRecordModal(asset: Asset, scheduledDate?: string) {
+    const preferredDate = String(scheduledDate || asset.nextMaintenanceDate || "").trim() || toYmd(new Date());
+    setError("");
+    setMaintenanceRecordMessage("");
+    setMaintenanceQuickGeneralTask(false);
+    setMaintenanceRecordScheduleJumpMode(true);
+    setMaintenanceRecordDatePickerOpen(false);
+    setMaintenanceRecordForm(createMaintenanceRecordForm(asset, preferredDate, currentOperatorName, preferredDate));
+    setScheduleMaintenanceRecordModalOpen(true);
   }
 
   const inventoryTxnById = useMemo(() => {
@@ -53181,14 +53198,14 @@ function formatTicketRequestSource(value?: string) {
                 <div className="form-grid">
                   <label className="field">
                     <span>Campus</span>
-                    <select className="input" value={cctvSiteFilter} onChange={(e) => setCctvSiteFilter(e.target.value)}>
-                      <option value="ALL">All Sites</option>
-                      {cctvCampusFilterOptions.map((campus) => (
-                        <option key={`cctv-campus-filter-${campus}`} value={campus}>
-                          {campusLabel(campus)}
-                        </option>
-                      ))}
-                    </select>
+                    <LocationPicker
+                      value={cctvSiteFilter}
+                      onChange={setCctvSiteFilter}
+                      options={buildCampusPickerOptions(cctvCampusFilterOptions, { includeAll: true, allLabel: "All Sites" })}
+                      placeholder="All Sites"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>Status</span>
@@ -53321,12 +53338,14 @@ function formatTicketRequestSource(value?: string) {
                   <div className="cctv-live-toolbar">
                     <label className="field">
                       <span>{lang === "km" ? "ជ្រើស Campus" : "Select Campus"}</span>
-                      <select className="input" value={cctvLiveCampusFilter} onChange={(e) => setCctvLiveCampusFilter(e.target.value)}>
-                        <option value="ALL">{t.allCampuses}</option>
-                        {cctvLiveCampusOptions.map((campus) => (
-                          <option key={`cctv-live-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                        ))}
-                      </select>
+                      <LocationPicker
+                        value={cctvLiveCampusFilter}
+                        onChange={setCctvLiveCampusFilter}
+                        options={buildCampusPickerOptions(cctvLiveCampusOptions, { includeAll: true })}
+                        placeholder={t.allCampuses}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                      />
                     </label>
                     <label className="field">
                       <span>{lang === "km" ? "របៀបមើល" : "View Mode"}</span>
@@ -53497,12 +53516,14 @@ function formatTicketRequestSource(value?: string) {
                   <div className="cctv-live-toolbar">
                     <label className="field">
                       <span>{lang === "km" ? "Campus" : "Campus"}</span>
-                      <select className="input" value={cctvReplayCampusFilter} onChange={(e) => setCctvReplayCampusFilter(e.target.value)}>
-                        <option value="ALL">{t.allCampuses}</option>
-                        {cctvReplayCampusOptions.map((campus) => (
-                          <option key={`cctv-replay-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                        ))}
-                      </select>
+                      <LocationPicker
+                        value={cctvReplayCampusFilter}
+                        onChange={setCctvReplayCampusFilter}
+                        options={buildCampusPickerOptions(cctvReplayCampusOptions, { includeAll: true })}
+                        placeholder={t.allCampuses}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                      />
                     </label>
                     <label className="field">
                       <span>NVR</span>
@@ -59108,7 +59129,7 @@ function formatTicketRequestSource(value?: string) {
                             <button
                               className="btn-primary btn-small maintenance-schedule-icon-btn"
                               disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                              onClick={() => openMaintenanceRecordFromScheduleAsset(row.asset, row.date)}
+                              onClick={() => openScheduleMaintenanceRecordModal(row.asset, row.date)}
                               title="Record"
                               aria-label="Record"
                             >
@@ -59193,7 +59214,7 @@ function formatTicketRequestSource(value?: string) {
                                   <button
                                     className="btn-primary btn-small maintenance-schedule-icon-btn"
                                     disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                                    onClick={() => openMaintenanceRecordFromScheduleAsset(row.asset, row.date)}
+                                    onClick={() => openScheduleMaintenanceRecordModal(row.asset, row.date)}
                                     title="Record"
                                     aria-label="Record"
                                   >
@@ -59271,7 +59292,7 @@ function formatTicketRequestSource(value?: string) {
                             <button
                               className="btn-primary btn-small maintenance-schedule-icon-btn"
                               disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                              onClick={() => openMaintenanceRecordFromScheduleAsset(row.asset, row.date)}
+                              onClick={() => openScheduleMaintenanceRecordModal(row.asset, row.date)}
                               title="Record"
                               aria-label="Record"
                             >
@@ -59356,7 +59377,7 @@ function formatTicketRequestSource(value?: string) {
                                   <button
                                     className="btn-primary btn-small maintenance-schedule-icon-btn"
                                     disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                                    onClick={() => openMaintenanceRecordFromScheduleAsset(row.asset, row.date)}
+                                    onClick={() => openScheduleMaintenanceRecordModal(row.asset, row.date)}
                                     title="Record"
                                     aria-label="Record"
                                   >
@@ -59680,24 +59701,21 @@ function formatTicketRequestSource(value?: string) {
               </label>
               <label className="field">
                 <span>To Campus</span>
-                <select
-                  className="input"
+                <LocationPicker
                   value={transferForm.toCampus}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setTransferForm((f) => ({
                       ...f,
-                      toCampus: e.target.value,
+                      toCampus: value,
                       toLocation: "",
                       toLocationPhoto: "",
                     }))
                   }
-                >
-                  {campusOptions.map((campus) => (
-                    <option key={`to-campus-${campus}`} value={campus}>
-                      {campusLabel(campus)}
-                    </option>
-                  ))}
-                </select>
+                  options={buildCampusPickerOptions(campusOptions)}
+                  placeholder="Select campus"
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                />
               </label>
               <label className="field">
                 <span>To Location</span>
@@ -60099,15 +60117,14 @@ function formatTicketRequestSource(value?: string) {
                     </label>
                     <label className="field">
                       <span>From Campus</span>
-                      <select
-                        className="input"
+                      <LocationPicker
                         value={transferHistoryEdit.fromCampus}
-                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, fromCampus: e.target.value } : f))}
-                      >
-                        {campusOptions.map((campus) => (
-                          <option key={`edit-transfer-from-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                        ))}
-                      </select>
+                        onChange={(value) => setTransferHistoryEdit((f) => (f ? { ...f, fromCampus: value } : f))}
+                        options={buildCampusPickerOptions(campusOptions)}
+                        placeholder="Select campus"
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                      />
                     </label>
                     <label className="field">
                       <span>From Location</span>
@@ -60119,15 +60136,14 @@ function formatTicketRequestSource(value?: string) {
                     </label>
                     <label className="field">
                       <span>To Campus</span>
-                      <select
-                        className="input"
+                      <LocationPicker
                         value={transferHistoryEdit.toCampus}
-                        onChange={(e) => setTransferHistoryEdit((f) => (f ? { ...f, toCampus: e.target.value } : f))}
-                      >
-                        {campusOptions.map((campus) => (
-                          <option key={`edit-transfer-to-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                        ))}
-                      </select>
+                        onChange={(value) => setTransferHistoryEdit((f) => (f ? { ...f, toCampus: value } : f))}
+                        options={buildCampusPickerOptions(campusOptions)}
+                        placeholder="Select campus"
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                      />
                     </label>
                     <label className="field">
                       <span>To Location</span>
@@ -63684,19 +63700,20 @@ function formatTicketRequestSource(value?: string) {
                   </label>
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={utilityInvoiceForm.campus}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setUtilityInvoiceForm((prev) => ({
                           ...prev,
-                          campus: e.target.value,
-                          location: e.target.value === "Chaktomuk Campus (C2.2)" ? prev.location : "",
+                          campus: value,
+                          location: value === "Chaktomuk Campus (C2.2)" ? prev.location : "",
                         }))
                       }
-                    >
-                      {campusOptions.map((campus) => <option key={`utility-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
-                    </select>
+                      options={buildCampusPickerOptions(campusOptions)}
+                      placeholder="Select campus"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   {utilityInvoiceForm.campus === "Chaktomuk Campus (C2.2)" ? (
                     <label className="field">
@@ -64117,9 +64134,14 @@ function formatTicketRequestSource(value?: string) {
                 <div className="form-grid inventory-item-grid rental-printer-master-grid">
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select className="input" value={rentalPrinterForm.campus} onChange={(e) => setRentalPrinterForm((prev) => ({ ...prev, campus: e.target.value }))}>
-                      {campusOptions.map((campus) => <option key={`rental-printer-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
-                    </select>
+                    <LocationPicker
+                      value={rentalPrinterForm.campus}
+                      onChange={(value) => setRentalPrinterForm((prev) => ({ ...prev, campus: value }))}
+                      options={buildCampusPickerOptions(campusOptions)}
+                      placeholder="Select campus"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>Location</span>
@@ -65372,11 +65394,14 @@ function formatTicketRequestSource(value?: string) {
               <div className="form-grid inventory-item-create-grid">
                 <label className="field">
                   <span>Campus</span>
-                  <select className="input" value={inventoryItemForm.campus} onChange={(e) => setInventoryItemForm((f) => ({ ...f, campus: e.target.value }))}>
-                    {campusOptions.map((campus) => (
-                      <option key={`inventory-edit-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                    ))}
-                  </select>
+                  <LocationPicker
+                    value={inventoryItemForm.campus}
+                    onChange={(value) => setInventoryItemForm((f) => ({ ...f, campus: value }))}
+                    options={buildCampusPickerOptions(campusOptions)}
+                    placeholder="Select campus"
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
                 </label>
                 <label className="field">
                   <span>Inventory Group</span>
@@ -71170,11 +71195,7 @@ function formatTicketRequestSource(value?: string) {
                 <LocationPicker
                   value={locationCampus}
                   onChange={setLocationCampus}
-                  options={campusOptions.map((campus) => ({
-                    value: campus,
-                    label: campusLabel(campus),
-                    searchText: `${campus} ${campusLabel(campus)}`,
-                  }))}
+                  options={buildCampusPickerOptions(campusOptions)}
                   placeholder="Select campus"
                   searchPlaceholder="Search campus..."
                   emptyText="No campus found."
@@ -73044,6 +73065,331 @@ function formatTicketRequestSource(value?: string) {
             </section>
           </div>
         ) : null}
+        {scheduleMaintenanceRecordModalOpen && typeof document !== "undefined"
+          ? createPortal(
+              <div
+                className="modal-backdrop schedule-maintenance-modal-backdrop"
+                onClick={() => {
+                  setScheduleMaintenanceRecordModalOpen(false);
+                  setMaintenanceRecordDatePickerOpen(false);
+                }}
+              >
+                <section className="panel modal-panel schedule-maintenance-modal-panel" onClick={(e) => e.stopPropagation()}>
+                  <div className="panel-row schedule-maintenance-modal-head">
+                    <div>
+                      <h2>{lang === "km" ? "កត់ត្រាថែទាំពីកាលវិភាគ" : "Record Maintenance From Schedule"}</h2>
+                      <div className="tiny">
+                        {lang === "km"
+                          ? "បំពេញកំណត់ត្រាថែទាំបានភ្លាមៗ ដោយមិនចាំបាច់ចេញពីទំព័រកាលវិភាគ។"
+                          : "Save the maintenance record directly here without leaving the schedule page."}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="schedule-maintenance-modal-close"
+                      aria-label={t.close}
+                      title={t.close}
+                      onClick={() => {
+                        setScheduleMaintenanceRecordModalOpen(false);
+                        setMaintenanceRecordDatePickerOpen(false);
+                      }}
+                    >
+                      <span aria-hidden={true}>×</span>
+                    </button>
+                  </div>
+                  {maintenanceRecordSelectedAsset ? (
+                    <>
+                      <div className="schedule-maintenance-modal-asset">
+                        <div className="schedule-maintenance-modal-asset-main">
+                          <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
+                          <span>{assetItemName(maintenanceRecordSelectedAsset.category, maintenanceRecordSelectedAsset.type, maintenanceRecordSelectedAsset.pcType || "")}</span>
+                        </div>
+                        <div className="schedule-maintenance-modal-asset-meta">
+                          <span>{campusLabel(maintenanceRecordSelectedAsset.campus)}</span>
+                          <span>{maintenanceRecordSelectedAsset.location || "-"}</span>
+                        </div>
+                      </div>
+                      <div className="form-grid schedule-maintenance-modal-grid">
+                        <div className="maintenance-record-inline-triple field-wide">
+                          <div className="field quickout-date-field" ref={maintenanceRecordDateWrapRef}>
+                            <span>{t.date}</span>
+                            <div className="quickout-date-input-wrap">
+                              <input
+                                className="input"
+                                type="text"
+                                readOnly
+                                value={maintenanceRecordDisplayDate}
+                                placeholder="dd/mm/yyyy"
+                              />
+                              <button
+                                type="button"
+                                className="quickout-date-icon-btn"
+                                onClick={openMaintenanceRecordDatePicker}
+                                aria-label="Open Maintenance Calendar"
+                              >
+                                <Calendar size={18} />
+                              </button>
+                            </div>
+                            {maintenanceRecordDatePickerOpen ? (
+                              <div className="quickout-eco-inline-panel">
+                                <div className="quickout-eco-head">
+                                  <strong className="quickout-eco-title">{maintenanceRecordDateMonthLabel}</strong>
+                                  <div className="quickout-eco-nav">
+                                    <button
+                                      type="button"
+                                      className="quickout-eco-nav-btn"
+                                      aria-label="Previous month"
+                                      disabled={!maintenanceRecordDateCanGoPrevMonth}
+                                      onClick={() =>
+                                        setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+                                      }
+                                    >
+                                      {"<"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="quickout-eco-nav-btn"
+                                      aria-label="Next month"
+                                      onClick={() =>
+                                        setMaintenanceRecordDateMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+                                      }
+                                    >
+                                      {">"}
+                                    </button>
+                                  </div>
+                                </div>
+                                <CalendarGridTemplate
+                                  weekdayLabels={calendarWeekdayLabels}
+                                  days={maintenanceRecordDateGridDays}
+                                  selectedDate={maintenanceRecordSelectedDate}
+                                  todayYmd={todayYmd}
+                                  onSelectDate={(ymd) => {
+                                    setMaintenanceRecordSelectedDate(ymd);
+                                    setMaintenanceRecordForm((f) => ({ ...f, date: ymd }));
+                                    setMaintenanceRecordDatePickerOpen(false);
+                                  }}
+                                  isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
+                                  gridClassName="quickout-eco-grid"
+                                  renderHolidayTag={(d) =>
+                                    d.holidayName ? (
+                                      <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
+                                        {calendarEventBadgeLabel(normalizeCalendarEventType(d.holidayType))}
+                                      </em>
+                                    ) : null
+                                  }
+                                  headKeyPrefix="schedule-modal-maintenance-date-head"
+                                  dayKeyPrefix="schedule-modal-maintenance-date-day"
+                                />
+                              </div>
+                            ) : null}
+                          </div>
+                          <label className="field">
+                            <span>{lang === "km" ? "ម៉ោង" : "Time"}</span>
+                            <input
+                              className="input"
+                              type="time"
+                              value={maintenanceRecordForm.time || "00:00"}
+                              onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, time: e.target.value }))}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
+                            <LocationPicker
+                              value={maintenanceRecordForm.type}
+                              options={maintenanceTypePickerOptions}
+                              onChange={(nextValue) => setMaintenanceRecordForm((f) => ({ ...f, type: nextValue }))}
+                              placeholder={lang === "km" ? "ជ្រើសប្រភេទ" : "Select type"}
+                              searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search type..."}
+                              emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No type found."}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>{lang === "km" ? "ស្ថានភាពការងារ" : "Work Status"}</span>
+                            <select
+                              className="input"
+                              value={maintenanceRecordForm.completion}
+                              onChange={(e) =>
+                                setMaintenanceRecordForm((f) => ({
+                                  ...f,
+                                  completion: e.target.value as "Done" | "Not Yet",
+                                }))
+                              }
+                            >
+                              {MAINTENANCE_COMPLETION_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {maintenanceCompletionText(opt.value)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <div className="schedule-maintenance-modal-meta-row field-wide">
+                          <label className="field">
+                            <span>{lang === "km" ? "ដោយ" : "By"}</span>
+                            <input
+                              className="input"
+                              value={maintenanceRecordForm.by}
+                              onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>{lang === "km" ? "ត្រួតពិនិត្យដោយ" : "Checked By"}</span>
+                            <input
+                              className="input"
+                              value={maintenanceRecordForm.checkedBy}
+                              onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, checkedBy: e.target.value }))}
+                              placeholder={lang === "km" ? "ឈ្មោះអ្នកត្រួតពិនិត្យ" : "Supervisor / checker name"}
+                            />
+                          </label>
+                          <div className="field">
+                            <span>{lang === "km" ? "Asset Snapshot" : "Asset Snapshot"}</span>
+                            <div className="panel-note schedule-maintenance-modal-asset-snapshot">
+                              <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
+                              {" | "}
+                              {assetItemName(
+                                maintenanceRecordSelectedAsset.category,
+                                maintenanceRecordSelectedAsset.type,
+                                maintenanceRecordSelectedAsset.pcType || "",
+                              )}
+                              {" | "}
+                              {campusLabel(maintenanceRecordSelectedAsset.campus)}
+                              {" • "}
+                              {maintenanceRecordSelectedAsset.location || "-"}
+                              {maintenanceRecordSelectedAsset.serialNumber ? ` • SN: ${maintenanceRecordSelectedAsset.serialNumber}` : ""}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="field field-wide">
+                          <div className="tiny schedule-maintenance-modal-note-help">
+                            {lang === "km"
+                              ? "របៀបសាមញ្ញ: សរសេរកំណត់ចំណាំខ្លីៗ ហើយភ្ជាប់រូបមុន និងរូបក្រោយ។"
+                              : "Simple mode: add a short note, then upload before and after photos."}
+                          </div>
+                        </div>
+                        <label className="field field-wide">
+                          <span>{lang === "km" ? "កំណត់ចំណាំថែទាំ" : "Maintenance Note"}</span>
+                          <textarea
+                            className="textarea schedule-maintenance-note-textarea"
+                            rows={1}
+                            value={maintenanceRecordForm.note}
+                            onChange={(e) => {
+                              setMaintenanceRecordForm((f) => ({ ...f, note: e.target.value }));
+                              e.currentTarget.style.height = "auto";
+                              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                            }}
+                            placeholder={
+                              lang === "km"
+                                ? "ឧទាហរណ៍: ជួសជុលខ្សែភ្លើងរលុង សម្អាត និងសាកល្បងរួចដំណើរការល្អ"
+                                : "Example: Fixed loose power cable, cleaned unit, tested and working normally."
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{lang === "km" ? "ចំណាយ / ថ្លៃទូទាត់" : "Cost / Payment"}</span>
+                          <input
+                            className="input"
+                            value={maintenanceRecordForm.cost}
+                            onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                            placeholder={lang === "km" ? "ឧ. 5$, 10$, ឬ Free" : "Example: 5$, 10$, or Free"}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
+                          <input
+                            className="input"
+                            value={maintenanceRecordForm.condition}
+                            onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
+                            placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ" : "Example: Working well"}
+                          />
+                        </label>
+                        <div className="field field-wide maintenance-quick-photo-pair">
+                          <label className="field maintenance-quick-photo-field">
+                            <span>{lang === "km" ? "មុន" : "Before"} ({MAX_MAINTENANCE_PHOTOS})</span>
+                            {renderMaintenancePhotoChooser(`schedule-maintenance-before-upload-${maintenanceRecordFileKey}`, "before")}
+                            {maintenanceRecordForm.beforePhotos.length ? (
+                              <div className="asset-photo-gallery maintenance-quick-photo-gallery">
+                                {maintenanceRecordForm.beforePhotos.map((url, index) => (
+                                  <div key={`schedule-maintenance-before-${index}`} className="asset-photo-chip">
+                                    <img loading="lazy" decoding="async" src={url} alt={`schedule-maintenance-before-${index + 1}`} className="asset-photo-chip-img" />
+                                    <div className="asset-photo-chip-actions">
+                                      <button
+                                        type="button"
+                                        className="tab"
+                                        onClick={() =>
+                                          setMaintenanceRecordForm((f) => ({
+                                            ...f,
+                                            beforePhotos: (f.beforePhotos || []).filter((_, i) => i !== index),
+                                          }))
+                                        }
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </label>
+                          <label className="field maintenance-quick-photo-field">
+                            <span>{lang === "km" ? "ក្រោយ" : "After"} ({MAX_MAINTENANCE_PHOTOS})</span>
+                            {renderMaintenancePhotoChooser(`schedule-maintenance-after-upload-${maintenanceRecordFileKey}`, "after")}
+                            {maintenanceRecordForm.afterPhotos.length ? (
+                              <div className="asset-photo-gallery maintenance-quick-photo-gallery">
+                                {maintenanceRecordForm.afterPhotos.map((url, index) => (
+                                  <div key={`schedule-maintenance-after-${index}`} className="asset-photo-chip">
+                                    <img loading="lazy" decoding="async" src={url} alt={`schedule-maintenance-after-${index + 1}`} className="asset-photo-chip-img" />
+                                    <div className="asset-photo-chip-actions">
+                                      <button
+                                        type="button"
+                                        className="tab"
+                                        onClick={() =>
+                                          setMaintenanceRecordForm((f) => {
+                                            const nextAfter = (f.afterPhotos || []).filter((_, i) => i !== index);
+                                            return {
+                                              ...f,
+                                              afterPhotos: nextAfter,
+                                              photo: nextAfter[0] || "",
+                                              photos: nextAfter,
+                                            };
+                                          })
+                                        }
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </label>
+                        </div>
+                      </div>
+                      {maintenanceRecordMessage ? <div className="alert">{maintenanceRecordMessage}</div> : null}
+                      <div className="asset-actions schedule-maintenance-modal-actions">
+                        <div className="tiny">
+                          {lang === "km"
+                            ? "ត្រូវការតែ Note និងរូប Before / After ដើម្បីរក្សាទុក។"
+                            : "Only note plus before/after photos are required to save."}
+                        </div>
+                        <button
+                          className="btn-primary"
+                          disabled={busy || maintenanceRecordSaving || !maintenanceRecordIsComplete}
+                          onClick={addMaintenanceRecordFromTab}
+                        >
+                          {maintenanceRecordSaving
+                            ? (lang === "km" ? "កំពុងរក្សាទុក..." : "Saving...")
+                            : (lang === "km" ? "រក្សាទុកកំណត់ត្រាថែទាំ" : "Save Maintenance Record")}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="tiny">Asset not found.</p>
+                  )}
+                </section>
+              </div>,
+              document.body,
+            )
+          : null}
         {maintenanceQrModalOpen ? (
           <div className="modal-backdrop" onClick={() => setMaintenanceQrModalOpen(false)}>
             <section className="panel modal-panel tool-review-modal-panel" onClick={(e) => e.stopPropagation()}>
