@@ -2736,16 +2736,10 @@ function itemSetupAssetCategoryLabel(code: string) {
 }
 const AIRCON_HP_OPTIONS = ["1.0HP", "1.5HP", "2.0HP", "2.5HP", "3.0HP", "3.5HP"] as const;
 const AIRCON_TYPE_OPTIONS = ["Cassette", "Wall Mount"] as const;
-const FAN_TYPE_OPTIONS = ["Wall Mount", "Ceiling Fan", "Exhaust Fan", "Stand Fan"] as const;
+const FAN_TYPE_OPTIONS = ["Wall Fan", "Ceiling Fan", "Exhaust Fan", "Stand Fan"] as const;
 const FAN_TYPE_CODES = ["FAN", "WFN", "CFN", "EFN", "SFN"] as const;
-const FAN_TYPE_CODE_BY_LABEL: Record<(typeof FAN_TYPE_OPTIONS)[number], (typeof FAN_TYPE_CODES)[number]> = {
-  "Wall Mount": "WFN",
-  "Ceiling Fan": "CFN",
-  "Exhaust Fan": "EFN",
-  "Stand Fan": "SFN",
-};
 const FAN_TYPE_LABEL_BY_CODE: Partial<Record<(typeof FAN_TYPE_CODES)[number], (typeof FAN_TYPE_OPTIONS)[number]>> = {
-  WFN: "Wall Mount",
+  WFN: "Wall Fan",
   CFN: "Ceiling Fan",
   EFN: "Exhaust Fan",
   SFN: "Stand Fan",
@@ -2898,7 +2892,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
     { itemEn: "Fan", itemKm: "កង្ហារ", code: "FAN" },
-    { itemEn: "Wall Mount Fan", itemKm: "កង្ហារព្យួរជញ្ជាំង", code: "WFN" },
+    { itemEn: "Wall Fan", itemKm: "កង្ហារព្យួរជញ្ជាំង", code: "WFN" },
     { itemEn: "Ceiling Fan", itemKm: "កង្ហារពិដាន", code: "CFN" },
     { itemEn: "Exhaust Fan", itemKm: "កង្ហារបឺតខ្យល់", code: "EFN" },
     { itemEn: "Stand Fan", itemKm: "កង្ហារឈរ", code: "SFN" },
@@ -2929,7 +2923,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 
 const NEW_ENTRY_HIDDEN_TYPE_CODES: Record<string, string[]> = {
   IT: ["BAT", "CHB", "MCD", "BAG", "PBG", "RMT", "ADP", "HDC", "WMR"],
-  FACILITY: ["RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO"],
+  FACILITY: ["RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "WFN", "CFN", "EFN", "SFN"],
 };
 
 const WALKIE_TALKIE_TYPE_CODE = "WTK";
@@ -7891,11 +7885,6 @@ function buildFanSpecs(baseSpecs: string, fanType: string) {
 function fanTypeFromAssetTypeCode(type: string) {
   const code = String(type || "").trim().toUpperCase() as (typeof FAN_TYPE_CODES)[number];
   return FAN_TYPE_LABEL_BY_CODE[code] || "";
-}
-
-function fanTypeCodeFromLabel(label: string) {
-  const normalized = String(label || "").trim() as (typeof FAN_TYPE_OPTIONS)[number];
-  return FAN_TYPE_CODE_BY_LABEL[normalized] || "";
 }
 
 function parseWalkieTalkieSpecs(specsRaw: string) {
@@ -19606,7 +19595,12 @@ export default function App() {
 
   useEffect(() => {
     if (!currentTypeOptions.some((opt) => opt.code === assetForm.type)) {
-      setAssetForm((f) => ({ ...f, type: currentTypeOptions[0].code }));
+      setAssetForm((f) => {
+        if (isFanAsset(f.category, f.type)) {
+          return { ...f, type: "FAN" };
+        }
+        return { ...f, type: currentTypeOptions[0].code };
+      });
     }
   }, [assetForm.type, currentTypeOptions]);
   useEffect(() => {
@@ -20932,6 +20926,7 @@ export default function App() {
       }
     }
 
+    const normalizedCreateType = createIsFan ? "FAN" : assetForm.type.toUpperCase();
     setBusy(true);
     setError("");
     try {
@@ -20940,7 +20935,7 @@ export default function App() {
         body: JSON.stringify({
           ...assetForm,
           photos: normalizeAssetPhotos(assetForm),
-          type: assetForm.type.toUpperCase(),
+          type: normalizedCreateType,
           model: createIsFurniture && isSingleFurnitureType(assetForm.type) ? "" : assetForm.model,
           setCode: createSetCode,
           parentAssetId: createParentAssetId,
@@ -21418,18 +21413,18 @@ export default function App() {
           allLocal,
           assetForm.campus,
           assetForm.category,
-          assetForm.type.toUpperCase()
+          normalizedCreateType
         );
         const createPhotos = normalizeAssetPhotos(assetForm);
         const newAsset: Asset = {
           id: Date.now(),
           campus: assetForm.campus,
           category: assetForm.category,
-          type: assetForm.type.toUpperCase(),
+          type: normalizedCreateType,
           pcType: isDesktopAsset ? assetForm.pcType.trim() : "",
           seq,
-          assetId: buildAssetId(assetForm.campus, assetForm.category, assetForm.type.toUpperCase(), seq),
-          name: assetItemName(assetForm.category, assetForm.type.toUpperCase()),
+          assetId: buildAssetId(assetForm.campus, assetForm.category, normalizedCreateType, seq),
+          name: assetItemName(assetForm.category, normalizedCreateType),
           location: assetForm.location,
           setCode: createSetCode,
           parentAssetId: createParentAssetId,
@@ -29944,7 +29939,12 @@ export default function App() {
       statusChangeBy = byInput.trim();
     }
 
+    const normalizedEditType = isFanAsset(editingAsset?.category || "", editingAsset?.type || "")
+      ? "FAN"
+      : String(editingAsset?.type || "").trim().toUpperCase();
     const payload = {
+      type: normalizedEditType,
+      name: assetItemName(String(editingAsset?.category || "").trim(), normalizedEditType),
       campus: nextCampusForEdit,
       location: assetEditForm.location.trim(),
       pcType: editingIsDesktop ? assetEditForm.pcType.trim() : "",
@@ -35806,8 +35806,8 @@ export default function App() {
     [hideAssetAssignedStaffColumn, assetListFurnitureOnly]
   );
   const assetCampusFilterSummary = useMemo(
-    () => summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, campusLabel),
-    [assetCampusMultiFilter, summarizeMultiFilter, t.allCampuses, campusLabel]
+    () => summarizeMultiFilter(assetCampusMultiFilter, t.allCampuses, rentalPrinterCampusLabel),
+    [assetCampusMultiFilter, summarizeMultiFilter, t.allCampuses, rentalPrinterCampusLabel]
   );
   const assetLocationFilterSummary = useMemo(
     () => summarizeMultiFilter(assetLocationMultiFilter, "All Locations"),
@@ -48962,9 +48962,6 @@ function formatTicketRequestSource(value?: string) {
                             setAssetForm((f) => ({
                               ...f,
                               fanType: e.target.value,
-                              type:
-                                fanTypeCodeFromLabel(e.target.value) ||
-                                f.type,
                             }))
                           }
                         >
@@ -48982,7 +48979,7 @@ function formatTicketRequestSource(value?: string) {
                           placeholder="Vendor"
                         />
                         <div className="tiny" style={{ display: "flex", alignItems: "center", padding: "0 8px" }}>
-                          Type Code: {String(assetForm.type || "").trim().toUpperCase() || "FAN"}
+                          Type Code: FAN
                         </div>
                       </div>
                     </div>
@@ -49514,8 +49511,9 @@ function formatTicketRequestSource(value?: string) {
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={assetCampusFilterSummary}
-                    options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: campusLabel(campus) }))}
+                    options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: rentalPrinterCampusLabel(campus) }))}
                     selectedValues={assetCampusMultiFilter}
                     allOptionLabel={t.allCampuses}
                     allOptionChecked={assetCampusMultiFilter.includes("ALL")}
@@ -49912,8 +49910,9 @@ function formatTicketRequestSource(value?: string) {
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
                   <SearchableMultiSelectPicker
+                    className="report-campus-picker"
                     summary={assetCampusFilterSummary}
-                    options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: campusLabel(campus) }))}
+                    options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: rentalPrinterCampusLabel(campus) }))}
                     selectedValues={assetCampusMultiFilter}
                     allOptionLabel={t.allCampuses}
                     allOptionChecked={assetCampusMultiFilter.includes("ALL")}
@@ -50938,7 +50937,7 @@ function formatTicketRequestSource(value?: string) {
                           </select>
                           <input
                             className="input"
-                            value={fanTypeCodeFromLabel(assetEditForm.fanType) || String(editingAsset?.type || "").trim().toUpperCase()}
+                            value="FAN"
                             readOnly
                             placeholder="Type Code"
                           />
