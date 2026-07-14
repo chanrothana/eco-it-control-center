@@ -470,6 +470,18 @@ type InventoryReportColumnKey =
   | "current"
   | "min"
   | "alert";
+type VaultReportColumnKey =
+  | "section"
+  | "system"
+  | "account"
+  | "username"
+  | "owner"
+  | "status"
+  | "updated"
+  | "link"
+  | "recoveryExtra"
+  | "password"
+  | "note";
 type EdAssetTemplate =
   | "ALL"
   | "computer"
@@ -7844,6 +7856,23 @@ function getVisibleSpecsTextareaValue(category: string, type: string, specs: str
     }
     return lines.join("\n").trim();
   }
+  if (String(category || "").trim().toUpperCase() === "IT" && String(type || "").trim().toUpperCase() === TV_TYPE_CODE) {
+    const parsed = parseTvSpecs(specs);
+    const lines: string[] = [];
+    const count = Math.max(1, Math.min(2, Number(parsed.remoteCount || 1)));
+    lines.push("Included Components:");
+    if (count === 1) {
+      lines.push("Remote");
+    } else {
+      lines.push("Remote 1");
+      lines.push("Remote 2");
+    }
+    if (parsed.specs) {
+      lines.push("");
+      lines.push(parsed.specs);
+    }
+    return lines.join("\n").trim();
+  }
   if (String(category || "").trim().toUpperCase() === "IT" && String(type || "").trim().toUpperCase() === "TAB") {
     const parsed = parseTabletSpecs(specs);
     const lines: string[] = [];
@@ -11108,6 +11137,19 @@ export default function App() {
     "unit",
     "checkStatus",
   ]);
+  const [vaultReportVisibleColumns, setVaultReportVisibleColumns] = useState<VaultReportColumnKey[]>([
+    "section",
+    "system",
+    "account",
+    "username",
+    "owner",
+    "status",
+    "updated",
+    "link",
+    "recoveryExtra",
+    "password",
+    "note",
+  ]);
   const [maintenanceReportExpandedRows, setMaintenanceReportExpandedRows] = useState<Record<string, boolean>>({});
   const [maintenanceReportFiltersCollapsed, setMaintenanceReportFiltersCollapsed] = useState(false);
   const [reportPeriodMode, setReportPeriodMode] = useState<"month" | "term">("month");
@@ -13515,7 +13557,7 @@ export default function App() {
   const [bulkScheduleForm, setBulkScheduleForm] = useState({
     campus: "ALL",
     category: "SAFETY",
-    type: "FE",
+    types: ["FE"],
     date: "",
     note: "",
     group: "",
@@ -14781,6 +14823,20 @@ export default function App() {
       searchText: `${campus} ${CAMPUS_CODE[campus] || ""} ${campusLabel(campus)} ${rentalPrinterCampusLabel(campus)}`,
     }),
     [campusLabel, lang, rentalPrinterCampusLabel]
+  );
+  const buildCampusPickerOptions = useCallback(
+    (list: string[], options?: { includeAll?: boolean; allLabel?: string }) => [
+      ...((options?.includeAll ?? false)
+        ? [{
+            value: "ALL",
+            label: options?.allLabel || t.allCampuses,
+            description: "",
+            searchText: `${options?.allLabel || t.allCampuses} ALL`,
+          }]
+        : []),
+      ...list.map((campus) => quickCampusPickerOption(campus)),
+    ],
+    [quickCampusPickerOption, t.allCampuses]
   );
   const buildDefaultBulkServiceScheduleForm = useCallback(
     () => ({
@@ -31045,6 +31101,11 @@ export default function App() {
 
   async function saveBulkMaintenanceSchedule() {
     if (!requireAdminAction()) return;
+    const selectedTypes = Array.from(new Set((bulkScheduleForm.types || []).map((value) => String(value || "").trim()).filter(Boolean)));
+    if (!selectedTypes.length) {
+      setError("Please select at least one item type.");
+      return;
+    }
     const requiresDate = bulkScheduleForm.repeatMode !== "MONTHLY_WEEKDAY";
     const normalizedDate = requiresDate ? normalizeYmdInput(bulkScheduleForm.date) : "";
     if (requiresDate && !normalizedDate) {
@@ -31058,11 +31119,11 @@ export default function App() {
 
     const matched = assets.filter((asset) => {
       const campusOk = bulkScheduleForm.campus === "ALL" || asset.campus === bulkScheduleForm.campus;
-      return campusOk && asset.category === bulkScheduleForm.category && asset.type === bulkScheduleForm.type;
+      return campusOk && asset.category === bulkScheduleForm.category && selectedTypes.includes(asset.type);
     });
     if (!matched.length) {
-      setError("No assets matched this campus + item type.");
-      setSetupMessage("No assets matched this campus + item type.");
+      setError("No assets matched this campus + selected item types.");
+      setSetupMessage("No assets matched this campus + selected item types.");
       return;
     }
 
@@ -31074,7 +31135,7 @@ export default function App() {
           : bulkScheduleForm.note.trim(),
       scheduleGroup:
         String(bulkScheduleForm.group || "").trim() ||
-        inferScheduleGroupValue(matched[0] || { category: bulkScheduleForm.category, type: bulkScheduleForm.type, pcType: "" }),
+        inferScheduleGroupValue(matched[0] || { category: bulkScheduleForm.category, type: selectedTypes[0] || "", pcType: "" }),
       repeatMode: bulkScheduleForm.repeatMode,
       repeatWeekOfMonth:
         bulkScheduleForm.repeatMode === "MONTHLY_WEEKDAY"
@@ -31123,7 +31184,7 @@ export default function App() {
       appendUiAudit(
         "SCHEDULE_BULK_UPDATE",
         "asset",
-        `${bulkScheduleForm.campus} | ${bulkScheduleForm.category}-${bulkScheduleForm.type}`,
+        `${bulkScheduleForm.campus} | ${bulkScheduleForm.category}-${selectedTypes.join(",")}`,
         `${matched.length} assets`
       );
       await loadData();
@@ -31205,6 +31266,27 @@ export default function App() {
       setBusy(false);
     }
   }
+
+  const bulkScheduleTypeOptions = useMemo(
+    () =>
+      (allTypeOptions[bulkScheduleForm.category] || []).map((item) => ({
+        value: item.code,
+        label: assetItemName(bulkScheduleForm.category, item.code),
+      })),
+    [allTypeOptions, assetItemName, bulkScheduleForm.category]
+  );
+  const bulkScheduleTypeSummary = useMemo(() => {
+    const selected = bulkScheduleTypeOptions.filter((option) => (bulkScheduleForm.types || []).includes(option.value));
+    if (!selected.length) return lang === "km" ? "ជ្រើសប្រភេទទំនិញ" : "Select item type(s)";
+    if (selected.length <= 2) return selected.map((option) => option.label).join(", ");
+    return lang === "km"
+      ? `${selected[0]?.label}, ${selected[1]?.label} និង ${selected.length - 2} ផ្សេងទៀត`
+      : `${selected[0]?.label}, ${selected[1]?.label} +${selected.length - 2} more`;
+  }, [bulkScheduleForm.types, bulkScheduleTypeOptions, lang]);
+  const bulkScheduleIsWdpOnly = useMemo(() => {
+    const selected = (bulkScheduleForm.types || []).map((value) => String(value || "").trim()).filter(Boolean);
+    return selected.length === 1 && selected[0] === "WDP";
+  }, [bulkScheduleForm.types]);
 
   function startEditBulkServiceSchedule(row: CalendarEvent) {
     const parsed = parseServiceScheduleEvent(row);
@@ -36557,6 +36639,7 @@ export default function App() {
       campus: string;
       scheduleGroup: string;
       scheduleNote: string;
+      timeLabel: string;
       assetCount: number;
       assetIds: string[];
       locations: string[];
@@ -36572,6 +36655,7 @@ export default function App() {
         campus: string;
         scheduleGroup: string;
         scheduleNote: string;
+        timeLabel: string;
         assetCount: number;
         assetIds: string[];
         locations: string[];
@@ -36594,6 +36678,7 @@ export default function App() {
             campus,
             scheduleGroup: group,
             scheduleNote,
+            timeLabel: "",
             assetCount: 0,
             assetIds: [],
             locations: [],
@@ -36627,6 +36712,7 @@ export default function App() {
         campus: row.campus,
         scheduleGroup: row.scheduleGroup,
         scheduleNote: row.scheduleNote,
+        timeLabel: row.timeLabel,
         assetCount: 1,
         assetIds: [],
         locations: [row.timeLabel],
@@ -36695,6 +36781,20 @@ export default function App() {
       };
     });
   }, [reportScheduleMonth, reportScheduleCalendarByDate]);
+  const renderScheduleLocationList = useCallback((locations: string[]) => {
+    const cleaned = locations.map((location) => String(location || "").trim()).filter(Boolean);
+    if (!cleaned.length) return "-";
+    return (
+      <div className="report-schedule-location-list">
+        {cleaned.map((location, index) => (
+          <div key={`schedule-location-${index}`} className="report-schedule-location-item">
+            <span className="report-schedule-location-bullet">-</span>
+            <span>{location}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }, []);
   useEffect(() => {
     if (reportScheduleCampusFilter !== "ALL" && !reportScheduleCampusOptions.includes(reportScheduleCampusFilter)) {
       setReportScheduleCampusFilter("ALL");
@@ -39666,6 +39766,66 @@ export default function App() {
       return [...withColumn].sort((a, b) => order.indexOf(a) - order.indexOf(b));
     });
   }, [inventoryReportColumnDefs]);
+  const vaultReportColumnDefs = useMemo<Array<{ key: VaultReportColumnKey; label: string }>>(
+    () => [
+      { key: "section", label: "Section" },
+      { key: "system", label: "System" },
+      { key: "account", label: "Account" },
+      { key: "username", label: "Username / Mobile" },
+      { key: "owner", label: "Owner" },
+      { key: "status", label: "Control Status" },
+      { key: "updated", label: "Updated / Review" },
+      { key: "link", label: "Link" },
+      { key: "recoveryExtra", label: "Recovery / Extra" },
+      { key: "password", label: "Password" },
+      { key: "note", label: "Note" },
+    ],
+    []
+  );
+  const visibleVaultReportColumnDefs = useMemo(
+    () => vaultReportColumnDefs.filter((column) => vaultReportVisibleColumns.includes(column.key)),
+    [vaultReportColumnDefs, vaultReportVisibleColumns]
+  );
+  const updateVaultReportColumnSelection = useCallback((column: VaultReportColumnKey) => {
+    setVaultReportVisibleColumns((prev) => {
+      const exists = prev.includes(column);
+      if (exists) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((item) => item !== column);
+      }
+      const withColumn = [...prev, column];
+      const order = vaultReportColumnDefs.map((d) => d.key);
+      return [...withColumn].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    });
+  }, [vaultReportColumnDefs]);
+  const vaultReportCellText = useCallback((row: VaultReportRow, key: VaultReportColumnKey) => {
+    switch (key) {
+      case "section":
+        return row.section || "-";
+      case "system":
+        return row.system || "-";
+      case "account":
+        return row.account || "-";
+      case "username":
+        return row.username || "-";
+      case "owner":
+        return row.owner || "-";
+      case "status":
+        return row.status || "-";
+      case "updated":
+        return row.reviewDate ? formatDate(row.reviewDate) : formatDate(row.lastUpdated || "-");
+      case "link":
+        return row.loginUrl || "-";
+      case "recoveryExtra":
+        return [row.recovery, row.extra].filter(Boolean).join(" | ") || "-";
+      case "password":
+        return vaultReportShowSensitive ? (row.password || "-") : (row.password ? "Hidden" : "-");
+      case "note":
+        return row.note || "-";
+      default:
+        return "-";
+    }
+  }, [vaultReportShowSensitive]);
   const inventoryReportCellText = useCallback(
     (row: (typeof reportInventoryRows)[number], key: InventoryReportColumnKey) => {
       switch (key) {
@@ -41585,20 +41745,10 @@ export default function App() {
       ]);
     } else if (reportType === "it_vault") {
       title = "School IT Vault Access and Control Report";
-      columns = ["Section", "System", "Account", "Username / Mobile", "Owner", "Control Status", "Updated / Review", "Link", "Recovery / Extra", "Password", "Note"];
-      rows = vaultReportRowsFiltered.map((row) => [
-        row.section,
-        row.system || "-",
-        row.account || "-",
-        row.username || "-",
-        row.owner || "-",
-        row.status || "-",
-        row.reviewDate ? formatDate(row.reviewDate) : formatDate(row.lastUpdated || "-"),
-        row.loginUrl || "-",
-        [row.recovery, row.extra].filter(Boolean).join(" | ") || "-",
-        vaultReportShowSensitive ? (row.password || "-") : (row.password ? "Hidden" : "-"),
-        row.note || "-",
-      ]);
+      columns = visibleVaultReportColumnDefs.map((column) => column.label);
+      rows = vaultReportRowsFiltered.map((row) =>
+        visibleVaultReportColumnDefs.map((column) => vaultReportCellText(row, column.key))
+      );
     } else {
       title =
         qrLabelEntityType === "rental_printer"
@@ -41860,14 +42010,6 @@ export default function App() {
               <div class="report-summary-card">
                 <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "ខែ" : "Month")}</div>
                 <div class="report-summary-card-value">${escapeHtml(inventoryToolReportMonthLabel || "-")}</div>
-              </div>
-              <div class="report-summary-card">
-                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "សាខា" : "Campus")}</div>
-                <div class="report-summary-card-value">${escapeHtml(reportInventoryCampusFilterLabel || "-")}</div>
-              </div>
-              <div class="report-summary-card">
-                <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "ប្រភេទឧបករណ៍" : "Tools")}</div>
-                <div class="report-summary-card-value">${escapeHtml(reportInventoryGroupFilterLabel || "-")}</div>
               </div>
               <div class="report-summary-card">
                 <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "កម្មសិទ្ធិ" : "Property Type")}</div>
@@ -42672,15 +42814,17 @@ export default function App() {
               .map((day) => {
                 const entryBlocks = day.entries.length
                   ? day.entries
-                      .map((entry) => {
+                    .map((entry) => {
                         const color = scheduleCalendarCampusColor(entry.campus);
                         const campusText = reportCampusName(entry.campus);
                         const lineTwo = entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup);
-                        const lineThree = entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup);
+                        const lineThree = entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup);
+                        const lineFour = entry.timeLabel && entry.scheduleNote ? entry.scheduleNote : "";
                         return `<div class="schedule-calendar-entry" style="background:${escapeHtml(color)};">
                           <strong>${escapeHtml(campusText)}</strong>
                           <span>${escapeHtml(lineTwo)}</span>
                           <span>${escapeHtml(lineThree)}</span>
+                          ${lineFour ? `<span>${escapeHtml(lineFour)}</span>` : ""}
                         </div>`;
                       })
                       .join("")
@@ -42706,7 +42850,13 @@ export default function App() {
                       <td>${escapeHtml(row.items.join(", ") || "-")}</td>
                       <td>${escapeHtml(reportScheduleGroupLabel(row.scheduleGroup))}</td>
                       <td>${escapeHtml(row.scheduleNote || "-")}</td>
-                      <td>${escapeHtml(row.locations.join(", ") || "-")}</td>
+                      <td>${
+                        row.locations.length
+                          ? row.locations
+                              .map((location) => `<div style="display:flex;gap:6px;align-items:flex-start;"><span style="font-weight:800;">-</span><span>${escapeHtml(location)}</span></div>`)
+                              .join("")
+                          : "-"
+                      }</td>
                     </tr>`
                   )
                   .join("")
@@ -42943,6 +43093,13 @@ export default function App() {
           }
           .report-summary-grid-tools {
             grid-template-columns: repeat(5, minmax(0, 1fr));
+          }
+          .report-summary-grid-tools .report-summary-card {
+            text-align: center;
+          }
+          .report-summary-grid-tools .report-summary-card-label,
+          .report-summary-grid-tools .report-summary-card-value {
+            text-align: center;
           }
           .report-summary-card {
             border: 1px solid #d7ccb8;
@@ -47216,9 +47373,14 @@ function formatTicketRequestSource(value?: string) {
                 <div className="form-grid inventory-item-grid asset-form-grid">
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select className="input" value={assetForm.campus} onChange={(e) => setAssetForm((f) => ({ ...f, campus: e.target.value }))}>
-                      {campusOptions.map((campus) => <option key={campus} value={campus}>{campusLabel(campus)}</option>)}
-                    </select>
+                    <LocationPicker
+                      value={assetForm.campus}
+                      onChange={(value) => setAssetForm((f) => ({ ...f, campus: value }))}
+                      options={buildCampusPickerOptions(campusOptions)}
+                      placeholder="Select campus"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>{t.location}</span>
@@ -50832,17 +50994,14 @@ function formatTicketRequestSource(value?: string) {
                     {isSuperAdmin ? (
                       <label className="field">
                         <span>{t.campus}</span>
-                        <select
-                          className="input"
+                        <LocationPicker
                           value={assetEditForm.campus}
-                          onChange={(e) => setAssetEditForm((f) => ({ ...f, campus: e.target.value }))}
-                        >
-                          {campusOptions.map((campus) => (
-                            <option key={`edit-asset-campus-${campus}`} value={campus}>
-                              {campusLabel(campus)}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(value) => setAssetEditForm((f) => ({ ...f, campus: value }))}
+                          options={buildCampusPickerOptions(campusOptions)}
+                          placeholder="Select campus"
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                          emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                        />
                         {assetEditForm.campus !== editingAsset.campus ? (
                           <p className="tiny">Super Admin only. Changing campus will also affect report and maintenance display for this asset.</p>
                         ) : null}
@@ -52572,15 +52731,14 @@ function formatTicketRequestSource(value?: string) {
                     </label>
                     <label className="field">
                       <span>To Campus</span>
-                      <select
-                        className="input"
+                      <LocationPicker
                         value={transferForm.toCampus}
-                        onChange={(e) => setTransferForm((f) => ({ ...f, toCampus: e.target.value, toLocation: "", toLocationPhoto: "" }))}
-                      >
-                        {campusOptions.map((campus) => (
-                          <option key={`quick-to-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                        ))}
-                      </select>
+                        onChange={(value) => setTransferForm((f) => ({ ...f, toCampus: value, toLocation: "", toLocationPhoto: "" }))}
+                        options={buildCampusPickerOptions(campusOptions)}
+                        placeholder="Select campus"
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                      />
                     </label>
                     <label className="field">
                       <span>To Location</span>
@@ -53092,7 +53250,17 @@ function formatTicketRequestSource(value?: string) {
                   </table>
                 </div>
                 <div className="form-grid" style={{ marginTop: 12 }}>
-                  <label className="field"><span>{t.campus}</span><select className="input" value={cctvCameraForm.campus} onChange={(e) => setCctvCameraForm((f) => ({ ...f, campus: e.target.value }))}>{campusOptions.map((campus) => <option key={`cctv-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}</select></label>
+                  <label className="field">
+                    <span>{t.campus}</span>
+                    <LocationPicker
+                      value={cctvCameraForm.campus}
+                      onChange={(value) => setCctvCameraForm((f) => ({ ...f, campus: value }))}
+                      options={buildCampusPickerOptions(campusOptions)}
+                      placeholder="Select campus"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
+                  </label>
                   <label className="field"><span>Site / Area</span><input className="input" value={cctvCameraForm.site} onChange={(e) => setCctvCameraForm((f) => ({ ...f, site: e.target.value }))} placeholder="Campus 2.2 / Gate Area / Playground" /></label>
                   <label className="field"><span>Camera Type</span><select className="input" value={cctvCameraForm.cameraType} onChange={(e) => setCctvCameraForm((f) => ({ ...f, cameraType: e.target.value as NonNullable<CctvCameraRecord["cameraType"]> }))}><option value="IP Camera">IP Camera</option><option value="Analog Camera">Analog Camera (DVR)</option></select></label>
                   <label className="field"><span>Camera Name</span><input className="input" value={cctvCameraForm.cameraName} onChange={(e) => setCctvCameraForm((f) => ({ ...f, cameraName: e.target.value }))} /></label>
@@ -53652,9 +53820,14 @@ function formatTicketRequestSource(value?: string) {
                 <div className="form-grid">
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select className="input" value={ticketForm.campus} onChange={(e) => setTicketForm((f) => ({ ...f, campus: e.target.value }))}>
-                      {campusOptions.map((campus) => <option key={campus} value={campus}>{campusLabel(campus)}</option>)}
-                    </select>
+                    <LocationPicker
+                      value={ticketForm.campus}
+                      onChange={(value) => setTicketForm((f) => ({ ...f, campus: value }))}
+                      options={buildCampusPickerOptions(campusOptions)}
+                      placeholder="Select campus"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>{t.category}</span>
@@ -53814,12 +53987,14 @@ function formatTicketRequestSource(value?: string) {
                   </label>
                   <label className="field">
                     <span>{t.campus}</span>
-                    <select className="input" value={ticketDashboardCampusFilter} onChange={(e) => setTicketDashboardCampusFilter(e.target.value)}>
-                      <option value="ALL">{t.allCampuses}</option>
-                      {ticketDashboardCampusOptions.map((campus) => (
-                        <option key={`ticket-dash-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                      ))}
-                    </select>
+                    <LocationPicker
+                      value={ticketDashboardCampusFilter}
+                      onChange={setTicketDashboardCampusFilter}
+                      options={buildCampusPickerOptions(ticketDashboardCampusOptions, { includeAll: true })}
+                      placeholder={t.allCampuses}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>{lang === "km" ? "អ្នកទទួលការងារ" : "Assigned To"}</span>
@@ -54098,9 +54273,14 @@ function formatTicketRequestSource(value?: string) {
               <div className="form-grid">
                 <label className="field">
                   <span>{t.campus}</span>
-                  <select className="input" value={ticketEditForm.campus} onChange={(e) => setTicketEditForm((f) => ({ ...f, campus: e.target.value }))}>
-                    {campusOptions.map((campus) => <option key={`ticket-edit-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>)}
-                  </select>
+                  <LocationPicker
+                    value={ticketEditForm.campus}
+                    onChange={(value) => setTicketEditForm((f) => ({ ...f, campus: value }))}
+                    options={buildCampusPickerOptions(campusOptions)}
+                    placeholder="Select campus"
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
                 </label>
                 <label className="field">
                   <span>{t.category}</span>
@@ -54607,11 +54787,14 @@ function formatTicketRequestSource(value?: string) {
                 <div className="form-grid inventory-item-create-grid">
                   <label className="field">
                     <span>Campus</span>
-                    <select className="input" value={inventoryItemForm.campus} onChange={(e) => setInventoryItemForm((f) => ({ ...f, campus: e.target.value }))}>
-                      {campusOptions.map((campus) => (
-                        <option key={`inv-form-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                      ))}
-                    </select>
+                    <LocationPicker
+                      value={inventoryItemForm.campus}
+                      onChange={(value) => setInventoryItemForm((f) => ({ ...f, campus: value }))}
+                      options={buildCampusPickerOptions(campusOptions)}
+                      placeholder="Select campus"
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
                   </label>
                   <label className="field">
                     <span>Inventory Group</span>
@@ -55020,11 +55203,14 @@ function formatTicketRequestSource(value?: string) {
                   <div className="form-grid">
                     <label className="field">
                       <span>Campus</span>
-                      <select className="input" value={tonerItemForm.campus} onChange={(e) => setTonerItemForm((f) => ({ ...f, campus: e.target.value }))}>
-                        {campusOptions.map((campus) => (
-                          <option key={`toner-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
-                        ))}
-                      </select>
+                      <LocationPicker
+                        value={tonerItemForm.campus}
+                        onChange={(value) => setTonerItemForm((f) => ({ ...f, campus: value }))}
+                        options={buildCampusPickerOptions(campusOptions)}
+                        placeholder="Select campus"
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                      />
                     </label>
                     <label className="field">
                       <span>Toner Code</span>
@@ -58276,38 +58462,17 @@ function formatTicketRequestSource(value?: string) {
 
         {tab === "schedule" && (
           <section className="panel">
-            <div className="row-actions" style={{ marginBottom: 12 }}>
-              <button
-                className={`tab ${scheduleView === "calendar" ? "tab-active" : ""}`}
-                onClick={() => setScheduleView("calendar")}
-              >
-                Eco Calendar View
-              </button>
-              <button
-                className={`tab ${scheduleView === "bulk" ? "tab-active" : ""}`}
-                onClick={() => setScheduleView("bulk")}
-              >
-                Bulk Campus
-              </button>
-              <button
-                className={`tab ${scheduleView === "single" ? "tab-active" : ""}`}
-                onClick={() => setScheduleView("single")}
-              >
-                By Asset
-              </button>
-            </div>
-
             {scheduleView === "bulk" && (
               <>
-            <div className="row-actions" style={{ marginBottom: 12 }}>
+            <div className="row-actions schedule-switch-row schedule-switch-row-secondary" style={{ marginBottom: 12 }}>
               <button
-                className={`tab ${bulkScheduleMode === "asset" ? "tab-active" : ""}`}
+                className={`tab schedule-switch-btn schedule-switch-btn-secondary ${bulkScheduleMode === "asset" ? "tab-active" : ""}`}
                 onClick={() => setBulkScheduleMode("asset")}
               >
                 Asset Schedule
               </button>
               <button
-                className={`tab ${bulkScheduleMode === "service" ? "tab-active" : ""}`}
+                className={`tab schedule-switch-btn schedule-switch-btn-secondary ${bulkScheduleMode === "service" ? "tab-active" : ""}`}
                 onClick={() => setBulkScheduleMode("service")}
               >
                 Service / Task Schedule
@@ -58325,11 +58490,12 @@ function formatTicketRequestSource(value?: string) {
                   value={bulkScheduleForm.campus}
                   onChange={(value) => setBulkScheduleForm((f) => ({ ...f, campus: value }))}
                   options={[
-                    { value: "ALL", label: t.allCampuses },
-                    ...campusOptions.map((campus) => ({
-                      value: campus,
-                      label: campusLabel(campus),
-                    })),
+                    {
+                      value: "ALL",
+                      label: t.allCampuses,
+                      searchText: `${t.allCampuses} ALL`,
+                    },
+                    ...campusOptions.map((campus) => quickCampusPickerOption(campus)),
                   ]}
                   placeholder={t.allCampuses}
                   searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
@@ -58343,7 +58509,7 @@ function formatTicketRequestSource(value?: string) {
                   onChange={(value) => {
                     const category = value;
                     const firstType = (allTypeOptions[category] || [])[0]?.code || "";
-                    setBulkScheduleForm((f) => ({ ...f, category, type: firstType }));
+                    setBulkScheduleForm((f) => ({ ...f, category, types: firstType ? [firstType] : [] }));
                   }}
                   options={CATEGORY_OPTIONS.map((cat) => ({
                     value: cat.value,
@@ -58355,15 +58521,20 @@ function formatTicketRequestSource(value?: string) {
                 />
               </label>
               <label className="field">
-                <span>Item Type</span>
-                <AssetTypePicker
-                  value={bulkScheduleForm.type}
-                  onChange={(value) => setBulkScheduleForm((f) => ({ ...f, type: value }))}
-                  options={(allTypeOptions[bulkScheduleForm.category] || []).map((item) => ({
-                    code: item.code,
-                    label: assetItemName(bulkScheduleForm.category, item.code),
-                  }))}
-                  placeholder="Select item type"
+                <span>Item Types</span>
+                <SearchableMultiSelectPicker
+                  summary={bulkScheduleTypeSummary}
+                  options={bulkScheduleTypeOptions}
+                  selectedValues={bulkScheduleForm.types}
+                  onToggleValue={(value, checked) =>
+                    setBulkScheduleForm((f) => {
+                      const current = Array.from(new Set((f.types || []).map((item) => String(item || "").trim()).filter(Boolean)));
+                      const next = checked
+                        ? [...current, value].filter((item, index, arr) => arr.indexOf(item) === index)
+                        : current.filter((item) => item !== value);
+                      return { ...f, types: next };
+                    })
+                  }
                   searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទទំនិញ..." : "Search item type..."}
                   emptyText={lang === "km" ? "មិនមានប្រភេទទំនិញ" : "No item type found."}
                 />
@@ -58457,7 +58628,7 @@ function formatTicketRequestSource(value?: string) {
                   </option>
                   <option value="EVERY_6_MONTHS">Every 6 months</option>
                   <option value="EVERY_12_MONTHS">Every 12 months</option>
-                  {bulkScheduleForm.type === "WDP" ? (
+                  {bulkScheduleIsWdpOnly ? (
                     <option value="WDP_FILTER_CYCLE">WDP filter cycle (2 filters / all 4 filters)</option>
                   ) : null}
                 </select>
@@ -58527,13 +58698,13 @@ function formatTicketRequestSource(value?: string) {
                 </select>
               </label>
             </div>
-            <div className="asset-actions">
-              <div className="tiny">
-                Apply one date/rule to all matched assets in selected campus + item type (example: all FE on same day).
-              </div>
+              <div className="asset-actions">
+                <div className="tiny">
+                Apply one date/rule to all matched assets in selected campus + selected item types.
+                </div>
               <button
                 className="btn-primary"
-                disabled={busy || !isAdmin || !bulkScheduleForm.type || (bulkScheduleForm.repeatMode === "NONE" && !bulkScheduleForm.date)}
+                disabled={busy || !isAdmin || !(bulkScheduleForm.types || []).length || (bulkScheduleForm.repeatMode === "NONE" && !bulkScheduleForm.date)}
                 onClick={saveBulkMaintenanceSchedule}
               >
                 Apply Bulk Schedule
@@ -58548,13 +58719,7 @@ function formatTicketRequestSource(value?: string) {
                 <LocationPicker
                   value={bulkServiceScheduleForm.campus}
                   onChange={(value) => setBulkServiceScheduleForm((f) => ({ ...f, campus: value }))}
-                  options={[
-                    { value: "ALL", label: t.allCampuses },
-                    ...campusOptions.map((campus) => ({
-                      value: campus,
-                      label: campusLabel(campus),
-                    })),
-                  ]}
+                  options={buildCampusPickerOptions(campusOptions, { includeAll: true })}
                   placeholder={t.allCampuses}
                   searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                   emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
@@ -59732,18 +59897,14 @@ function formatTicketRequestSource(value?: string) {
             <div className="transfer-history-filter-bar">
               <label className="field">
                 <span>{t.campus}</span>
-                <select
-                  className="input"
+                <LocationPicker
                   value={transferHistoryCampusFilter}
-                  onChange={(e) => setTransferHistoryCampusFilter(e.target.value)}
-                >
-                  <option value="ALL">{t.allCampuses}</option>
-                  {transferHistoryCampusOptions.map((campus) => (
-                    <option key={`transfer-history-campus-${campus}`} value={campus}>
-                      {campusLabel(campus)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setTransferHistoryCampusFilter}
+                  options={buildCampusPickerOptions(transferHistoryCampusOptions, { includeAll: true })}
+                  placeholder={t.allCampuses}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                  emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                />
               </label>
               <label className="field">
                 <span>{t.category}</span>
@@ -66066,6 +66227,24 @@ function formatTicketRequestSource(value?: string) {
                       <span>Show passwords</span>
                     </span>
                   </label>
+                  <SearchableMultiSelectPicker
+                    summary={columnFilterSummary}
+                    options={vaultReportColumnDefs.map((column) => ({
+                      value: column.key,
+                      label: column.label,
+                    }))}
+                    selectedValues={vaultReportVisibleColumns}
+                    allOptionLabel="All Columns"
+                    allOptionChecked={vaultReportVisibleColumns.length === vaultReportColumnDefs.length}
+                    onToggleAllOption={(checked) =>
+                      setVaultReportVisibleColumns(
+                        checked ? vaultReportColumnDefs.map((column) => column.key) : vaultReportVisibleColumns
+                      )
+                    }
+                    onToggleValue={(value) => updateVaultReportColumnSelection(value as VaultReportColumnKey)}
+                    searchPlaceholder="Search columns..."
+                    emptyText="No columns found."
+                  />
                 </>
               ) : null}
               {reportType === "qr_labels" || reportType === "asset_full_record" ? (
@@ -67035,9 +67214,9 @@ function formatTicketRequestSource(value?: string) {
                 <div
                   style={{
                     border: "1px solid rgba(215, 204, 184, 0.42)",
-                    borderRadius: 20,
+                    borderRadius: isPhoneView ? 16 : 20,
                     background: "linear-gradient(180deg, rgba(248,242,230,0.94) 0%, rgba(244,236,221,0.98) 100%)",
-                    padding: 16,
+                    padding: isPhoneView ? 10 : 16,
                     boxShadow: "0 18px 42px rgba(79, 60, 32, 0.08)",
                   }}
                 >
@@ -67045,19 +67224,20 @@ function formatTicketRequestSource(value?: string) {
                     style={{
                       display: "flex",
                       flexWrap: "wrap",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      alignItems: "center",
-                      marginBottom: 12,
+                      justifyContent: isPhoneView ? "flex-start" : "space-between",
+                      gap: isPhoneView ? 8 : 12,
+                      alignItems: isPhoneView ? "flex-start" : "center",
+                      marginBottom: isPhoneView ? 10 : 12,
+                      flexDirection: isPhoneView ? "column" : "row",
                     }}
                   >
                     <div>
                       <div className="tiny" style={{ letterSpacing: "0.14em", textTransform: "uppercase", color: "#8a6f47", fontWeight: 800 }}>
                         {lang === "km" ? "ប្រតិទិនកាលវិភាគផ្លូវការ" : "Official Calendar Preview"}
                       </div>
-                      <strong style={{ fontSize: 24, color: "#1f2e26" }}>{selectedReportDisplayTitle}</strong>
+                      <strong style={{ fontSize: isPhoneView ? 15 : 24, lineHeight: 1.2, color: "#1f2e26", display: "block" }}>{selectedReportDisplayTitle}</strong>
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: isPhoneView ? 6 : 10 }}>
                       {reportScheduleCampusOptions.map((campus) => (
                         <span
                           key={`schedule-legend-${campus}`}
@@ -67065,19 +67245,19 @@ function formatTicketRequestSource(value?: string) {
                             display: "inline-flex",
                             alignItems: "center",
                             gap: 8,
-                            padding: "6px 10px",
+                            padding: isPhoneView ? "5px 8px" : "6px 10px",
                             borderRadius: 999,
                             background: "rgba(255,255,255,0.72)",
                             border: "1px solid rgba(202, 164, 104, 0.28)",
                             color: "#425347",
-                            fontSize: 12,
+                            fontSize: isPhoneView ? 10 : 12,
                             fontWeight: 700,
                           }}
                         >
                           <span
                             style={{
-                              width: 14,
-                              height: 14,
+                              width: isPhoneView ? 10 : 14,
+                              height: isPhoneView ? 10 : 14,
                               borderRadius: 4,
                               background: scheduleCalendarCampusColor(campus),
                               border: "1px solid rgba(72, 63, 45, 0.18)",
@@ -67093,7 +67273,7 @@ function formatTicketRequestSource(value?: string) {
                       display: "grid",
                       gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
                       border: "1px solid rgba(151, 124, 85, 0.3)",
-                      borderRadius: 18,
+                      borderRadius: isPhoneView ? 14 : 18,
                       overflow: "hidden",
                       background: "#fffdf8",
                     }}
@@ -67102,10 +67282,10 @@ function formatTicketRequestSource(value?: string) {
                       <div
                         key={`report-schedule-head-${weekday}`}
                         style={{
-                          padding: "10px 8px",
+                          padding: isPhoneView ? "6px 2px" : "10px 8px",
                           textAlign: "center",
                           fontWeight: 800,
-                          fontSize: 12,
+                          fontSize: isPhoneView ? 9 : 12,
                           background: "#f5ecdc",
                           borderRight: index === 6 ? "0" : "1px solid rgba(151, 124, 85, 0.24)",
                           borderBottom: "1px solid rgba(151, 124, 85, 0.3)",
@@ -67119,32 +67299,38 @@ function formatTicketRequestSource(value?: string) {
                       <div
                         key={`report-schedule-day-${day.ymd}`}
                         style={{
-                          minHeight: 132,
-                          padding: 8,
+                          minHeight: isPhoneView ? 86 : 132,
+                          padding: isPhoneView ? 4 : 8,
                           background: day.inMonth ? "#fff" : "#f7f2e8",
                           borderRight: day.weekday === 6 ? "0" : "1px solid rgba(151, 124, 85, 0.18)",
                           borderBottom: "1px solid rgba(151, 124, 85, 0.18)",
                           display: "grid",
                           gridTemplateRows: "auto 1fr",
-                          gap: 6,
+                          gap: isPhoneView ? 3 : 6,
                         }}
                       >
-                        <div style={{ fontSize: 12, fontWeight: 800, color: day.weekday === 0 ? "#bb3f3f" : "#33443a" }}>{day.day}</div>
-                        <div style={{ display: "grid", gap: 6, alignContent: "start" }}>
+                        <div style={{ fontSize: isPhoneView ? 10 : 12, fontWeight: 800, color: day.weekday === 0 ? "#bb3f3f" : "#33443a" }}>{day.day}</div>
+                        <div style={{ display: "grid", gap: isPhoneView ? 3 : 6, alignContent: "start" }}>
                           {day.entries.map((entry) => (
                             <div
                               key={entry.key}
                               style={{
-                                borderRadius: 10,
-                                padding: "6px 7px",
+                                borderRadius: isPhoneView ? 8 : 10,
+                                padding: isPhoneView ? "3px 4px" : "6px 7px",
                                 background: scheduleCalendarCampusColor(entry.campus),
                                 boxShadow: "inset 0 0 0 1px rgba(72, 63, 45, 0.08)",
                                 color: "#223128",
+                                overflow: "hidden",
                               }}
                             >
-                              <div style={{ fontSize: 10, fontWeight: 800, lineHeight: 1.2 }}>{reportCampusName(entry.campus)}</div>
-                              <div style={{ fontSize: 10, lineHeight: 1.2 }}>{entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
-                              <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.82 }}>{entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
+                              <div style={{ fontSize: isPhoneView ? 7 : 10, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{reportCampusName(entry.campus)}</div>
+                              <div style={{ fontSize: isPhoneView ? 7 : 10, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
+                              <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.82, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}
+                              </div>
+                              {!isPhoneView && entry.timeLabel && entry.scheduleNote ? (
+                                <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.74 }}>{entry.scheduleNote}</div>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -67153,41 +67339,38 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 </div>
 
-                <div className="table-wrap report-table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>No.</th>
-                        <th>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</th>
-                        <th>{t.campus}</th>
-                        <th>{lang === "km" ? "ការងារ / ធាតុ" : "Task / Item"}</th>
-                        <th>{lang === "km" ? "ក្រុម" : "Group"}</th>
-                        <th>{lang === "km" ? "សម្គាល់" : "Schedule Note"}</th>
-                        <th>{lang === "km" ? "ពេលវេលា / ទីតាំង" : "Time / Locations"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {reportScheduleCalendarRows.length ? (
-                        reportScheduleCalendarRows.map((row, index) => (
-                          <tr key={`report-schedule-row-${row.key}`}>
-                            <td>{index + 1}</td>
-                            <td>{formatDate(row.date)}</td>
-                            <td>{reportCampusName(row.campus)}</td>
-                            <td>{row.items.join(", ") || "-"}</td>
-                            <td>{reportScheduleGroupLabel(row.scheduleGroup)}</td>
-                            <td>{row.scheduleNote || "-"}</td>
-                            <td>{row.locations.join(", ") || "-"}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={7}>
-                            {lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month."}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                <div className="report-schedule-list">
+                  {reportScheduleCalendarRows.length ? (
+                    reportScheduleCalendarRows.map((row, index) => (
+                      <article key={`report-schedule-row-${row.key}`} className="report-schedule-card">
+                        <div className="report-schedule-card-top">
+                          <span className="report-schedule-card-index">{index + 1}</span>
+                          <div className="report-schedule-card-date">{formatDate(row.date)}</div>
+                          <div className="report-schedule-card-group">{reportScheduleGroupLabel(row.scheduleGroup)}</div>
+                        </div>
+                        <div className="report-schedule-card-body">
+                          <div className="report-schedule-card-main">
+                            <strong>{row.items.join(", ") || "-"}</strong>
+                            <span>{reportCampusName(row.campus)}</span>
+                          </div>
+                          <div className="report-schedule-card-meta">
+                            <div className="report-schedule-card-field">
+                              <span>{lang === "km" ? "សម្គាល់" : "Schedule Note"}</span>
+                              <strong>{row.scheduleNote || "-"}</strong>
+                            </div>
+                            <div className="report-schedule-card-field">
+                              <span>{lang === "km" ? "ពេលវេលា / ទីតាំង" : "Time / Locations"}</span>
+                              <strong>{renderScheduleLocationList(row.locations)}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">
+                      {lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month."}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -68284,15 +68467,14 @@ function formatTicketRequestSource(value?: string) {
                             </div>
                           </div>
                           <div className="report-card-meta">
-                            <div><strong>Account:</strong> {row.account || "-"}</div>
-                            <div><strong>Username / Mobile:</strong> {row.username || "-"}</div>
-                            <div><strong>Owner:</strong> {row.owner || "-"}</div>
-                            <div><strong>Status:</strong> {row.status || "-"}</div>
-                            <div><strong>Updated / Review:</strong> {formatDate(row.reviewDate || row.lastUpdated || "-")}</div>
-                            <div><strong>Link:</strong> {row.loginUrl || "-"}</div>
-                            <div><strong>Recovery / Extra:</strong> {[row.recovery, row.extra].filter(Boolean).join(" | ") || "-"}</div>
-                            <div><strong>Password:</strong> {vaultReportShowSensitive ? (row.password || "-") : (row.password ? "Hidden" : "-")}</div>
-                            <div className="report-card-row-wide"><strong>Note:</strong> {row.note || "-"}</div>
+                            {visibleVaultReportColumnDefs.map((column) => (
+                              <div
+                                key={`report-vault-mobile-field-${row.id}-${column.key}`}
+                                className={column.key === "note" ? "report-card-row-wide" : undefined}
+                              >
+                                <strong>{column.label}:</strong> {vaultReportCellText(row, column.key)}
+                              </div>
+                            ))}
                             <div className="report-card-row-wide">
                               <button type="button" className="tab btn-small" onClick={() => void copyVaultText(`vault-report-row-${row.id}`, row.reportText)}>
                                 {vaultCopiedEntryId === `vault-report-row-${row.id}` ? "Copied" : "Copy Record"}
@@ -68327,34 +68509,25 @@ function formatTicketRequestSource(value?: string) {
                             </div>
                           </div>
                           <div className="report-it-vault-record-grid">
-                            <div className="report-it-vault-record-item">
-                              <span>Owner</span>
-                              <strong>{row.owner || "-"}</strong>
-                            </div>
-                            <div className="report-it-vault-record-item">
-                              <span>Updated / Review</span>
-                              <strong>{formatDate(row.reviewDate || row.lastUpdated || "-")}</strong>
-                            </div>
-                            <div className="report-it-vault-record-item report-it-vault-record-item-wide">
-                              <span>Link</span>
-                              <strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong>
-                            </div>
-                            <div className="report-it-vault-record-item">
-                              <span>Recovery</span>
-                              <strong>{row.recovery || "-"}</strong>
-                            </div>
-                            <div className="report-it-vault-record-item">
-                              <span>Extra</span>
-                              <strong>{row.extra || "-"}</strong>
-                            </div>
-                            <div className="report-it-vault-record-item">
-                              <span>Password</span>
-                              <strong>{vaultReportShowSensitive ? (row.password || "-") : (row.password ? "Hidden" : "-")}</strong>
-                            </div>
-                            <div className="report-it-vault-record-item report-it-vault-record-item-full">
-                              <span>Note</span>
-                              <strong>{row.note || "-"}</strong>
-                            </div>
+                            {visibleVaultReportColumnDefs.map((column) => (
+                              <div
+                                key={`report-vault-field-${row.id}-${column.key}`}
+                                className={`report-it-vault-record-item ${
+                                  column.key === "note"
+                                    ? "report-it-vault-record-item-full"
+                                    : column.key === "link" || column.key === "recoveryExtra"
+                                      ? "report-it-vault-record-item-wide"
+                                      : ""
+                                }`.trim()}
+                              >
+                                <span>{column.label}</span>
+                                <strong>
+                                  {column.key === "link" && row.loginUrl
+                                    ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a>
+                                    : vaultReportCellText(row, column.key)}
+                                </strong>
+                              </div>
+                            ))}
                           </div>
                         </article>
                       ))
@@ -72939,10 +73112,13 @@ function formatTicketRequestSource(value?: string) {
         ) : null}
         {scheduleScopeModal ? (
           <div className="modal-backdrop" onClick={() => setScheduleScopeModal(null)}>
-            <section className="panel modal-panel" onClick={(e) => e.stopPropagation()}>
-              <div className="panel-row">
-                <h2>{scheduleScopeModal.action === "edit" ? "Edit Recurring Schedule" : "Delete Recurring Schedule"}</h2>
-                <button className="tab" onClick={() => setScheduleScopeModal(null)}>{t.close}</button>
+            <section className="panel modal-panel schedule-scope-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row schedule-scope-modal-head">
+                <div className="schedule-scope-modal-copy">
+                  <span className="schedule-scope-modal-kicker">Recurring Schedule</span>
+                  <h2>{scheduleScopeModal.action === "edit" ? "Edit Recurring Schedule" : "Delete Recurring Schedule"}</h2>
+                </div>
+                <button className="tab schedule-scope-modal-close" onClick={() => setScheduleScopeModal(null)}>{t.close}</button>
               </div>
               {(() => {
                 const asset = assets.find((a) => a.id === scheduleScopeModal.assetId);
@@ -72950,18 +73126,25 @@ function formatTicketRequestSource(value?: string) {
                 const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
                 return (
                   <>
-                    <p className="tiny" style={{ marginBottom: 12 }}>
-                      {scheduleScopeModal.action === "edit"
-                        ? `This item has multiple schedules (${itemName}). Choose scope like Google Calendar.`
-                        : `Delete schedule for ${itemName}. Choose scope like Google Calendar.`}
-                    </p>
-                    <div className="row-actions" style={{ justifyContent: "flex-end" }}>
-                      <button className="tab" onClick={() => void applyScheduleScopeAction("single")}>
-                        This schedule only
-                      </button>
-                      <button className="btn-danger" onClick={() => void applyScheduleScopeAction("all")}>
-                        {scheduleScopeModal.action === "edit" ? "All same schedules" : "Delete all same schedules"}
-                      </button>
+                    <div className="schedule-scope-modal-body">
+                      <div className="schedule-scope-modal-message">
+                        <strong>{itemName}</strong>
+                        <p>
+                          {scheduleScopeModal.action === "edit"
+                            ? "This item has recurring schedules. Choose whether to update only this schedule or all matching recurring schedules."
+                            : "Choose whether to delete only this schedule or remove all matching recurring schedules."}
+                        </p>
+                      </div>
+                      <div className="schedule-scope-modal-actions">
+                        <button className="tab schedule-scope-modal-action" onClick={() => void applyScheduleScopeAction("single")}>
+                          <strong>This schedule only</strong>
+                          <span>Keep the rest unchanged.</span>
+                        </button>
+                        <button className="btn-danger schedule-scope-modal-action schedule-scope-modal-action-danger" onClick={() => void applyScheduleScopeAction("all")}>
+                          <strong>{scheduleScopeModal.action === "edit" ? "All same schedules" : "Delete all same schedules"}</strong>
+                          <span>{scheduleScopeModal.action === "edit" ? "Update every matching recurring row." : "Remove every matching recurring row."}</span>
+                        </button>
+                      </div>
                     </div>
                   </>
                 );
