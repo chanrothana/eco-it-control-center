@@ -5447,6 +5447,16 @@ function formatDate(value: string) {
   return `${day}-${month}-${year}`;
 }
 
+function formatSignatureDateValue(value: string) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const normalizedYmd = normalizeYmdInput(text);
+  if (normalizedYmd) return formatDate(normalizedYmd);
+  const directParsed = new Date(text.replace(/\//g, "-"));
+  if (!Number.isNaN(directParsed.getTime())) return formatDate(directParsed.toISOString());
+  return text;
+}
+
 function formatMateDateInput(value: string) {
   const normalized = normalizeYmdInput(String(value || "").trim());
   if (!normalized) return String(value || "").trim();
@@ -11048,9 +11058,23 @@ export default function App() {
   const [reportMaintenanceCampusFilter, setReportMaintenanceCampusFilter] = useState("ALL");
   const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
   const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
+  const [reportIncludePreparedBySignature, setReportIncludePreparedBySignature] = useState(false);
+  const [reportShowSignatureMeta, setReportShowSignatureMeta] = useState(true);
+  const [reportPreparedByName, setReportPreparedByName] = useState("");
+  const [reportPreparedByPosition, setReportPreparedByPosition] = useState("");
+  const [reportPreparedByDate, setReportPreparedByDate] = useState("");
   const [reportIncludeStaffSignature, setReportIncludeStaffSignature] = useState(false);
+  const [reportStaffSignatureName, setReportStaffSignatureName] = useState("");
+  const [reportStaffSignaturePosition, setReportStaffSignaturePosition] = useState("");
+  const [reportStaffSignatureDate, setReportStaffSignatureDate] = useState("");
   const [reportIncludeSupervisorSignature, setReportIncludeSupervisorSignature] = useState(false);
+  const [reportSupervisorSignatureName, setReportSupervisorSignatureName] = useState("");
+  const [reportSupervisorSignaturePosition, setReportSupervisorSignaturePosition] = useState("");
+  const [reportSupervisorSignatureDate, setReportSupervisorSignatureDate] = useState("");
   const [reportIncludeEdApprovalSignature, setReportIncludeEdApprovalSignature] = useState(false);
+  const [reportEdApprovalName, setReportEdApprovalName] = useState("");
+  const [reportEdApprovalPosition, setReportEdApprovalPosition] = useState("");
+  const [reportEdApprovalDate, setReportEdApprovalDate] = useState("");
   const [maintenanceReportShowPendingDetails, setMaintenanceReportShowPendingDetails] = useState(true);
   const [maintenanceQuickTemplate, setMaintenanceQuickTemplate] = useState<MaintenanceQuickTemplateKey>("manual");
   const [maintenanceReportNote, setMaintenanceReportNote] = useState("");
@@ -39763,9 +39787,23 @@ export default function App() {
     ]);
   }, []);
   const resetReportFilters = useCallback(() => {
+    setReportShowSignatureMeta(true);
+    setReportIncludePreparedBySignature(false);
+    setReportPreparedByName("");
+    setReportPreparedByPosition("");
+    setReportPreparedByDate("");
     setReportIncludeStaffSignature(false);
+    setReportStaffSignatureName("");
+    setReportStaffSignaturePosition("");
+    setReportStaffSignatureDate("");
     setReportIncludeSupervisorSignature(false);
+    setReportSupervisorSignatureName("");
+    setReportSupervisorSignaturePosition("");
+    setReportSupervisorSignatureDate("");
     setReportIncludeEdApprovalSignature(false);
+    setReportEdApprovalName("");
+    setReportEdApprovalPosition("");
+    setReportEdApprovalDate("");
     if (reportType === "asset_full_record") {
       setReportAssetIdFilter("");
       setQrLabelEntityType("asset");
@@ -39921,9 +39959,23 @@ export default function App() {
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
     setReportDateTo(ymd);
+    setReportShowSignatureMeta(true);
+    setReportIncludePreparedBySignature(false);
+    setReportPreparedByName("");
+    setReportPreparedByPosition("");
+    setReportPreparedByDate("");
     setReportIncludeStaffSignature(false);
+    setReportStaffSignatureName("");
+    setReportStaffSignaturePosition("");
+    setReportStaffSignatureDate("");
     setReportIncludeSupervisorSignature(false);
+    setReportSupervisorSignatureName("");
+    setReportSupervisorSignaturePosition("");
+    setReportSupervisorSignatureDate("");
     setReportIncludeEdApprovalSignature(false);
+    setReportEdApprovalName("");
+    setReportEdApprovalPosition("");
+    setReportEdApprovalDate("");
     setMaintenanceReportShowPendingDetails(true);
     setMaintenanceQuickTemplate("manual");
     setMaintenanceReportNote("");
@@ -42626,34 +42678,58 @@ export default function App() {
           <tbody>${tableHtml}</tbody>
         </table></div>`;
 
+    const buildReportSignatureMetaHtml = (fields: Array<{ label: string; value: string }>) => {
+      const visibleFields = fields.filter((field) => String(field.value || "").trim());
+      if (!reportShowSignatureMeta || !visibleFields.length) return "";
+      return `<div class="report-signature-meta">${visibleFields
+        .map(
+          (field) =>
+            `<div class="report-signature-meta-line">${escapeHtml(field.label)} ${escapeHtml(field.value)}</div>`
+        )
+        .join("")}</div>`;
+    };
+    const buildReportSignatureCardHtml = (title: string, fields: Array<{ label: string; value: string }>) => {
+      const metaHtml = buildReportSignatureMetaHtml(fields);
+      return `<article class="report-signature-card${metaHtml ? "" : " report-signature-card-compact"}">
+        <div class="report-signature-title">${escapeHtml(title)}</div>
+        <div class="report-signature-body"></div>
+        <div class="report-signature-line"></div>
+        ${metaHtml}
+      </article>`;
+    };
+
     const reportSignatureCards = [
+      reportIncludePreparedBySignature
+        ? buildReportSignatureCardHtml(lang === "km" ? "រៀបចំដោយ" : "Prepared By", [
+            { label: lang === "km" ? "ឈ្មោះ:" : "Name:", value: reportPreparedByName },
+            { label: lang === "km" ? "តួនាទី:" : "Position:", value: reportPreparedByPosition },
+            { label: lang === "km" ? "កាលបរិច្ឆេទ:" : "Date:", value: reportPreparedByDate },
+          ])
+        : "",
       reportIncludeStaffSignature
-        ? `<article class="report-signature-card">
-            <div class="report-signature-title">${escapeHtml(lang === "km" ? "រៀបចំដោយ" : "Prepared By")}</div>
-            <div class="report-signature-body"></div>
-            <div class="report-signature-line"></div>
-            <div class="report-signature-fields">
-              <span>${escapeHtml(lang === "km" ? "ឈ្មោះ" : "Name")}</span>
-              <span>${escapeHtml(lang === "km" ? "តួនាទី" : "Position")}</span>
-              <span>${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}</span>
-            </div>
-          </article>`
+        ? buildReportSignatureCardHtml(lang === "km" ? "ហត្ថលេខាបុគ្គលិក" : "Staff Signature", [
+            { label: lang === "km" ? "ឈ្មោះ:" : "Name:", value: reportStaffSignatureName },
+            { label: lang === "km" ? "តួនាទី:" : "Position:", value: reportStaffSignaturePosition },
+            { label: lang === "km" ? "កាលបរិច្ឆេទ:" : "Date:", value: reportStaffSignatureDate },
+          ])
+        : "",
+      reportIncludeSupervisorSignature
+        ? buildReportSignatureCardHtml(lang === "km" ? "ហត្ថលេខាអ្នកគ្រប់គ្រង" : "Supervisor Signature", [
+            { label: lang === "km" ? "ឈ្មោះ:" : "Name:", value: reportSupervisorSignatureName },
+            { label: lang === "km" ? "តួនាទី:" : "Position:", value: reportSupervisorSignaturePosition },
+            { label: lang === "km" ? "កាលបរិច្ឆេទ:" : "Date:", value: reportSupervisorSignatureDate },
+          ])
         : "",
       reportIncludeEdApprovalSignature
-        ? `<article class="report-signature-card">
-            <div class="report-signature-title">${escapeHtml(lang === "km" ? "អនុម័តដោយ" : "Approved By")}</div>
-            <div class="report-signature-body"></div>
-            <div class="report-signature-line"></div>
-            <div class="report-signature-fields">
-              <span>${escapeHtml(lang === "km" ? "ឈ្មោះ" : "Name")}</span>
-              <span>${escapeHtml(lang === "km" ? "តួនាទី" : "Position")}</span>
-              <span>${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}</span>
-            </div>
-          </article>`
+        ? buildReportSignatureCardHtml(lang === "km" ? "អនុម័តដោយ ED" : "Approved By ED", [
+            { label: lang === "km" ? "ឈ្មោះ:" : "Name:", value: reportEdApprovalName },
+            { label: lang === "km" ? "តួនាទី:" : "Position:", value: reportEdApprovalPosition },
+            { label: lang === "km" ? "កាលបរិច្ឆេទ:" : "Date:", value: reportEdApprovalDate },
+          ])
         : "",
     ].filter(Boolean);
     const reportSignatureHtml = reportSignatureCards.length
-      ? `<section class="report-signature-section">${reportSignatureCards.join("")}</section>`
+      ? `<section class="report-signature-section report-signature-section-count-${reportSignatureCards.length}">${reportSignatureCards.join("")}</section>`
       : "";
 
     const html = `
@@ -42982,22 +43058,38 @@ export default function App() {
             hyphens: none;
           }
           .report-signature-section {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
             gap: 18px;
             margin-top: 18px;
             align-items: start;
           }
           .report-signature-card {
+            box-sizing: border-box;
+            flex: 0 0 300px;
+            width: 300px;
+            max-width: 100%;
             border: 1px solid #d7ccb8;
             border-radius: 12px;
             background: #fffdf8;
             padding: 16px 18px 14px;
-            min-height: 128px;
+            min-height: 0;
             display: grid;
-            align-content: center;
-            justify-items: center;
-            text-align: center;
+            align-content: start;
+            justify-items: stretch;
+            text-align: left;
+          }
+          .report-signature-section-count-4 {
+            flex-wrap: nowrap;
+          }
+          .report-signature-section-count-4 .report-signature-card {
+            flex: 1 1 0;
+            width: auto;
+            min-width: 0;
+          }
+          .report-signature-card-compact {
+            min-height: 0;
           }
           .report-signature-title {
             font-size: 12px;
@@ -43005,28 +43097,31 @@ export default function App() {
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: #7a6647;
-            margin-bottom: 18px;
+            margin-bottom: 12px;
           }
           .report-signature-body {
-            min-height: 42px;
+            min-height: 64px;
             width: 100%;
+          }
+          .report-signature-card-compact .report-signature-body {
+            min-height: 48px;
           }
           .report-signature-line {
             border-top: 1px solid #977c55;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             width: 100%;
           }
-          .report-signature-fields {
+          .report-signature-meta {
             width: 100%;
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
+            gap: 4px;
             color: #7b6544;
             font-size: 10px;
-            text-align: center;
+            text-align: left;
           }
-          .report-signature-fields span {
+          .report-signature-meta-line {
             display: block;
+            min-height: 14px;
           }
           .report-signature-note {
             color: #7b6544;
@@ -66270,22 +66365,106 @@ function formatTicketRequestSource(value?: string) {
                       : "Tick the signature blocks you want to include in the printed report."}
                   </div>
                   <div className="report-signature-options-grid">
-                    <label className="report-checkbox report-signature-option">
-                      <input
-                        type="checkbox"
-                        checked={reportIncludeStaffSignature}
-                        onChange={(e) => setReportIncludeStaffSignature(e.target.checked)}
-                      />
-                      <span>{lang === "km" ? "រៀបចំដោយ" : "Prepared By"}</span>
-                    </label>
-                    <label className="report-checkbox report-signature-option">
-                      <input
-                        type="checkbox"
-                        checked={reportIncludeEdApprovalSignature}
-                        onChange={(e) => setReportIncludeEdApprovalSignature(e.target.checked)}
-                      />
-                      <span>{lang === "km" ? "អនុម័តដោយ" : "Approved By"}</span>
-                    </label>
+                    <div className="report-signature-option-card">
+                      <label className="report-checkbox report-signature-option">
+                        <input
+                          type="checkbox"
+                          checked={reportIncludePreparedBySignature}
+                          onChange={(e) => setReportIncludePreparedBySignature(e.target.checked)}
+                        />
+                        <span>{lang === "km" ? "រៀបចំដោយ" : "Prepared By"}</span>
+                      </label>
+                      {reportIncludePreparedBySignature ? (
+                        <div className="report-signature-input-grid">
+                          <input className="input" value={reportPreparedByName} onChange={(e) => setReportPreparedByName(e.target.value)} placeholder="Name" />
+                          <input className="input" value={reportPreparedByPosition} onChange={(e) => setReportPreparedByPosition(e.target.value)} placeholder="Position" />
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="text"
+                            value={reportPreparedByDate}
+                            onChange={(e) => setReportPreparedByDate(e.target.value)}
+                            onBlur={(e) => setReportPreparedByDate(formatSignatureDateValue(e.target.value))}
+                            placeholder="dd-mmm-yyyy"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="report-signature-option-card">
+                      <label className="report-checkbox report-signature-option">
+                        <input
+                          type="checkbox"
+                          checked={reportIncludeStaffSignature}
+                          onChange={(e) => setReportIncludeStaffSignature(e.target.checked)}
+                        />
+                        <span>{lang === "km" ? "ហត្ថលេខាបុគ្គលិក" : "Staff Signature"}</span>
+                      </label>
+                      {reportIncludeStaffSignature ? (
+                        <div className="report-signature-input-grid">
+                          <input className="input" value={reportStaffSignatureName} onChange={(e) => setReportStaffSignatureName(e.target.value)} placeholder="Name" />
+                          <input className="input" value={reportStaffSignaturePosition} onChange={(e) => setReportStaffSignaturePosition(e.target.value)} placeholder="Position" />
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="text"
+                            value={reportStaffSignatureDate}
+                            onChange={(e) => setReportStaffSignatureDate(e.target.value)}
+                            onBlur={(e) => setReportStaffSignatureDate(formatSignatureDateValue(e.target.value))}
+                            placeholder="dd-mmm-yyyy"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="report-signature-option-card">
+                      <label className="report-checkbox report-signature-option">
+                        <input
+                          type="checkbox"
+                          checked={reportIncludeSupervisorSignature}
+                          onChange={(e) => setReportIncludeSupervisorSignature(e.target.checked)}
+                        />
+                        <span>{lang === "km" ? "ហត្ថលេខាអ្នកគ្រប់គ្រង" : "Supervisor Signature"}</span>
+                      </label>
+                      {reportIncludeSupervisorSignature ? (
+                        <div className="report-signature-input-grid">
+                          <input className="input" value={reportSupervisorSignatureName} onChange={(e) => setReportSupervisorSignatureName(e.target.value)} placeholder="Name" />
+                          <input className="input" value={reportSupervisorSignaturePosition} onChange={(e) => setReportSupervisorSignaturePosition(e.target.value)} placeholder="Position" />
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="text"
+                            value={reportSupervisorSignatureDate}
+                            onChange={(e) => setReportSupervisorSignatureDate(e.target.value)}
+                            onBlur={(e) => setReportSupervisorSignatureDate(formatSignatureDateValue(e.target.value))}
+                            placeholder="dd-mmm-yyyy"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="report-signature-option-card">
+                      <label className="report-checkbox report-signature-option">
+                        <input
+                          type="checkbox"
+                          checked={reportIncludeEdApprovalSignature}
+                          onChange={(e) => setReportIncludeEdApprovalSignature(e.target.checked)}
+                        />
+                        <span>{lang === "km" ? "អនុម័តដោយ ED" : "Approved By ED"}</span>
+                      </label>
+                      {reportIncludeEdApprovalSignature ? (
+                        <div className="report-signature-input-grid">
+                          <input className="input" value={reportEdApprovalName} onChange={(e) => setReportEdApprovalName(e.target.value)} placeholder="Name" />
+                          <input className="input" value={reportEdApprovalPosition} onChange={(e) => setReportEdApprovalPosition(e.target.value)} placeholder="Position" />
+                          <input
+                            className="input"
+                            type="text"
+                            inputMode="text"
+                            value={reportEdApprovalDate}
+                            onChange={(e) => setReportEdApprovalDate(e.target.value)}
+                            onBlur={(e) => setReportEdApprovalDate(formatSignatureDateValue(e.target.value))}
+                            placeholder="dd-mmm-yyyy"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ) : null}

@@ -5116,14 +5116,25 @@ h2 {
 
 .report-signature-options-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
+.report-signature-option-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
 .report-signature-option {
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 52px;
   background: rgba(248, 251, 255, 0.96);
+}
+
+.report-signature-input-grid {
+  display: grid;
+  gap: 8px;
 }
 
 .report-panel-it-vault {
