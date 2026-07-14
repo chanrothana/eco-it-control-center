@@ -10435,7 +10435,7 @@ export default function App() {
           return [
             {
               key: "pool.dashboard",
-              label: lang === "km" ? "ផ្ទាំងសង្ខេប" : "Dashboard",
+              label: lang === "km" ? "កំណត់ត្រាប្រចាំថ្ងៃ" : "Daily Record",
               active: poolView === "dashboard",
               onSelect: () =>
                 startTabTransition(() => {
@@ -11103,10 +11103,9 @@ export default function App() {
     "code",
     "photo",
     "name",
-    "campus",
     "location",
-    "unit",
     "amount",
+    "unit",
     "checkStatus",
   ]);
   const [maintenanceReportExpandedRows, setMaintenanceReportExpandedRows] = useState<Record<string, boolean>>({});
@@ -18938,6 +18937,62 @@ export default function App() {
     activePoolOperationRecords,
     todayYmd,
   ]);
+  const poolDailyTimeline = useMemo(() => {
+    const rows = [
+      ...activePoolCleaningSchedules.map((row) => ({
+        id: `clean-${row.id}`,
+        sortKey: `${row.date || ""} ${row.created || ""}`,
+        timeLabel: formatDate(row.date || "-"),
+        type: "Cleaning",
+        title: row.task || "Cleaning task",
+        detail: `${row.shift || "-"} | ${row.status || "Pending"}${row.assignedTo ? ` | ${row.assignedTo}` : ""}`,
+        note: row.note || "",
+      })),
+      ...activePoolChemicalRecords.map((row) => ({
+        id: `chemical-${row.id}`,
+        sortKey: `${row.datetime || ""} ${row.created || ""}`,
+        timeLabel: formatDateTime(row.datetime || "-"),
+        type: "Chemical",
+        title: `pH ${row.ph ?? "-"} | Free Cl ${row.chlorineFree ?? "-"}`,
+        detail: `${row.operator || "-"} | Temp ${row.temperature ?? "-"}`,
+        note: row.note || "",
+      })),
+      ...activePoolOperationRecords.map((row) => ({
+        id: `operation-${row.id}`,
+        sortKey: `${row.datetime || ""} ${row.created || ""}`,
+        timeLabel: formatDateTime(row.datetime || "-"),
+        type: "Operation",
+        title: `Pump ${row.pumpStatus || "-"} | Pressure ${row.filterPressure ?? "-"}`,
+        detail: `${row.timerMode || "-"}${row.operator ? ` | ${row.operator}` : ""}`,
+        note: row.note || "",
+      })),
+      ...activePoolComplaints.map((row) => ({
+        id: `issue-${row.id}`,
+        sortKey: `${row.date || ""} ${row.created || ""}`,
+        timeLabel: formatDate(row.date || "-"),
+        type: row.entryType === "Comment" ? "Remark" : "Issue",
+        title: row.condition || row.entryType || "Pool note",
+        detail: `${row.teacher || "-"} | ${row.status || "-"}${row.severity ? ` | ${row.severity}` : ""}`,
+        note: row.note || "",
+      })),
+    ];
+    return rows.sort((a, b) => b.sortKey.localeCompare(a.sortKey)).slice(0, 8);
+  }, [
+    activePoolChemicalRecords,
+    activePoolCleaningSchedules,
+    activePoolComplaints,
+    activePoolOperationRecords,
+  ]);
+  const poolUpcomingSchedulePreview = useMemo(() => {
+    return [...activePoolCleaningSchedules]
+      .sort((a, b) => {
+        const aKey = `${a.date || ""} ${a.shift || ""} ${a.created || ""}`;
+        const bKey = `${b.date || ""} ${b.shift || ""} ${b.created || ""}`;
+        return aKey.localeCompare(bKey);
+      })
+      .filter((row) => row.date >= todayYmd)
+      .slice(0, 6);
+  }, [activePoolCleaningSchedules, todayYmd]);
 
   const setupLocations = useMemo(
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === locationCampus)),
@@ -39496,30 +39551,27 @@ export default function App() {
     () =>
       reportInventoryIsToolGroup
         ? [
-            { key: "code", label: "Code" },
+            { key: "code", label: lang === "km" ? "កូដ" : "Code" },
             { key: "photo", label: t.photo },
-            { key: "name", label: "Name" },
-            { key: "campus", label: t.campus },
+            { key: "name", label: lang === "km" ? "ឈ្មោះ" : "Name" },
             { key: "location", label: t.location },
-            { key: "owner", label: "Owner" },
-            { key: "responsible", label: "Responsible" },
-            { key: "unit", label: "Unit" },
-            { key: "amount", label: "Amount" },
+            { key: "amount", label: lang === "km" ? "ចំនួន" : "Amount" },
+            { key: "unit", label: lang === "km" ? "ឯកតា" : "Unit" },
             { key: "checkStatus", label: lang === "km" ? "ស្ថានភាពត្រួតពិនិត្យ" : "Check Status" },
           ]
         : [
-            { key: "code", label: "Code" },
+            { key: "code", label: lang === "km" ? "កូដ" : "Code" },
             { key: "photo", label: t.photo },
-            { key: "name", label: "Name" },
-            { key: "category", label: "Category" },
+            { key: "name", label: lang === "km" ? "ឈ្មោះ" : "Name" },
+            { key: "category", label: lang === "km" ? "ប្រភេទ" : "Category" },
             { key: "campus", label: t.campus },
             { key: "location", label: t.location },
-            { key: "unit", label: "Unit" },
-            { key: "stockIn", label: "Stock In" },
-            { key: "stockOut", label: "Stock Out" },
-            { key: "current", label: "Current" },
-            { key: "min", label: "Min" },
-            { key: "alert", label: "Alert" },
+            { key: "unit", label: lang === "km" ? "ឯកតា" : "Unit" },
+            { key: "stockIn", label: lang === "km" ? "ចូលស្តុក" : "Stock In" },
+            { key: "stockOut", label: lang === "km" ? "ចេញស្តុក" : "Stock Out" },
+            { key: "current", label: lang === "km" ? "នៅសល់" : "Current" },
+            { key: "min", label: lang === "km" ? "អប្បបរមា" : "Min" },
+            { key: "alert", label: lang === "km" ? "ជូនដំណឹង" : "Alert" },
           ],
     [lang, reportInventoryIsToolGroup, t.photo, t.campus, t.location]
   );
@@ -41338,9 +41390,9 @@ export default function App() {
             reportInventoryGroupFilter !== "ALL" &&
             reportInventoryGroupFilterLabel
           )
-            ? `${reportInventoryGroupFilterLabel} Report`
-            : "Inventory Tool Balance Report"
-        : "Inventory Stock Balance Report";
+            ? `${reportInventoryGroupFilterLabel} ${lang === "km" ? "របាយការណ៍" : "Report"}`
+            : (lang === "km" ? "របាយការណ៍សមតុល្យឧបករណ៍" : "Inventory Tool Balance Report")
+        : (lang === "km" ? "របាយការណ៍សមតុល្យស្តុក" : "Inventory Stock Balance Report");
       columns = visibleInventoryReportColumnDefs.map((column) => column.label);
       rows = reportInventoryRows.map((row) => [
         ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
@@ -41527,7 +41579,7 @@ export default function App() {
     }
 
     if (reportType !== "qr_labels" && reportType !== "asset_full_record") {
-      columns = ["No.", ...columns];
+      columns = [lang === "km" ? "ល.រ" : "No.", ...columns];
       rows = rows.map((row, index) => [String(index + 1), ...row]);
     }
 
@@ -41579,9 +41631,16 @@ export default function App() {
       if (!headers.length) return [] as number[];
       const weights = headers.map((header, index) => {
         const label = String(header || "").trim().toLowerCase();
-        if (index === 0 && (label === "no." || label === "no")) return 5;
+        if (index === 0 && (label === "no." || label === "no" || label === "ល.រ")) return 5;
         if (label.includes("date")) return 10;
         if (label.includes("asset id")) return 14;
+        if (label.includes("កូដ")) return 11;
+        if (label.includes("រូប")) return 8;
+        if (label.includes("ឈ្មោះ")) return 18;
+        if (label.includes("ទីតាំង")) return 18;
+        if (label.includes("ចំនួន")) return 8;
+        if (label.includes("ឯកតា")) return 7;
+        if (label.includes("ស្ថានភាព")) return 14;
         if (label.includes("location")) return 18;
         if (label.includes("maintenance type")) return 14;
         if (label.includes("work status")) return 12;
@@ -42632,18 +42691,18 @@ export default function App() {
                             return `<tr>${cells.map((cell) => printableCellHtml(cell)).join("")}</tr>`;
                           })
                           .join("")
-                      : `<tr><td colspan="${visibleInventoryReportColumnDefs.length + 1}">No tools in this section.</td></tr>`;
+                      : `<tr><td colspan="${visibleInventoryReportColumnDefs.length + 1}">${escapeHtml(lang === "km" ? "មិនមានឧបករណ៍នៅក្នុងផ្នែកនេះទេ។" : "No tools in this section.")}</td></tr>`;
                     return `<section class="inventory-preview-subsection">
                       <div class="inventory-preview-subsection-head">
                         <h4>${escapeHtml(section.title)}</h4>
                         <div class="inventory-preview-page-meta">
-                          <span>Items: ${section.rows.length}</span>
-                          <span>Low Stock: ${section.rows.filter((row) => row.lowStock).length}</span>
+                          <span>${escapeHtml(lang === "km" ? "ចំនួន" : "Items")}: ${section.rows.length}</span>
+                          <span>${escapeHtml(lang === "km" ? "ស្តុកទាប" : "Low Stock")}: ${section.rows.filter((row) => row.lowStock).length}</span>
                         </div>
                       </div>
                       <div class="preview-table-wrap inventory-preview-table-wrap">
                         <table class="preview-report-table inventory-preview-report-table">
-                          <thead><tr><th>No.</th>${visibleInventoryReportColumnDefs.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
+                          <thead><tr><th>${escapeHtml(lang === "km" ? "ល.រ" : "No.")}</th>${visibleInventoryReportColumnDefs.map((column) => `<th>${escapeHtml(column.label)}</th>`).join("")}</tr></thead>
                           <tbody>${sectionRowsHtml}</tbody>
                         </table>
                       </div>
@@ -42653,13 +42712,13 @@ export default function App() {
                 return `<section class="inventory-preview-page${pageIndex < reportInventoryToolPages.length - 1 ? " inventory-preview-page-break" : ""}">
                   <div class="inventory-preview-page-head">
                     <div>
-                      <div class="inventory-preview-page-kicker">Tool Report Page ${pageIndex + 1}</div>
+                      <div class="inventory-preview-page-kicker">${escapeHtml(lang === "km" ? `ទំព័ររបាយការណ៍ឧបករណ៍ ${pageIndex + 1}` : `Tool Report Page ${pageIndex + 1}`)}</div>
                       <h3>${escapeHtml(page.title)}</h3>
                       <p>${escapeHtml(page.description)}</p>
                     </div>
                     <div class="inventory-preview-page-meta">
-                      <span>Items: ${page.rows.length}</span>
-                      <span>Low Stock: ${page.rows.filter((row) => row.lowStock).length}</span>
+                      <span>${escapeHtml(lang === "km" ? "ចំនួន" : "Items")}: ${page.rows.length}</span>
+                      <span>${escapeHtml(lang === "km" ? "ស្តុកទាប" : "Low Stock")}: ${page.rows.filter((row) => row.lowStock).length}</span>
                     </div>
                   </div>
                   ${pageSectionsHtml}
@@ -42668,7 +42727,7 @@ export default function App() {
               .join("")
           : `<div class="preview-table-wrap">
               <table class="preview-report-table">
-                <tbody><tr><td>${escapeHtml(reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data.")}</td></tr></tbody>
+                <tbody><tr><td>${escapeHtml(reportInventoryMode === "low" ? (lang === "km" ? "មិនមានស្តុកទាបទេ។" : "No low stock alerts.") : (lang === "km" ? "មិនមានទិន្នន័យសមតុល្យស្តុកទេ។" : "No stock balance data."))}</td></tr></tbody>
               </table>
             </div>`
         : `<div class="preview-table-wrap">
@@ -59967,22 +60026,22 @@ function formatTicketRequestSource(value?: string) {
 
                 <div className="tabs pool-view-tabs">
                   <button className={`tab ${poolView === "dashboard" ? "tab-active" : ""}`} onClick={() => setPoolView("dashboard")}>
-                    Dashboard
+                    Daily Record
                   </button>
                   <button className={`tab ${poolView === "schedule" ? "tab-active" : ""}`} onClick={() => setPoolView("schedule")}>
-                    {t.cleaningSchedule}
+                    Cleaning
                   </button>
                   <button className={`tab ${poolView === "equipment" ? "tab-active" : ""}`} onClick={() => setPoolView("equipment")}>
-                    {t.cleaningEquipment}
+                    Equipment
                   </button>
                   <button className={`tab ${poolView === "chemical" ? "tab-active" : ""}`} onClick={() => setPoolView("chemical")}>
-                    {t.addChemicalRecord}
+                    Chemical Log
                   </button>
                   <button className={`tab ${poolView === "operations" ? "tab-active" : ""}`} onClick={() => setPoolView("operations")}>
-                    {t.operationRecord}
+                    Operations
                   </button>
                   <button className={`tab ${poolView === "complaints" ? "tab-active" : ""}`} onClick={() => setPoolView("complaints")}>
-                    {t.poolComplaints}
+                    Issues
                   </button>
                 </div>
 
@@ -60041,14 +60100,14 @@ function formatTicketRequestSource(value?: string) {
               </div>
               {poolView === "dashboard" ? (
                 <>
-                  <div className="pool-dashboard-layout">
-                    <section className="pool-dashboard-summary-card">
+                  <div className="pool-daily-layout">
+                    <section className="pool-daily-main-card">
                       <div className="pool-dashboard-headline">
                         <div>
-                          <div className="pool-dashboard-kicker">Today Overview</div>
-                          <h3 className="section-title">Swimming Pool Operation Dashboard</h3>
+                          <div className="pool-dashboard-kicker">Daily Record</div>
+                          <h3 className="section-title">Simple Daily Pool Control</h3>
                           <div className="tiny">
-                            {activePoolLabel}{poolInfo.sizeM3 ? ` | Size ${poolInfo.sizeM3} m3` : ""}
+                            Staff can record the daily work fast, and managers can still review everything in the same place.
                           </div>
                         </div>
                         <div className="pool-dashboard-badges">
@@ -60059,94 +60118,160 @@ function formatTicketRequestSource(value?: string) {
                             Pump {poolDashboardData.latestOperation?.pumpStatus || "-"}
                           </span>
                           <span className={`pool-badge ${poolDashboardData.overdueCleaning.length ? "pool-badge-alert" : "pool-badge-good"}`}>
-                            Overdue Tasks {poolDashboardData.overdueCleaning.length}
+                            Overdue {poolDashboardData.overdueCleaning.length}
                           </span>
                         </div>
                       </div>
 
+                      <div className="pool-daily-action-grid">
+                        <button type="button" className="pool-daily-action-card" onClick={() => setPoolView("chemical")}>
+                          <span>Chemical Record</span>
+                          <strong>Add water test result</strong>
+                          <small>pH, chlorine, temperature, operator</small>
+                        </button>
+                        <button type="button" className="pool-daily-action-card" onClick={() => setPoolView("schedule")}>
+                          <span>Cleaning Record</span>
+                          <strong>Update cleaning task</strong>
+                          <small>Shift, task, staff, done status</small>
+                        </button>
+                        <button type="button" className="pool-daily-action-card" onClick={() => setPoolView("operations")}>
+                          <span>Operation Record</span>
+                          <strong>Log pump and filter</strong>
+                          <small>Pump status, timer mode, pressure</small>
+                        </button>
+                        <button type="button" className="pool-daily-action-card" onClick={() => setPoolView("complaints")}>
+                          <span>Issue / Remark</span>
+                          <strong>Report problem or comment</strong>
+                          <small>Complaint, comment, severity, photo</small>
+                        </button>
+                      </div>
+
                       <div className="pool-dashboard-grid">
                         <article className="pool-metric-card">
-                          <div className="pool-metric-label">Open Complaints</div>
-                          <div className="pool-metric-value">{poolDashboardData.openComplaints.length}</div>
-                          <div className="tiny">Waiting for resolution</div>
-                        </article>
-                        <article className="pool-metric-card">
-                          <div className="pool-metric-label">Critical / High</div>
-                          <div className="pool-metric-value">{poolDashboardData.criticalComplaints.length}</div>
-                          <div className="tiny">Immediate action items</div>
-                        </article>
-                        <article className="pool-metric-card">
-                          <div className="pool-metric-label">Pending Cleaning</div>
+                          <div className="pool-metric-label">Pending Today</div>
                           <div className="pool-metric-value">{poolDashboardData.pendingCleaningToday.length}</div>
-                          <div className="tiny">Scheduled today but not done</div>
+                          <div className="tiny">Cleaning items still waiting</div>
                         </article>
                         <article className="pool-metric-card">
-                          <div className="pool-metric-label">Positive Comments</div>
-                          <div className="pool-metric-value">{poolDashboardData.positiveComments.length}</div>
-                          <div className="tiny">Good condition remarks</div>
+                          <div className="pool-metric-label">Open Issues</div>
+                          <div className="pool-metric-value">{poolDashboardData.openComplaints.length}</div>
+                          <div className="tiny">Complaint items not resolved</div>
                         </article>
-                      </div>
-
-                      <div className="pool-dashboard-health">
-                        <article className={`pool-health-tile ${poolDashboardData.phInRange ? "is-good" : "is-alert"}`}>
-                          <div className="pool-health-title">Latest pH</div>
-                          <div className="pool-health-value">{poolDashboardData.latestChemical?.ph ?? "-"}</div>
+                        <article className="pool-metric-card">
+                          <div className="pool-metric-label">Latest pH</div>
+                          <div className="pool-metric-value">{poolDashboardData.latestChemical?.ph ?? "-"}</div>
                           <div className="tiny">Target 7.2 - 7.8</div>
                         </article>
-                        <article className={`pool-health-tile ${poolDashboardData.chlorineInRange ? "is-good" : "is-alert"}`}>
-                          <div className="pool-health-title">Free Chlorine</div>
-                          <div className="pool-health-value">{poolDashboardData.latestChemical?.chlorineFree ?? "-"}</div>
-                          <div className="tiny">Target 1.0 - 3.0 ppm</div>
+                        <article className="pool-metric-card">
+                          <div className="pool-metric-label">Filter Pressure</div>
+                          <div className="pool-metric-value">{poolDashboardData.latestOperation?.filterPressure ?? "-"}</div>
+                          <div className="tiny">Check if above 2.2 bar</div>
                         </article>
-                        <article className={`pool-health-tile ${poolDashboardData.latestOperation?.pumpStatus === "On" ? "is-good" : "is-alert"}`}>
-                          <div className="pool-health-title">Pump Status</div>
-                          <div className="pool-health-value">{poolDashboardData.latestOperation?.pumpStatus || "-"}</div>
-                          <div className="tiny">Current operation record</div>
-                        </article>
-                        <article className={`pool-health-tile ${poolDashboardData.pressureHigh ? "is-alert" : "is-good"}`}>
-                          <div className="pool-health-title">Filter Pressure</div>
-                          <div className="pool-health-value">{poolDashboardData.latestOperation?.filterPressure ?? "-"}</div>
-                          <div className="tiny">Alert if above 2.2 bar</div>
-                        </article>
-                      </div>
-
-                      <div className="pool-dashboard-quick-actions">
-                        <button type="button" className="tab" onClick={() => setPoolView("complaints")}>Manage Complaints</button>
-                        <button type="button" className="tab" onClick={() => setPoolView("schedule")}>Update Cleaning</button>
-                        <button type="button" className="tab" onClick={() => setPoolView("chemical")}>Add Chemical Log</button>
-                        <button type="button" className="tab" onClick={() => setPoolView("operations")}>Add Operation Log</button>
                       </div>
                     </section>
 
-                    <section className="pool-dashboard-focus-card">
-                      <div className="pool-dashboard-kicker">At A Glance</div>
-                      <h3 className="section-title">Today&apos;s Focus</h3>
+                    <section className="pool-daily-side-card">
+                      <div className="pool-dashboard-kicker">Manager Control</div>
+                      <h3 className="section-title">Quick Review</h3>
                       <div className="pool-focus-list">
                         <div className="pool-focus-item">
-                          <span>Water Chemistry</span>
-                          <strong>{poolDashboardData.waterQualityHealthy ? "Within standard range" : "Check chemical record"}</strong>
+                          <span>Active Pool</span>
+                          <strong>{activePoolLabel}</strong>
                         </div>
                         <div className="pool-focus-item">
-                          <span>Pump</span>
-                          <strong>{poolDashboardData.latestOperation?.pumpStatus || "No operation log yet"}</strong>
+                          <span>Chemical Status</span>
+                          <strong>{poolDashboardData.waterQualityHealthy ? "Within standard range" : "Need recheck"}</strong>
                         </div>
                         <div className="pool-focus-item">
-                          <span>Filter Pressure</span>
-                          <strong>{poolDashboardData.latestOperation?.filterPressure ?? "-"}</strong>
+                          <span>Latest Pump</span>
+                          <strong>{poolDashboardData.latestOperation?.pumpStatus || "No record yet"}</strong>
                         </div>
                         <div className="pool-focus-item">
-                          <span>Recent Positive Remarks</span>
+                          <span>Positive Remarks</span>
                           <strong>{poolDashboardData.positiveComments.length}</strong>
                         </div>
                       </div>
+                      <div className="pool-daily-manager-strip">
+                        <button type="button" className="tab" onClick={() => setPoolView("schedule")}>Cleaning List</button>
+                        <button type="button" className="tab" onClick={() => setPoolView("equipment")}>Equipment Check</button>
+                        <button type="button" className="tab" onClick={() => setPoolView("complaints")}>Issues List</button>
+                      </div>
                     </section>
 
-                    <div className="pool-dashboard-bottom">
-                      <div className="pool-dashboard-list-card">
+                    <section className="pool-daily-list-card">
                       <div className="panel-row">
-                        <h3 className="section-title">Immediate Action Items</h3>
+                        <h3 className="section-title">Service and Task Schedule</h3>
+                        <button type="button" className="tab btn-small" onClick={() => setPoolView("schedule")}>
+                          Open Full Schedule
+                        </button>
+                      </div>
+                      <div className="pool-daily-schedule-summary">
+                        <article className="pool-daily-schedule-stat">
+                          <span>Today</span>
+                          <strong>{poolDashboardData.pendingCleaningToday.length}</strong>
+                          <small>task(s) still pending</small>
+                        </article>
+                        <article className="pool-daily-schedule-stat">
+                          <span>Upcoming</span>
+                          <strong>{poolUpcomingSchedulePreview.length}</strong>
+                          <small>next service/task item(s)</small>
+                        </article>
+                        <article className="pool-daily-schedule-stat">
+                          <span>Overdue</span>
+                          <strong>{poolDashboardData.overdueCleaning.length}</strong>
+                          <small>need follow-up</small>
+                        </article>
+                      </div>
+                      <div className="pool-daily-schedule-grid">
+                        {poolUpcomingSchedulePreview.length ? (
+                          poolUpcomingSchedulePreview.map((row) => (
+                            <article key={`pool-upcoming-${row.id}`} className="pool-daily-schedule-card">
+                              <div className="pool-daily-schedule-date">{formatDate(row.date || "-")}</div>
+                              <strong>{row.task || "Pool task"}</strong>
+                              <span>{row.shift || "-"}</span>
+                              <small>
+                                {row.assignedTo || "No staff yet"} | {row.status || "Pending"}
+                              </small>
+                              {row.note ? <p>{row.note}</p> : null}
+                            </article>
+                          ))
+                        ) : (
+                          <div className="pool-empty-note">No upcoming service or task schedule yet.</div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="pool-daily-list-card">
+                      <div className="panel-row">
+                        <h3 className="section-title">Recent Activity</h3>
+                        <button type="button" className="tab btn-small" onClick={() => setPoolView("operations")}>
+                          Add Record
+                        </button>
+                      </div>
+                      <div className="pool-daily-timeline">
+                        {poolDailyTimeline.length ? (
+                          poolDailyTimeline.map((row) => (
+                            <article key={row.id} className="pool-daily-timeline-item">
+                              <div className="pool-daily-timeline-time">{row.timeLabel}</div>
+                              <div className="pool-daily-timeline-body">
+                                <span>{row.type}</span>
+                                <strong>{row.title}</strong>
+                                <small>{row.detail}</small>
+                                {row.note ? <p>{row.note}</p> : null}
+                              </div>
+                            </article>
+                          ))
+                        ) : (
+                          <div className="pool-empty-note">No pool records yet for this pool.</div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="pool-daily-list-card">
+                      <div className="panel-row">
+                        <h3 className="section-title">Need Attention</h3>
                         <button type="button" className="tab btn-small" onClick={() => setPoolView("complaints")}>
-                          View All
+                          Open Issues
                         </button>
                       </div>
                       {poolDashboardData.criticalComplaints.length ? (
@@ -60159,7 +60284,7 @@ function formatTicketRequestSource(value?: string) {
                           ))}
                         </ul>
                       ) : (
-                        <div className="pool-empty-note">No critical complaints right now.</div>
+                        <div className="pool-empty-note">No critical complaint right now.</div>
                       )}
                       <div className="pool-secondary-alerts">
                         {poolDashboardData.overdueCleaning.length ? (
@@ -60168,39 +60293,12 @@ function formatTicketRequestSource(value?: string) {
                           <div className="pool-secondary-ok">No overdue cleaning tasks.</div>
                         )}
                         {!poolDashboardData.waterQualityHealthy ? (
-                          <div className="pool-secondary-alert">Water chemistry out of range. Recheck chemical record.</div>
+                          <div className="pool-secondary-alert">Water chemistry is out of range. Please check chemical record.</div>
                         ) : (
-                          <div className="pool-secondary-ok">Water chemistry within standard range.</div>
+                          <div className="pool-secondary-ok">Water chemistry is in the standard range.</div>
                         )}
                       </div>
-                      </div>
-                      <div className="pool-dashboard-list-card">
-                      <div className="panel-row">
-                        <h3 className="section-title">Pool Remarks Feed (Teacher / Staff)</h3>
-                        <button type="button" className="tab btn-small" onClick={() => setPoolView("complaints")}>
-                          Add Remark
-                        </button>
-                      </div>
-                      <div className="pool-remark-feed">
-                        {poolDashboardData.recentComplaints.length ? (
-                          poolDashboardData.recentComplaints.slice(0, 6).map((row) => (
-                            <article
-                              key={`pool-remark-feed-${row.id}`}
-                              className={`pool-remark-item ${row.entryType === "Complaint" ? "is-complaint" : "is-comment"}`}
-                            >
-                              <div className="pool-remark-main">
-                                <strong>{row.condition}</strong>
-                                <span>{formatDate(row.date)} | {row.teacher} | {row.severity} | {row.status}</span>
-                              </div>
-                              {row.photo ? <img loading="lazy" decoding="async" src={row.photo} alt="pool incident" className="pool-remark-photo" /> : null}
-                            </article>
-                          ))
-                        ) : (
-                          <div className="pool-empty-note">No remarks yet.</div>
-                        )}
-                      </div>
-                      </div>
-                    </div>
+                    </section>
                   </div>
                 </>
               ) : null}
@@ -67485,13 +67583,19 @@ function formatTicketRequestSource(value?: string) {
                       <section key={`report-inventory-page-${page.key}`} className="report-inventory-page-card">
                         <div className="report-inventory-page-head">
                           <div>
-                            <div className="report-inventory-page-kicker">Tool Report Page {pageIndex + 1}</div>
+                            <div className="report-inventory-page-kicker">
+                              {lang === "km" ? `ទំព័ររបាយការណ៍ឧបករណ៍ ${pageIndex + 1}` : `Tool Report Page ${pageIndex + 1}`}
+                            </div>
                             <h4>{page.title}</h4>
                             <p className="report-inventory-page-copy">{page.description}</p>
                           </div>
                           <div className="report-inventory-page-stats">
-                            <span>{page.rows.length} items</span>
-                            <span>{page.rows.filter((row) => row.lowStock).length} low stock</span>
+                            <span>
+                              {page.rows.length} {lang === "km" ? "ធាតុ" : "items"}
+                            </span>
+                            <span>
+                              {page.rows.filter((row) => row.lowStock).length} {lang === "km" ? "ស្តុកទាប" : "low stock"}
+                            </span>
                           </div>
                         </div>
                         <div className="report-inventory-page-sections">
@@ -67502,8 +67606,12 @@ function formatTicketRequestSource(value?: string) {
                                   <h5>{section.title}</h5>
                                 </div>
                                 <div className="report-inventory-subsection-stats">
-                                  <span>{section.rows.length} items</span>
-                                  <span>{section.rows.filter((row) => row.lowStock).length} low stock</span>
+                                  <span>
+                                    {section.rows.length} {lang === "km" ? "ធាតុ" : "items"}
+                                  </span>
+                                  <span>
+                                    {section.rows.filter((row) => row.lowStock).length} {lang === "km" ? "ស្តុកទាប" : "low stock"}
+                                  </span>
                                 </div>
                               </div>
                               <div className="table-wrap report-table-wrap report-table-wrap-inventory report-table-wrap-inventory-page">
@@ -67532,7 +67640,9 @@ function formatTicketRequestSource(value?: string) {
                                       ))
                                     ) : (
                                       <tr>
-                                        <td colSpan={Math.max(visibleInventoryReportColumnDefs.length, 1)}>No tools in this section.</td>
+                                        <td colSpan={Math.max(visibleInventoryReportColumnDefs.length, 1)}>
+                                          {lang === "km" ? "មិនមានឧបករណ៍នៅក្នុងផ្នែកនេះទេ។" : "No tools in this section."}
+                                        </td>
                                       </tr>
                                     )}
                                   </tbody>
@@ -67549,7 +67659,9 @@ function formatTicketRequestSource(value?: string) {
                         <tbody>
                           <tr>
                             <td colSpan={10}>
-                              {reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data."}
+                              {reportInventoryMode === "low"
+                                ? (lang === "km" ? "មិនមានស្តុកទាបទេ។" : "No low stock alerts.")
+                                : (lang === "km" ? "មិនមានទិន្នន័យសមតុល្យស្តុកទេ។" : "No stock balance data.")}
                             </td>
                           </tr>
                         </tbody>
@@ -67587,7 +67699,9 @@ function formatTicketRequestSource(value?: string) {
                       ) : (
                         <tr>
                           <td colSpan={Math.max(visibleInventoryReportColumnDefs.length, 1)}>
-                            {reportInventoryMode === "low" ? "No low stock alerts." : "No stock balance data."}
+                            {reportInventoryMode === "low"
+                              ? (lang === "km" ? "មិនមានស្តុកទាបទេ។" : "No low stock alerts.")
+                              : (lang === "km" ? "មិនមានទិន្នន័យសមតុល្យស្តុកទេ។" : "No stock balance data.")}
                           </td>
                         </tr>
                       )}
@@ -70805,11 +70919,18 @@ function formatTicketRequestSource(value?: string) {
             <div className="form-grid">
               <label className="field">
                 <span>{t.campus}</span>
-                <select className="input" value={locationCampus} onChange={(e) => setLocationCampus(e.target.value)}>
-                  {campusOptions.map((campus) => (
-                    <option key={campus} value={campus}>{campusLabel(campus)}</option>
-                  ))}
-                </select>
+                <LocationPicker
+                  value={locationCampus}
+                  onChange={setLocationCampus}
+                  options={campusOptions.map((campus) => ({
+                    value: campus,
+                    label: campusLabel(campus),
+                    searchText: `${campus} ${campusLabel(campus)}`,
+                  }))}
+                  placeholder="Select campus"
+                  searchPlaceholder="Search campus..."
+                  emptyText="No campus found."
+                />
               </label>
               <label className="field">
                 <span>{t.locationName}</span>
