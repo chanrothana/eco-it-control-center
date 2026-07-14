@@ -4846,6 +4846,10 @@ h2 {
   gap: 10px;
 }
 
+.report-builder-actions-maintenance .report-builder-action-buttons-smart {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .report-builder-action-buttons-smart .btn-primary,
 .report-builder-action-buttons-smart .tab {
   width: 100%;
@@ -4884,6 +4888,19 @@ h2 {
   color: #ffd7a6;
   background: rgba(164, 104, 32, 0.16);
   border-color: rgba(210, 150, 80, 0.34);
+}
+
+.report-control-icon-btn-pending {
+  color: #d9e7ff;
+  background: rgba(88, 112, 155, 0.16);
+  border-color: rgba(132, 158, 214, 0.34);
+}
+
+.report-control-icon-btn-pending-active {
+  color: #f6fbff;
+  background: rgba(58, 106, 196, 0.24);
+  border-color: rgba(108, 156, 250, 0.52);
+  box-shadow: 0 12px 22px rgba(29, 69, 141, 0.2);
 }
 
 .report-mobile-filter-btn {
@@ -5051,6 +5068,10 @@ h2 {
   .report-filter-row-maintenance {
     grid-template-columns: 1fr;
   }
+
+  .report-signature-options-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .report-builder-inventory .report-filters-title {
@@ -5079,6 +5100,30 @@ h2 {
   width: 16px;
   height: 16px;
   accent-color: #2f73eb;
+}
+
+.report-signature-options-shell {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid rgba(120, 150, 198, 0.16);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
+    radial-gradient(circle at top right, rgba(74, 132, 233, 0.08), transparent 42%);
+}
+
+.report-signature-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.report-signature-option {
+  justify-content: center;
+  min-height: 52px;
+  background: rgba(248, 251, 255, 0.96);
 }
 
 .report-panel-it-vault {

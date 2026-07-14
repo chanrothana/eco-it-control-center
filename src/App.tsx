@@ -22,6 +22,7 @@ import {
   Keyboard,
   Laptop,
   Lightbulb,
+  List,
   Monitor,
   Mic,
   Mouse,
@@ -11047,6 +11048,10 @@ export default function App() {
   const [reportMaintenanceCampusFilter, setReportMaintenanceCampusFilter] = useState("ALL");
   const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
   const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
+  const [reportIncludeStaffSignature, setReportIncludeStaffSignature] = useState(false);
+  const [reportIncludeSupervisorSignature, setReportIncludeSupervisorSignature] = useState(false);
+  const [reportIncludeEdApprovalSignature, setReportIncludeEdApprovalSignature] = useState(false);
+  const [maintenanceReportShowPendingDetails, setMaintenanceReportShowPendingDetails] = useState(true);
   const [maintenanceQuickTemplate, setMaintenanceQuickTemplate] = useState<MaintenanceQuickTemplateKey>("manual");
   const [maintenanceReportNote, setMaintenanceReportNote] = useState("");
   const [reportAssetIdFilter, setReportAssetIdFilter] = useState("");
@@ -39416,12 +39421,12 @@ export default function App() {
       { key: "campus" as MaintenanceReportColumnKey, label: t.campus },
       { key: "location" as MaintenanceReportColumnKey, label: "Location" },
       { key: "type" as MaintenanceReportColumnKey, label: "Maintenance Type" },
+      { key: "note" as MaintenanceReportColumnKey, label: "Maintenance Remark" },
       { key: "completion" as MaintenanceReportColumnKey, label: "Work Status" },
       { key: "condition" as MaintenanceReportColumnKey, label: "Condition" },
       { key: "cost" as MaintenanceReportColumnKey, label: "Cost" },
       { key: "by" as MaintenanceReportColumnKey, label: "By" },
       { key: "reportFile" as MaintenanceReportColumnKey, label: "Report File" },
-      { key: "note" as MaintenanceReportColumnKey, label: "Maintenance Remark" },
     ],
     [t.assetId, t.campus]
   );
@@ -39677,6 +39682,13 @@ export default function App() {
       maintenanceCompletionSummaryChips.forEach((chip) => {
         if (chip) chips.push(chip);
       });
+      chips.push(
+        `${lang === "km" ? "ទ្រង់ទ្រាយមិនទាន់" : "Not Yet View"}: ${
+          maintenanceReportShowPendingDetails
+            ? (lang === "km" ? "បង្ហាញលម្អិត" : "Show Details")
+            : (lang === "km" ? "សង្ខេបតាមសាខា" : "Campus Summary")
+        }`
+      );
       if (maintenanceReportNote.trim()) {
         chips.push(`${lang === "km" ? "កំណត់ចំណាំ" : "Note"}: ${maintenanceReportNote.trim()}`);
       }
@@ -39694,6 +39706,7 @@ export default function App() {
   }, [
     lang,
     maintenanceReportNote,
+    maintenanceReportShowPendingDetails,
     maintenanceCompletionSummaryChips,
     campusFilterSummary,
     categoryFilterSummary,
@@ -39712,6 +39725,7 @@ export default function App() {
   ]);
   const reportFiltersCollapsedDesktop =
     reportType === "maintenance_completion" ? maintenanceReportFiltersCollapsed : reportDesktopFiltersCollapsed;
+  const showReportSignatureOptions = reportType !== "qr_labels";
   const hasReportFilters = useMemo(
     () =>
       reportType === "staff_borrowing" ||
@@ -39749,6 +39763,9 @@ export default function App() {
     ]);
   }, []);
   const resetReportFilters = useCallback(() => {
+    setReportIncludeStaffSignature(false);
+    setReportIncludeSupervisorSignature(false);
+    setReportIncludeEdApprovalSignature(false);
     if (reportType === "asset_full_record") {
       setReportAssetIdFilter("");
       setQrLabelEntityType("asset");
@@ -39786,6 +39803,7 @@ export default function App() {
       const ymd = toYmd(today);
       setMaintenanceQuickTemplate("manual");
       setMaintenanceReportNote("");
+      setMaintenanceReportShowPendingDetails(true);
       setReportDateFrom(`${ymd.slice(0, 7)}-01`);
       setReportDateTo(ymd);
       setReportAssetIdFilter("");
@@ -39903,6 +39921,10 @@ export default function App() {
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
     setReportDateTo(ymd);
+    setReportIncludeStaffSignature(false);
+    setReportIncludeSupervisorSignature(false);
+    setReportIncludeEdApprovalSignature(false);
+    setMaintenanceReportShowPendingDetails(true);
     setMaintenanceQuickTemplate("manual");
     setMaintenanceReportNote("");
     setReportYear(String(today.getFullYear()));
@@ -41492,6 +41514,9 @@ export default function App() {
       if (reportType === "staff_borrowing") {
         return [3, 12, 9, 11, 12, 11, 10, 10, 9, 13];
       }
+      if (reportType === "maintenance_completion") {
+        return [] as number[];
+      }
       const widths = readVisibleReportColumnWidths();
       if (widths.length === columns.length) return widths;
       if (!columns.length) return [] as number[];
@@ -41502,15 +41527,15 @@ export default function App() {
       if (!headers.length) return [] as number[];
       const weights = headers.map((header, index) => {
         const label = String(header || "").trim().toLowerCase();
-        if (index === 0 && (label === "no." || label === "no")) return 4;
+        if (index === 0 && (label === "no." || label === "no")) return 5;
         if (label.includes("date")) return 10;
-        if (label.includes("asset id")) return 13;
-        if (label.includes("location")) return 16;
+        if (label.includes("asset id")) return 14;
+        if (label.includes("location")) return 18;
         if (label.includes("maintenance type")) return 14;
-        if (label.includes("work status")) return 11;
+        if (label.includes("work status")) return 12;
         if (label === "type") return 10;
         if (label === "status") return 10;
-        if (label === "by") return 10;
+        if (label === "by") return 9;
         if (label.includes("campus")) return 13;
         if (label.includes("staff")) return 12;
         if (label.includes("assigned")) return 13;
@@ -41518,8 +41543,8 @@ export default function App() {
         if (label.includes("ack")) return 8;
         if (label.includes("condition")) return 16;
         if (label.includes("reason")) return 20;
-        if (label.includes("remark")) return 20;
-        if (label.includes("note")) return 20;
+        if (label.includes("remark")) return 22;
+        if (label.includes("note")) return 22;
         const contentLength = dataRows.reduce((max, row) => {
           const value = String(row[index] || "").replace(/\s+/g, " ").trim();
           return Math.max(max, value.length);
@@ -41969,6 +41994,8 @@ export default function App() {
     const previewTableClassName =
       reportType === "staff_borrowing"
         ? "preview-report-table preview-report-table-staff-borrowing"
+        : reportType === "maintenance_completion"
+          ? "preview-report-table preview-report-table-maintenance"
         : reportType === "inventory_balance"
           ? "preview-report-table preview-report-table-inventory"
         : "preview-report-table";
@@ -42264,6 +42291,25 @@ export default function App() {
                       ? "គ្មានទ្រព្យខកខានក្នុងតម្រងដែលបានជ្រើស។"
                       : "No missing assets in the selected filter."
                   )}</div>`
+              : !maintenanceReportShowPendingDetails
+                ? pendingCampusSections.length
+                  ? `<div class="maintenance-pending-list maintenance-pending-list-campus-summary">${pendingCampusSections
+                      .map((section) => {
+                        const campusCountLine =
+                          lang === "km"
+                            ? `មិនទាន់សរុប ${section.total} ទ្រព្យ`
+                            : `${section.total} asset(s) not yet done`;
+                        return `<article class="maintenance-pending-item maintenance-pending-item-campus-summary">
+                          <div class="maintenance-pending-item-main">${escapeHtml(section.campusName)}</div>
+                          <div class="maintenance-pending-item-sub maintenance-pending-item-sub-strong">${escapeHtml(campusCountLine)}</div>
+                        </article>`;
+                      })
+                      .join("")}</div>`
+                  : `<div class="maintenance-pending-empty">${escapeHtml(
+                      lang === "km"
+                        ? "គ្មានទ្រព្យខកខានក្នុងតម្រងដែលបានជ្រើស។"
+                        : "No missing assets in the selected filter."
+                    )}</div>`
               : pendingCampusSections.length
                 ? `<div class="maintenance-campus-sections">${pendingCampusSections
                     .map((section) => {
@@ -42580,21 +42626,35 @@ export default function App() {
           <tbody>${tableHtml}</tbody>
         </table></div>`;
 
-    const inventorySignatureHtml =
-      reportType === "inventory_balance"
-        ? `<section class="report-signature-section">
-            <article class="report-signature-card">
-              <div class="report-signature-title">${escapeHtml(lang === "km" ? "ហត្ថលេខាបុគ្គលិក" : "Staff Signature")}</div>
-              <div class="report-signature-line"></div>
-              <div class="report-signature-note">${escapeHtml(lang === "km" ? "ឈ្មោះ និងកាលបរិច្ឆេទ" : "Name and date")}</div>
-            </article>
-            <article class="report-signature-card">
-              <div class="report-signature-title">${escapeHtml(lang === "km" ? "ហត្ថលេខាអ្នកគ្រប់គ្រង" : "Supervisor Signature")}</div>
-              <div class="report-signature-line"></div>
-              <div class="report-signature-note">${escapeHtml(lang === "km" ? "ឈ្មោះ និងកាលបរិច្ឆេទ" : "Name and date")}</div>
-            </article>
-          </section>`
-        : "";
+    const reportSignatureCards = [
+      reportIncludeStaffSignature
+        ? `<article class="report-signature-card">
+            <div class="report-signature-title">${escapeHtml(lang === "km" ? "រៀបចំដោយ" : "Prepared By")}</div>
+            <div class="report-signature-body"></div>
+            <div class="report-signature-line"></div>
+            <div class="report-signature-fields">
+              <span>${escapeHtml(lang === "km" ? "ឈ្មោះ" : "Name")}</span>
+              <span>${escapeHtml(lang === "km" ? "តួនាទី" : "Position")}</span>
+              <span>${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}</span>
+            </div>
+          </article>`
+        : "",
+      reportIncludeEdApprovalSignature
+        ? `<article class="report-signature-card">
+            <div class="report-signature-title">${escapeHtml(lang === "km" ? "អនុម័តដោយ" : "Approved By")}</div>
+            <div class="report-signature-body"></div>
+            <div class="report-signature-line"></div>
+            <div class="report-signature-fields">
+              <span>${escapeHtml(lang === "km" ? "ឈ្មោះ" : "Name")}</span>
+              <span>${escapeHtml(lang === "km" ? "តួនាទី" : "Position")}</span>
+              <span>${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}</span>
+            </div>
+          </article>`
+        : "",
+    ].filter(Boolean);
+    const reportSignatureHtml = reportSignatureCards.length
+      ? `<section class="report-signature-section">${reportSignatureCards.join("")}</section>`
+      : "";
 
     const html = `
       <html>
@@ -42855,6 +42915,13 @@ export default function App() {
             background: #fff;
             padding: 9px 10px;
           }
+          .maintenance-pending-list-campus-summary {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+          .maintenance-pending-item-campus-summary {
+            min-height: 70px;
+            align-content: center;
+          }
           .maintenance-pending-item-main {
             font-size: 13px;
             font-weight: 800;
@@ -42886,6 +42953,19 @@ export default function App() {
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
           .preview-report-table th,
           .preview-report-table td { word-break: normal; overflow-wrap: break-word; hyphens: auto; }
+          .preview-report-table-maintenance {
+            table-layout: auto;
+          }
+          .preview-report-table-maintenance th {
+            white-space: nowrap;
+          }
+          .preview-report-table-maintenance td:nth-child(1),
+          .preview-report-table-maintenance td:nth-child(2),
+          .preview-report-table-maintenance td:nth-child(3),
+          .preview-report-table-maintenance td:nth-child(7),
+          .preview-report-table-maintenance td:nth-child(8) {
+            white-space: nowrap;
+          }
           .preview-report-table-inventory col:first-child {
             width: 3% !important;
           }
@@ -42906,25 +42986,47 @@ export default function App() {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 18px;
             margin-top: 18px;
+            align-items: start;
           }
           .report-signature-card {
             border: 1px solid #d7ccb8;
             border-radius: 12px;
             background: #fffdf8;
-            padding: 14px 16px 12px;
-            min-height: 94px;
+            padding: 16px 18px 14px;
+            min-height: 128px;
+            display: grid;
+            align-content: center;
+            justify-items: center;
+            text-align: center;
           }
           .report-signature-title {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 800;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: #7a6647;
-            margin-bottom: 34px;
+            margin-bottom: 18px;
+          }
+          .report-signature-body {
+            min-height: 42px;
+            width: 100%;
           }
           .report-signature-line {
             border-top: 1px solid #977c55;
-            margin-bottom: 6px;
+            margin-bottom: 10px;
+            width: 100%;
+          }
+          .report-signature-fields {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            color: #7b6544;
+            font-size: 10px;
+            text-align: center;
+          }
+          .report-signature-fields span {
+            display: block;
           }
           .report-signature-note {
             color: #7b6544;
@@ -43224,7 +43326,7 @@ export default function App() {
             ${summaryHtml}
             ${reportNoteHtml}
             ${reportContentHtml}
-            ${inventorySignatureHtml}
+            ${reportSignatureHtml}
           </div>
         </div>
         <script>
@@ -65246,6 +65348,34 @@ function formatTicketRequestSource(value?: string) {
                           <EyeOff size={16} aria-hidden={true} />
                         )}
                       </button>
+                      {reportType === "maintenance_completion" ? (
+                        <button
+                          type="button"
+                          className={`tab report-control-icon-btn report-control-icon-btn-pending ${
+                            maintenanceReportShowPendingDetails ? "report-control-icon-btn-pending-active" : ""
+                          }`}
+                          onClick={() => setMaintenanceReportShowPendingDetails((value) => !value)}
+                          aria-label={
+                            maintenanceReportShowPendingDetails
+                              ? (lang === "km" ? "លាក់លម្អិត មិនទាន់" : "Hide Not Yet Details")
+                              : (lang === "km" ? "បង្ហាញលម្អិត មិនទាន់" : "View Not Yet Details")
+                          }
+                          title={
+                            maintenanceReportShowPendingDetails
+                              ? (lang === "km" ? "លាក់លម្អិត មិនទាន់" : "Hide Not Yet Details")
+                              : (lang === "km" ? "បង្ហាញលម្អិត មិនទាន់" : "View Not Yet Details")
+                          }
+                        >
+                          <List size={16} aria-hidden={true} />
+                          {isPhoneView ? (
+                            <span>
+                              {maintenanceReportShowPendingDetails
+                                ? (lang === "km" ? "លាក់លម្អិត មិនទាន់" : "Hide Not Yet Details")
+                                : (lang === "km" ? "បង្ហាញលម្អិត មិនទាន់" : "View Not Yet Details")}
+                            </span>
+                          ) : null}
+                        </button>
+                      ) : null}
                       {!isPhoneView ? (
                         <button
                           type="button"
@@ -66129,6 +66259,36 @@ function formatTicketRequestSource(value?: string) {
                     : "No extra filters for this report. You can go directly to print."}
                 </div>
               )}
+              {showReportSignatureOptions ? (
+                <div className="report-signature-options-shell">
+                  <div className="tiny report-filters-title">
+                    {lang === "km" ? "ជម្រើសហត្ថលេខា" : "Signature Options"}
+                  </div>
+                  <div className="report-filters-subtitle">
+                    {lang === "km"
+                      ? "ជ្រើសតែហត្ថលេខាដែលចង់បន្ថែមក្នុងរបាយការណ៍ពេលបោះពុម្ព។"
+                      : "Tick the signature blocks you want to include in the printed report."}
+                  </div>
+                  <div className="report-signature-options-grid">
+                    <label className="report-checkbox report-signature-option">
+                      <input
+                        type="checkbox"
+                        checked={reportIncludeStaffSignature}
+                        onChange={(e) => setReportIncludeStaffSignature(e.target.checked)}
+                      />
+                      <span>{lang === "km" ? "រៀបចំដោយ" : "Prepared By"}</span>
+                    </label>
+                    <label className="report-checkbox report-signature-option">
+                      <input
+                        type="checkbox"
+                        checked={reportIncludeEdApprovalSignature}
+                        onChange={(e) => setReportIncludeEdApprovalSignature(e.target.checked)}
+                      />
+                      <span>{lang === "km" ? "អនុម័តដោយ" : "Approved By"}</span>
+                    </label>
+                  </div>
+                </div>
+              ) : null}
               {reportType === "qr_labels" ? (
                 <div className="panel-filters qr-size-toolbar">
                   <div className="tiny report-filters-title">
