@@ -11048,6 +11048,7 @@ export default function App() {
   const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
   const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
   const [maintenanceQuickTemplate, setMaintenanceQuickTemplate] = useState<MaintenanceQuickTemplateKey>("manual");
+  const [maintenanceReportNote, setMaintenanceReportNote] = useState("");
   const [reportAssetIdFilter, setReportAssetIdFilter] = useState("");
   const [maintenanceReportVisibleColumns, setMaintenanceReportVisibleColumns] = useState<MaintenanceReportColumnKey[]>([
     "date",
@@ -39666,10 +39667,19 @@ export default function App() {
   const reportOverviewChips = useMemo(() => {
     const chips: string[] = [];
     if (selectedReportTypeLabel) chips.push(selectedReportTypeLabel);
-    if (reportType === "maintenance_completion") {
+    if (reportType === "asset_master") {
+      chips.push(`${lang === "km" ? "Template" : "Template"}: ${selectedEdTemplateLabel}`);
+      chips.push(`${lang === "km" ? "Campus" : "Campus"}: ${campusFilterSummary}`);
+      chips.push(`${lang === "km" ? "Category" : "Category"}: ${categoryFilterSummary}`);
+      chips.push(`${lang === "km" ? "Items" : "Items"}: ${itemFilterSummary}`);
+      chips.push(`${lang === "km" ? "Status" : "Status"}: ${statusFilterSummary}`);
+    } else if (reportType === "maintenance_completion") {
       maintenanceCompletionSummaryChips.forEach((chip) => {
         if (chip) chips.push(chip);
       });
+      if (maintenanceReportNote.trim()) {
+        chips.push(`${lang === "km" ? "កំណត់ចំណាំ" : "Note"}: ${maintenanceReportNote.trim()}`);
+      }
     } else if (reportType === "schedule_calendar") {
       chips.push(`${lang === "km" ? "ខែ" : "Month"}: ${reportScheduleMonthLabel}`);
       chips.push(
@@ -39683,7 +39693,11 @@ export default function App() {
     return chips;
   }, [
     lang,
+    maintenanceReportNote,
     maintenanceCompletionSummaryChips,
+    campusFilterSummary,
+    categoryFilterSummary,
+    itemFilterSummary,
     reportAssetFilterLabel,
     reportScheduleCampusFilter,
     reportScheduleGroupFilter,
@@ -39692,6 +39706,8 @@ export default function App() {
     reportType,
     reportCampusName,
     selectedReportTypeLabel,
+    selectedEdTemplateLabel,
+    statusFilterSummary,
     t.allCampuses,
   ]);
   const reportFiltersCollapsedDesktop =
@@ -39769,6 +39785,7 @@ export default function App() {
       const today = new Date();
       const ymd = toYmd(today);
       setMaintenanceQuickTemplate("manual");
+      setMaintenanceReportNote("");
       setReportDateFrom(`${ymd.slice(0, 7)}-01`);
       setReportDateTo(ymd);
       setReportAssetIdFilter("");
@@ -39887,6 +39904,7 @@ export default function App() {
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
     setReportDateTo(ymd);
     setMaintenanceQuickTemplate("manual");
+    setMaintenanceReportNote("");
     setReportYear(String(today.getFullYear()));
     setReportTerm("Term 1");
     setReportMobileFiltersOpen(false);
@@ -41147,12 +41165,9 @@ export default function App() {
       columns = [];
       rows = [];
     } else if (reportType === "asset_master") {
-      const campusTitle = assetMasterCampusFilter.includes("ALL")
-        ? t.allCampuses
-        : assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", ");
       title = edAssetTemplate === "ALL"
-        ? `Asset Master Register Report - ${campusTitle}`
-        : `${selectedEdTemplateLabel} Report - ${campusTitle}`;
+        ? "Asset Master Register Report"
+        : `${selectedEdTemplateLabel} Report`;
       const visibleDefs = assetMasterColumnDefs.filter((def) => isAssetMasterColumnVisible(def.key));
       columns = visibleDefs.map((def) => def.label);
       rows = assetMasterReportRows.map((row) =>
@@ -41933,6 +41948,13 @@ export default function App() {
         : `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
             lang === "km" ? "តម្រងសាខា" : "Campus Filter"
           )}: ${escapeHtml(filterLabel)}</p>`;
+    const reportNoteHtml =
+      reportType === "maintenance_completion" && maintenanceReportNote.trim()
+        ? `<section class="report-note-panel">
+            <div class="report-note-panel-label">${escapeHtml(lang === "km" ? "កំណត់ចំណាំរបាយការណ៍" : "Report Note")}</div>
+            <div class="report-note-panel-value">${escapeHtml(maintenanceReportNote.trim())}</div>
+          </section>`
+        : "";
 
     const qrPrintVariant = qrLabelSize.replace("cm", "");
     const qrLabelPageCss =
@@ -41953,6 +41975,10 @@ export default function App() {
     const reportHeadingSubtitle =
       reportType === "maintenance_completion"
         ? maintenanceCompletionRangeLabel
+        : reportType === "asset_master"
+          ? (assetMasterCampusFilter.includes("ALL")
+              ? t.allCampuses
+              : assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", "))
         : "";
 
     const reportContentHtml =
@@ -42131,9 +42157,71 @@ export default function App() {
           })()
         : reportType === "maintenance_completion"
         ? (() => {
+            const pendingLocationGroups: Array<{
+              campusCode: string;
+              campusName: string;
+              locationName: string;
+              count: number;
+              assetIds: string[];
+            }> = [];
+            if (!reportAssetIdFilter) {
+              const grouped = new Map<string, {
+                campusCode: string;
+                campusName: string;
+                locationName: string;
+                count: number;
+                assetIds: string[];
+              }>();
+              for (const asset of maintenanceCompletionPendingAssets) {
+                const campusCode = asset.campus;
+                const campusName = reportCampusName(asset.campus);
+                const locationName = asset.location || "-";
+                const key = `${campusCode}||${locationName}`;
+                const current = grouped.get(key) || {
+                  campusCode,
+                  campusName,
+                  locationName,
+                  count: 0,
+                  assetIds: [],
+                };
+                current.count += 1;
+                current.assetIds.push(asset.assetId);
+                grouped.set(key, current);
+              }
+              pendingLocationGroups.push(
+                ...Array.from(grouped.values()).sort(
+                  (a, b) =>
+                    a.campusName.localeCompare(b.campusName, undefined, { sensitivity: "base" }) ||
+                    b.count - a.count ||
+                    a.locationName.localeCompare(b.locationName, undefined, { sensitivity: "base", numeric: true })
+                )
+              );
+            }
+            const pendingCampusSections = reportAssetIdFilter
+              ? []
+              : Array.from(
+                  pendingLocationGroups.reduce((map, group) => {
+                    const current = map.get(group.campusCode) || {
+                      campusCode: group.campusCode,
+                      campusName: group.campusName,
+                      total: 0,
+                      locations: [] as typeof pendingLocationGroups,
+                    };
+                    current.total += group.count;
+                    current.locations.push(group);
+                    map.set(group.campusCode, current);
+                    return map;
+                  }, new Map<string, {
+                    campusCode: string;
+                    campusName: string;
+                    total: number;
+                    locations: typeof pendingLocationGroups;
+                  }>())
+                    .values()
+                );
             const pendingHeading = reportAssetIdFilter
               ? (lang === "km" ? "ស្ថានភាពទ្រព្យដែលបានជ្រើស" : "Selected Asset Status")
-              : (lang === "km" ? "ទ្រព្យមិនទាន់ធ្វើ" : "Assets Not Yet Done");
+              : (lang === "km" ? "មិនទាន់ធ្វើ តាមសាខា និងទីតាំង" : "Not Yet By Campus and Location");
             const pendingIntro = reportAssetIdFilter
               ? maintenanceCompletionPendingAssets.length
                 ? (lang === "km"
@@ -42142,35 +42230,75 @@ export default function App() {
                 : (lang === "km"
                     ? "ទ្រព្យដែលបានជ្រើសបានបញ្ចប់រួចរាល់ក្នុងរយៈពេលនេះ។"
                     : "The selected asset is already completed in this date range.")
-              : maintenanceCompletionPendingAssets.length
+              : pendingLocationGroups.length
                 ? (lang === "km"
-                    ? `មានទ្រព្យ ${maintenanceCompletionPendingAssets.length} មិនទាន់ធ្វើរួចរាល់។`
-                    : `${maintenanceCompletionPendingAssets.length} asset(s) are still missing completion in this date range.`)
+                    ? `មាន ${pendingLocationGroups.length} ទីតាំង ដែលនៅមានទ្រព្យមិនទាន់ធ្វើរួចរាល់។`
+                    : `${pendingLocationGroups.length} location(s) still have assets missing completion in this date range.`)
                 : (lang === "km"
                     ? "ទ្រព្យដែលបានជ្រើសទាំងអស់បានបញ្ចប់រួចរាល់ក្នុងរយៈពេលនេះ។"
                     : "All selected assets are already completed in this date range.");
-            const pendingListHtml = maintenanceCompletionPendingAssets.length
-              ? `<div class="maintenance-pending-list">${maintenanceCompletionPendingAssets
-                  .map((asset) => {
-                    const locationLine =
-                      reportMaintenanceCampusFilter === "ALL"
-                        ? `${reportCampusName(asset.campus)} | ${asset.location}`
-                        : asset.location;
-                    const statusLine = asset.lastDate
-                      ? `${formatDate(asset.lastDate)} | ${asset.lastStatus || "Not Yet"}`
-                      : (lang === "km" ? "មិនទាន់មានកំណត់ត្រា" : "No record yet");
-                    return `<article class="maintenance-pending-item">
-                      <div class="maintenance-pending-item-main">${escapeHtml(asset.assetId)}</div>
-                      <div class="maintenance-pending-item-sub">${escapeHtml(locationLine)}</div>
-                      <div class="maintenance-pending-item-sub">${escapeHtml(statusLine)}</div>
-                    </article>`;
-                  })
-                  .join("")}</div>`
-              : `<div class="maintenance-pending-empty">${escapeHtml(
-                  lang === "km"
-                    ? "គ្មានទ្រព្យខកខានក្នុងតម្រងដែលបានជ្រើស។"
-                    : "No missing assets in the selected filter."
-                )}</div>`;
+            const pendingListHtml = reportAssetIdFilter
+              ? maintenanceCompletionPendingAssets.length
+                ? `<div class="maintenance-pending-list">${maintenanceCompletionPendingAssets
+                    .map((asset) => {
+                      const locationLine =
+                        reportMaintenanceCampusFilter === "ALL"
+                          ? `${reportCampusName(asset.campus)} | ${asset.location}`
+                          : asset.location;
+                      const statusLine = asset.lastDate
+                        ? `${formatDate(asset.lastDate)} | ${asset.lastStatus || "Not Yet"}`
+                        : (lang === "km" ? "មិនទាន់មានកំណត់ត្រា" : "No record yet");
+                      return `<article class="maintenance-pending-item">
+                        <div class="maintenance-pending-item-main">${escapeHtml(asset.assetId)}</div>
+                        <div class="maintenance-pending-item-sub">${escapeHtml(locationLine)}</div>
+                        <div class="maintenance-pending-item-sub">${escapeHtml(statusLine)}</div>
+                      </article>`;
+                    })
+                    .join("")}</div>`
+                : `<div class="maintenance-pending-empty">${escapeHtml(
+                    lang === "km"
+                      ? "គ្មានទ្រព្យខកខានក្នុងតម្រងដែលបានជ្រើស។"
+                      : "No missing assets in the selected filter."
+                  )}</div>`
+              : pendingCampusSections.length
+                ? `<div class="maintenance-campus-sections">${pendingCampusSections
+                    .map((section) => {
+                      const campusCountLine =
+                        lang === "km"
+                          ? `មិនទាន់សរុប ${section.total} ទ្រព្យ`
+                          : `${section.total} asset(s) not yet done`;
+                      const locationCards = section.locations
+                        .map((group) => {
+                          const assetPreview = group.assetIds.slice(0, 3).join(", ");
+                          const moreCount = Math.max(0, group.assetIds.length - 3);
+                          const assetLine = moreCount
+                            ? `${assetPreview} + ${moreCount} more`
+                            : assetPreview;
+                          const countLine =
+                            lang === "km"
+                              ? `មិនទាន់ ${group.count} ទ្រព្យ`
+                              : `${group.count} asset(s) not yet done`;
+                          return `<article class="maintenance-pending-item">
+                            <div class="maintenance-pending-item-main">${escapeHtml(group.locationName)}</div>
+                            <div class="maintenance-pending-item-sub maintenance-pending-item-sub-strong">${escapeHtml(countLine)}</div>
+                            <div class="maintenance-pending-item-sub">${escapeHtml(assetLine)}</div>
+                          </article>`;
+                        })
+                        .join("");
+                      return `<section class="maintenance-campus-section">
+                        <div class="maintenance-campus-section-head">
+                          <h4>${escapeHtml(section.campusName)}</h4>
+                          <div class="maintenance-campus-section-meta">${escapeHtml(campusCountLine)}</div>
+                        </div>
+                        <div class="maintenance-pending-list">${locationCards}</div>
+                      </section>`;
+                    })
+                    .join("")}</div>`
+                : `<div class="maintenance-pending-empty">${escapeHtml(
+                    lang === "km"
+                      ? "គ្មានទ្រព្យខកខានក្នុងតម្រងដែលបានជ្រើស។"
+                      : "No missing assets in the selected filter."
+                  )}</div>`;
             return `
               <section class="maintenance-pending-panel">
                 <div class="maintenance-pending-panel-head">
@@ -42553,12 +42681,12 @@ export default function App() {
           }
           .report-summary-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 10px;
             margin: 0 0 14px;
           }
           .report-summary-grid-tools {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
           }
           .report-summary-card {
             border: 1px solid #d7ccb8;
@@ -42641,6 +42769,28 @@ export default function App() {
           .report-summary-entry {
             display: block;
           }
+          .report-note-panel {
+            margin: 0 0 14px;
+            padding: 12px 14px;
+            border: 1px solid rgba(202, 164, 104, 0.24);
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.9);
+          }
+          .report-note-panel-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #8a6f47;
+            margin-bottom: 6px;
+          }
+          .report-note-panel-value {
+            color: #294036;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.45;
+            white-space: pre-wrap;
+          }
           .maintenance-pending-panel {
             margin: 0 0 14px;
             border: 1px solid #d7ccb8;
@@ -42659,11 +42809,41 @@ export default function App() {
             color: #59685f;
             line-height: 1.4;
           }
+          .maintenance-campus-sections {
+            display: grid;
+            gap: 12px;
+            margin-top: 10px;
+          }
+          .maintenance-campus-section {
+            border: 1px solid #e2d8c7;
+            border-radius: 12px;
+            background: #fff;
+            padding: 12px;
+          }
+          .maintenance-campus-section-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #efe5d4;
+          }
+          .maintenance-campus-section-head h4 {
+            margin: 0;
+            font-size: 15px;
+            color: #223128;
+          }
+          .maintenance-campus-section-meta {
+            font-size: 12px;
+            font-weight: 700;
+            color: #6a775f;
+            white-space: nowrap;
+          }
           .maintenance-pending-list {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 8px;
-            margin-top: 10px;
           }
           .maintenance-pending-item {
             border: 1px solid #e2d8c7;
@@ -42681,6 +42861,10 @@ export default function App() {
             font-size: 11px;
             color: #5c695f;
             line-height: 1.35;
+          }
+          .maintenance-pending-item-sub-strong {
+            font-weight: 700;
+            color: #314238;
           }
           .maintenance-pending-empty {
             margin-top: 10px;
@@ -43034,6 +43218,7 @@ export default function App() {
               ${printMetaHtml}
             </div>
             ${summaryHtml}
+            ${reportNoteHtml}
             ${reportContentHtml}
             ${inventorySignatureHtml}
           </div>
@@ -64760,10 +64945,10 @@ function formatTicketRequestSource(value?: string) {
 
         {tab === "reports" && (
           <section className={`panel ${reportType === "it_vault" ? "report-panel-it-vault" : ""}`}>
-            <div className={`report-title-row ${reportType === "it_vault" ? "report-title-row-it-vault" : ""}`}>
+            <div className={`report-title-row ${reportType === "it_vault" ? "report-title-row-it-vault" : ""} ${reportType === "maintenance_completion" ? "report-title-row-maintenance" : ""}`}>
               <h2>{reportType === "it_vault" ? "IT Vault Formal Report" : t.reports}</h2>
               <div className="report-title-actions">
-                {!(isPhoneView && reportType === "inventory_balance") ? (
+                {reportType === "inventory_balance" && !isPhoneView ? (
                   <button
                     className="btn-primary report-print-btn report-title-print-btn"
                     onClick={() => {
@@ -64945,10 +65130,10 @@ function formatTicketRequestSource(value?: string) {
                 ) : null}
               </>
             ) : null}
-            <div className={`report-builder ${reportType === "it_vault" ? "report-builder-it-vault" : ""} ${reportType === "inventory_balance" ? "report-builder-inventory" : ""}`}>
+            <div className={`report-builder ${reportType === "it_vault" ? "report-builder-it-vault" : ""} ${reportType === "inventory_balance" ? "report-builder-inventory" : ""} ${reportType === "maintenance_completion" ? "report-builder-maintenance" : ""}`}>
               {reportType !== "inventory_balance" ? (
-                <div className="report-builder-top report-builder-top-smart">
-                  <div className="report-builder-overview">
+                <div className={`report-builder-top report-builder-top-smart ${reportType === "maintenance_completion" ? "report-builder-top-maintenance" : ""}`}>
+                  <div className={`report-builder-overview ${reportType === "maintenance_completion" ? "report-builder-overview-maintenance" : ""}`}>
                     <div className="report-builder-overview-copy">
                       <div className="report-builder-overview-kicker">
                         {lang === "km" ? "របាយការណ៍ដែលបានជ្រើស" : "Selected Report"}
@@ -64968,9 +65153,26 @@ function formatTicketRequestSource(value?: string) {
                         ))}
                       </div>
                     ) : null}
+                    {reportType === "maintenance_completion" && maintenanceReportNote.trim() ? (
+                      <div className="report-builder-note-callout">
+                        <strong>{lang === "km" ? "កំណត់ចំណាំរបាយការណ៍" : "Report Note"}</strong>
+                        <span>{maintenanceReportNote.trim()}</span>
+                      </div>
+                    ) : null}
                   </div>
-                  <div className="report-builder-actions report-builder-actions-smart">
-                    <label className="field report-type-field">
+                  <div className={`report-builder-actions report-builder-actions-smart ${reportType === "maintenance_completion" ? "report-builder-actions-maintenance" : ""}`}>
+                    <div className="report-builder-actions-head">
+                      <div className="report-builder-actions-kicker">
+                        {lang === "km" ? "ការគ្រប់គ្រងរបាយការណ៍" : "Report Controls"}
+                      </div>
+                      <strong>{lang === "km" ? "ជ្រើសប្រភេទ និងសកម្មភាព" : "Choose Type and Actions"}</strong>
+                      <span>
+                        {lang === "km"
+                          ? "ប្តូរប្រភេទរបាយការណ៍ និងគ្រប់គ្រងតម្រងនៅទីនេះ។"
+                          : "Switch report type and manage filters from one place."}
+                      </span>
+                    </div>
+                    <label className="field report-type-field report-type-field-card">
                       <span>{lang === "km" ? "ប្រភេទរបាយការណ៍" : "Report Type"}</span>
                       <LocationPicker
                         value={reportType}
@@ -64985,7 +65187,18 @@ function formatTicketRequestSource(value?: string) {
                         emptyText={lang === "km" ? "មិនមានប្រភេទរបាយការណ៍" : "No report type found."}
                       />
                     </label>
-                    <div className="report-builder-action-buttons">
+                    <div className="report-builder-action-buttons report-builder-action-buttons-smart">
+                      <button
+                        type="button"
+                        className="btn-primary report-builder-inline-print-btn"
+                        onClick={() => {
+                          setReportMobileFiltersOpen(false);
+                          printCurrentReport();
+                        }}
+                      >
+                        <Printer size={16} aria-hidden={true} />
+                        <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span>
+                      </button>
                       <button
                         type="button"
                         className="tab report-mobile-filter-btn"
@@ -65005,26 +65218,22 @@ function formatTicketRequestSource(value?: string) {
                             ? (lang === "km" ? "បង្ហាញតម្រង" : "Show Filters")
                             : (lang === "km" ? "លាក់តម្រង" : "Hide Filters")}
                       </button>
-                      <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
-                        {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
-                      </button>
+                      {!isPhoneView ? (
+                        <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
+                          {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                        </button>
+                      ) : null}
+                      {isPhoneView ? (
+                        <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
+                          {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 </div>
               ) : null}
               {hasReportFilters ? (
                 <>
-                  <div
-                    className={`tiny report-filters-title ${
-                      reportFiltersCollapsedDesktop && !isPhoneView
-                        ? "report-filters-title-collapsed"
-                        : ""
-                    }`}
-                  >
-                    {reportType === "inventory_balance"
-                      ? (lang === "km" ? "តម្រងរបាយការណ៍" : "Report Filters")
-                      : (lang === "km" ? "តម្រង" : "Filters")}
-                  </div>
                   {isPhoneView && reportMobileFiltersOpen ? (
                     <button
                       type="button"
@@ -65048,7 +65257,24 @@ function formatTicketRequestSource(value?: string) {
                         {lang === "km" ? "រួចរាល់" : "Done"}
                       </button>
                     </div>
-                    <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" || reportType === "asset_full_record" ? "report-filter-row-qr" : ""} ${reportType === "it_vault" ? "report-filter-row-it-vault" : ""} ${reportType === "inventory_balance" ? "report-filter-row-inventory" : ""}`}>
+                    <div className={`report-filters-shell ${reportType === "maintenance_completion" ? "report-filters-shell-maintenance" : ""}`}>
+                      <div
+                        className={`tiny report-filters-title ${
+                          reportFiltersCollapsedDesktop && !isPhoneView
+                            ? "report-filters-title-collapsed"
+                            : ""
+                        }`}
+                      >
+                        {reportType === "inventory_balance"
+                          ? (lang === "km" ? "តម្រងរបាយការណ៍" : "Report Filters")
+                          : (lang === "km" ? "តម្រង" : "Filters")}
+                      </div>
+                      <div className="report-filters-subtitle">
+                        {lang === "km"
+                          ? "ជ្រើសតម្រងដែលត្រូវការ ហើយលទ្ធផលនឹងកែតាមភ្លាមៗ។"
+                          : "Adjust the filters you need and the result updates immediately."}
+                      </div>
+                      <div className={`panel-filters report-filters report-filter-row ${reportType === "qr_labels" || reportType === "asset_full_record" ? "report-filter-row-qr" : ""} ${reportType === "it_vault" ? "report-filter-row-it-vault" : ""} ${reportType === "inventory_balance" ? "report-filter-row-inventory" : ""} ${reportType === "maintenance_completion" ? "report-filter-row-maintenance" : ""}`}>
               {reportType === "maintenance_completion" ? (
                 <>
                   <LocationPicker
@@ -65143,6 +65369,21 @@ function formatTicketRequestSource(value?: string) {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកជួរឈរ..." : "Search columns..."}
                     emptyText={lang === "km" ? "មិនមានជួរឈរ" : "No columns found."}
                   />
+                  <div className="report-maintenance-note-wrap">
+                    <label className="field field-wide report-maintenance-note-field">
+                      <span>{lang === "km" ? "កំណត់ចំណាំរបាយការណ៍" : "Report Note"}</span>
+                      <textarea
+                        className="textarea"
+                        value={maintenanceReportNote}
+                        onChange={(e) => setMaintenanceReportNote(e.target.value)}
+                        placeholder={
+                          lang === "km"
+                            ? "បញ្ចូលកំណត់ចំណាំសម្រាប់របាយការណ៍នេះ..."
+                            : "Add a note for this report..."
+                        }
+                      />
+                    </label>
+                  </div>
                 </>
               ) : null}
               {reportType === "schedule_calendar" ? (
@@ -65826,10 +66067,7 @@ function formatTicketRequestSource(value?: string) {
                   />
                 </>
               ) : null}
-                      {!isPhoneView && reportType !== "inventory_balance" ? (
-                        <>
-                        </>
-                      ) : null}
+                      </div>
                     </div>
                   </div>
                 </>

@@ -107,7 +107,14 @@ function runStartRunner(isApiPortBusy) {
   const webCmd = process.platform === "win32"
     ? path.join("node_modules", ".bin", "react-scripts.cmd")
     : path.join("node_modules", ".bin", "react-scripts");
-  const webEnv = { ...process.env, PORT: String(WEB_PORT), HOST: webHost };
+  const webEnv = {
+    ...process.env,
+    PORT: String(WEB_PORT),
+    HOST: webHost,
+    // CRA's eslint-webpack-plugin can overflow on very large files like App.tsx
+    // and show a blocking overlay even when the app code itself compiles.
+    DISABLE_ESLINT_PLUGIN: "true",
+  };
   if (!isPhoneMode) {
     webEnv.DANGEROUSLY_DISABLE_HOST_CHECK = "true";
   }
