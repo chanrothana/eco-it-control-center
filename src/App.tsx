@@ -11055,8 +11055,8 @@ export default function App() {
     "assetId",
     "location",
     "type",
+    "note",
     "completion",
-    "condition",
     "by",
   ]);
   const [staffBorrowingVisibleColumns, setStaffBorrowingVisibleColumns] = useState<StaffBorrowingReportColumnKey[]>([
@@ -39421,7 +39421,7 @@ export default function App() {
       { key: "cost" as MaintenanceReportColumnKey, label: "Cost" },
       { key: "by" as MaintenanceReportColumnKey, label: "By" },
       { key: "reportFile" as MaintenanceReportColumnKey, label: "Report File" },
-      { key: "note" as MaintenanceReportColumnKey, label: "Note" },
+      { key: "note" as MaintenanceReportColumnKey, label: "Maintenance Remark" },
     ],
     [t.assetId, t.campus]
   );
@@ -39797,8 +39797,8 @@ export default function App() {
         "assetId",
         "location",
         "type",
+        "note",
         "completion",
-        "condition",
         "by",
       ]);
       setMaintenanceReportExpandedRows({});
@@ -41503,19 +41503,23 @@ export default function App() {
       const weights = headers.map((header, index) => {
         const label = String(header || "").trim().toLowerCase();
         if (index === 0 && (label === "no." || label === "no")) return 4;
-        if (label.includes("date")) return 11;
+        if (label.includes("date")) return 10;
+        if (label.includes("asset id")) return 13;
+        if (label.includes("location")) return 16;
+        if (label.includes("maintenance type")) return 14;
+        if (label.includes("work status")) return 11;
         if (label === "type") return 10;
         if (label === "status") return 10;
         if (label === "by") return 10;
         if (label.includes("campus")) return 13;
-        if (label.includes("location")) return 14;
         if (label.includes("staff")) return 12;
         if (label.includes("assigned")) return 13;
         if (label.includes("result")) return 11;
         if (label.includes("ack")) return 8;
         if (label.includes("condition")) return 16;
         if (label.includes("reason")) return 20;
-        if (label.includes("note")) return 22;
+        if (label.includes("remark")) return 20;
+        if (label.includes("note")) return 20;
         const contentLength = dataRows.reduce((max, row) => {
           const value = String(row[index] || "").replace(/\s+/g, " ").trim();
           return Math.max(max, value.length);
@@ -65190,18 +65194,20 @@ function formatTicketRequestSource(value?: string) {
                     <div className="report-builder-action-buttons report-builder-action-buttons-smart">
                       <button
                         type="button"
-                        className="btn-primary report-builder-inline-print-btn"
+                        className="btn-primary report-builder-inline-print-btn report-control-icon-btn report-control-icon-btn-print"
                         onClick={() => {
                           setReportMobileFiltersOpen(false);
                           printCurrentReport();
                         }}
+                        aria-label={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
+                        title={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
                       >
                         <Printer size={16} aria-hidden={true} />
-                        <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span>
+                        {isPhoneView ? <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span> : null}
                       </button>
                       <button
                         type="button"
-                        className="tab report-mobile-filter-btn"
+                        className="tab report-mobile-filter-btn report-control-icon-btn report-control-icon-btn-visibility"
                         onClick={() =>
                           isPhoneView
                             ? setReportMobileFiltersOpen((open) => !open)
@@ -65209,18 +65215,46 @@ function formatTicketRequestSource(value?: string) {
                               ? setMaintenanceReportFiltersCollapsed((value) => !value)
                               : setReportDesktopFiltersCollapsed((value) => !value)
                         }
+                        aria-label={
+                          isPhoneView
+                            ? reportMobileFiltersOpen
+                              ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
+                              : (lang === "km" ? "តម្រង" : "Filters")
+                            : reportFiltersCollapsedDesktop
+                              ? (lang === "km" ? "បង្ហាញតម្រង" : "Show Filters")
+                              : (lang === "km" ? "លាក់តម្រង" : "Hide Filters")
+                        }
+                        title={
+                          isPhoneView
+                            ? reportMobileFiltersOpen
+                              ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
+                              : (lang === "km" ? "តម្រង" : "Filters")
+                            : reportFiltersCollapsedDesktop
+                              ? (lang === "km" ? "បង្ហាញតម្រង" : "Show Filters")
+                              : (lang === "km" ? "លាក់តម្រង" : "Hide Filters")
+                        }
                       >
-                        {isPhoneView
-                          ? reportMobileFiltersOpen
-                            ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
-                            : (lang === "km" ? "តម្រង" : "Filters")
-                          : reportFiltersCollapsedDesktop
-                            ? (lang === "km" ? "បង្ហាញតម្រង" : "Show Filters")
-                            : (lang === "km" ? "លាក់តម្រង" : "Hide Filters")}
+                        {isPhoneView ? (
+                          <span>
+                            {reportMobileFiltersOpen
+                              ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
+                              : (lang === "km" ? "តម្រង" : "Filters")}
+                          </span>
+                        ) : reportFiltersCollapsedDesktop ? (
+                          <Eye size={16} aria-hidden={true} />
+                        ) : (
+                          <EyeOff size={16} aria-hidden={true} />
+                        )}
                       </button>
                       {!isPhoneView ? (
-                        <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
-                          {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                        <button
+                          type="button"
+                          className="tab report-mobile-filter-reset-btn report-control-icon-btn report-control-icon-btn-reset"
+                          onClick={resetReportFilters}
+                          aria-label={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                          title={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                        >
+                          <RotateCcw size={16} aria-hidden={true} />
                         </button>
                       ) : null}
                       {isPhoneView ? (
@@ -65288,6 +65322,23 @@ function formatTicketRequestSource(value?: string) {
                     placeholder={lang === "km" ? "ជ្រើស Template រហ័ស" : "Quick Report Template"}
                     searchPlaceholder={lang === "km" ? "ស្វែងរក Template..." : "Search template..."}
                     emptyText={lang === "km" ? "មិនមាន Template" : "No template found."}
+                  />
+                  <input
+                    className="input"
+                    type="month"
+                    value={reportDateFrom.slice(0, 7)}
+                    onChange={(e) => {
+                      const month = e.target.value;
+                      if (!month) return;
+                      const [yearText, monthText] = month.split("-");
+                      const year = Number(yearText);
+                      const monthIndex = Number(monthText) - 1;
+                      if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 0) return;
+                      const start = `${month}-01`;
+                      const end = toYmd(new Date(year, monthIndex + 1, 0));
+                      setReportDateFrom(start);
+                      setReportDateTo(end);
+                    }}
                   />
                   <input
                     className="input"

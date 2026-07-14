@@ -1549,6 +1549,7 @@ h2 {
   padding: 18px;
   background: linear-gradient(180deg, rgba(27, 45, 69, 0.96) 0%, rgba(19, 33, 52, 0.94) 100%);
   box-shadow: 0 14px 30px rgba(6, 14, 27, 0.22);
+  overflow: visible;
 }
 
 .panel-head {
@@ -4614,6 +4615,7 @@ h2 {
   display: grid;
   gap: 14px;
   margin-bottom: 14px;
+  overflow: visible;
 }
 
 .report-builder-maintenance {
@@ -4636,6 +4638,7 @@ h2 {
   grid-template-columns: minmax(320px, 1fr) auto;
   gap: 10px;
   align-items: end;
+  overflow: visible;
 }
 
 .report-builder-top-smart {
@@ -4659,6 +4662,7 @@ h2 {
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
     radial-gradient(circle at top right, rgba(74, 132, 233, 0.16), transparent 34%);
   box-shadow: inset 0 1px 0 rgba(210, 226, 249, 0.05);
+  overflow: visible;
 }
 
 .report-builder-overview-maintenance {
@@ -4786,6 +4790,7 @@ h2 {
   background:
     linear-gradient(180deg, rgba(15, 28, 45, 0.42), rgba(10, 21, 37, 0.26)),
     radial-gradient(circle at top left, rgba(74, 132, 233, 0.12), transparent 40%);
+  overflow: visible;
 }
 
 .report-builder-actions-maintenance {
@@ -4857,6 +4862,30 @@ h2 {
   width: 100%;
 }
 
+.report-control-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report-control-icon-btn-print {
+  background: linear-gradient(180deg, #377cf7 0%, #2761cf 100%);
+  border-color: rgba(91, 142, 238, 0.8);
+  box-shadow: 0 12px 22px rgba(34, 84, 177, 0.28);
+}
+
+.report-control-icon-btn-visibility {
+  color: #dfe9f8;
+  background: rgba(82, 128, 196, 0.14);
+  border-color: rgba(124, 156, 214, 0.34);
+}
+
+.report-control-icon-btn-reset {
+  color: #ffd7a6;
+  background: rgba(164, 104, 32, 0.16);
+  border-color: rgba(210, 150, 80, 0.34);
+}
+
 .report-mobile-filter-btn {
   display: inline-flex;
 }
@@ -4911,6 +4940,7 @@ h2 {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
     radial-gradient(circle at top right, rgba(74, 132, 233, 0.08), transparent 42%);
+  overflow: visible;
 }
 
 .report-filters-shell-maintenance {
@@ -4999,6 +5029,11 @@ h2 {
   .report-filter-row,
   .report-filter-row-maintenance {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-control-icon-btn {
+    justify-content: center;
+    gap: 8px;
   }
 }
 
@@ -5679,11 +5714,11 @@ h2 {
 }
 
 .report-maintenance-table-wrap .report-maintenance-col-date {
-  width: 96px;
+  width: 92px;
 }
 
 .report-maintenance-table-wrap .report-maintenance-col-assetId {
-  width: 126px;
+  width: 132px;
   font-size: 11.5px;
 }
 
@@ -5694,15 +5729,15 @@ h2 {
 }
 
 .report-maintenance-table-wrap .report-maintenance-col-location {
-  width: 150px;
+  width: 156px;
 }
 
 .report-maintenance-table-wrap .report-maintenance-col-type {
-  width: 120px;
+  width: 132px;
 }
 
 .report-maintenance-table-wrap .report-maintenance-col-completion {
-  width: 128px;
+  width: 110px;
 }
 
 .report-maintenance-table-wrap .report-maintenance-col-condition {
@@ -5710,7 +5745,11 @@ h2 {
 }
 
 .report-maintenance-table-wrap .report-maintenance-col-by {
-  width: 88px;
+  width: 104px;
+}
+
+.report-maintenance-table-wrap .report-maintenance-col-note {
+  width: 188px;
 }
 
 .report-maintenance-table-wrap .report-maintenance-col-details {
@@ -18436,6 +18475,10 @@ label.backup-action-btn {
 /* Canonical style hook for all searchable dropdown controls. */
 .searchable-dropdown {
   position: relative;
+}
+
+.searchable-dropdown:has(.asset-picker-menu) {
+  z-index: 220;
 }
 
 .asset-picker-trigger {
