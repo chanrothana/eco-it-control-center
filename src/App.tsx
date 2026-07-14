@@ -13625,6 +13625,7 @@ export default function App() {
   });
   const [inventoryItemFilterCampus, setInventoryItemFilterCampus] = useState("ALL");
   const [inventoryItemFilterGroup, setInventoryItemFilterGroup] = useState("ALL");
+  const [inventoryItemFilterOwnerType, setInventoryItemFilterOwnerType] = useState("ALL");
   const [inventoryItemFilterQuery, setInventoryItemFilterQuery] = useState("");
   const [inventoryToolListLocationFilter, setInventoryToolListLocationFilter] = useState("ALL");
   const [inventoryToolListAreaFilter, setInventoryToolListAreaFilter] = useState("ALL");
@@ -15968,6 +15969,16 @@ export default function App() {
       inventoryBusinessGroupLabel(a).localeCompare(inventoryBusinessGroupLabel(b))
     );
   }, [inventoryBalanceRows]);
+  const inventoryItemOwnerTypeOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const row of inventoryBalanceRows) {
+      if (inventoryBusinessGroupValue(row) !== inventoryDashboardGroup) continue;
+      if (inventoryItemFilterCampus !== "ALL" && String(row.campus || "").trim() !== inventoryItemFilterCampus) continue;
+      const ownerType = String(row.ownerType || "").trim();
+      if (ownerType) values.add(ownerType);
+    }
+    return Array.from(values).sort((a, b) => ownerTypeLabel(a).localeCompare(ownerTypeLabel(b)));
+  }, [inventoryBalanceRows, inventoryDashboardGroup, inventoryItemFilterCampus, ownerTypeLabel]);
   const inventoryItemRows = useMemo(() => {
     const query = inventoryItemFilterQuery.trim().toLowerCase();
     const rows = inventoryBalanceRows.filter((row) => {
@@ -15975,6 +15986,9 @@ export default function App() {
         return false;
       }
       if (inventoryItemFilterCampus !== "ALL" && String(row.campus || "").trim() !== inventoryItemFilterCampus) {
+        return false;
+      }
+      if (inventoryItemFilterOwnerType !== "ALL" && String(row.ownerType || "").trim() !== inventoryItemFilterOwnerType) {
         return false;
       }
       if (!query) return true;
@@ -16029,6 +16043,7 @@ export default function App() {
     inventoryBalanceRows,
     inventoryDashboardGroup,
     inventoryItemFilterCampus,
+    inventoryItemFilterOwnerType,
     inventoryItemFilterQuery,
     inventoryItemSort,
     inventoryCampusLabel,
@@ -36471,6 +36486,23 @@ export default function App() {
         return String(a.assetId || "").localeCompare(String(b.assetId || ""));
       });
   }, [resolvedAssets, inferScheduleGroupValue]);
+  const reportScheduleServiceRows = useMemo(() => {
+    return calendarEvents
+      .filter((row) => isServiceTaskCalendarType(normalizeCalendarEventType(row.type)))
+      .map((row) => {
+        const parsed = parseServiceScheduleEvent(row);
+        return {
+          id: `service-${row.id}`,
+          date: String(row.date || ""),
+          campus: parsed.campus,
+          scheduleGroup: parsed.serviceType,
+          scheduleNote: parsed.note,
+          entryLabel: parsed.title || calendarEventTypeLabel(parsed.serviceType),
+          timeLabel: normalizeCalendarEventTime(row.time) || (lang === "km" ? "គ្មានម៉ោង" : "No time"),
+        };
+      })
+      .filter((row) => row.date);
+  }, [calendarEvents, calendarEventTypeLabel, isServiceTaskCalendarType, lang, parseServiceScheduleEvent]);
   const scheduleGroupOptions = useMemo(
     () =>
       Array.from(new Set(scheduleAssets.map((asset) => String(asset.scheduleGroup || "").trim()).filter(Boolean))).sort((a, b) =>
@@ -36479,15 +36511,24 @@ export default function App() {
     [scheduleAssets]
   );
   const reportScheduleCampusOptions = useMemo(
-    () => Array.from(new Set(reportScheduleAssets.map((asset) => String(asset.campus || "").trim()).filter(Boolean))).sort(compareCampusByCode),
-    [reportScheduleAssets]
+    () =>
+      Array.from(
+        new Set([
+          ...reportScheduleAssets.map((asset) => String(asset.campus || "").trim()),
+          ...reportScheduleServiceRows.map((row) => String(row.campus || "").trim()),
+        ].filter(Boolean))
+      ).sort(compareCampusByCode),
+    [reportScheduleAssets, reportScheduleServiceRows]
   );
   const reportScheduleGroupOptions = useMemo(
     () =>
-      Array.from(new Set(reportScheduleAssets.map((asset) => String(asset.scheduleGroup || "").trim()).filter(Boolean))).sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [reportScheduleAssets]
+      Array.from(
+        new Set([
+          ...reportScheduleAssets.map((asset) => String(asset.scheduleGroup || "").trim()),
+          ...reportScheduleServiceRows.map((row) => String(row.scheduleGroup || "").trim()),
+        ].filter(Boolean))
+      ).sort((a, b) => a.localeCompare(b)),
+    [reportScheduleAssets, reportScheduleServiceRows]
   );
   const reportScheduleGroupLabel = useCallback(
     (value: string) => {
@@ -36574,6 +36615,24 @@ export default function App() {
       }
       addOccurrence(String(asset.nextMaintenanceDate || ""));
     });
+    reportScheduleServiceRows.forEach((row) => {
+      if (reportScheduleCampusFilter !== "ALL" && row.campus !== "ALL" && row.campus !== reportScheduleCampusFilter) return;
+      if (reportScheduleCampusFilter !== "ALL" && row.campus === "ALL") return;
+      if (reportScheduleGroupFilter !== "ALL" && row.scheduleGroup !== reportScheduleGroupFilter) return;
+      if (!row.date || row.date < startYmd || row.date > endYmd) return;
+      const key = [row.date, row.campus, row.scheduleGroup, row.scheduleNote, row.entryLabel].join("||");
+      grouped.set(key, {
+        key,
+        date: row.date,
+        campus: row.campus,
+        scheduleGroup: row.scheduleGroup,
+        scheduleNote: row.scheduleNote,
+        assetCount: 1,
+        assetIds: [],
+        locations: [row.timeLabel],
+        items: [row.entryLabel],
+      });
+    });
     return Array.from(grouped.values()).sort((a, b) => {
       const dateCompare = a.date.localeCompare(b.date);
       if (dateCompare) return dateCompare;
@@ -36585,6 +36644,7 @@ export default function App() {
     });
   }, [
     reportScheduleAssets,
+    reportScheduleServiceRows,
     reportScheduleMonth,
     reportScheduleCampusFilter,
     reportScheduleGroupFilter,
@@ -41386,12 +41446,14 @@ export default function App() {
       ]);
     } else if (reportType === "inventory_balance") {
       title = reportInventoryIsToolGroup
-        ? (
-            reportInventoryGroupFilter !== "ALL" &&
-            reportInventoryGroupFilterLabel
-          )
-            ? `${reportInventoryGroupFilterLabel} ${lang === "km" ? "របាយការណ៍" : "Report"}`
-            : (lang === "km" ? "របាយការណ៍សមតុល្យឧបករណ៍" : "Inventory Tool Balance Report")
+        ? `${
+            (
+              reportInventoryGroupFilter !== "ALL" &&
+              reportInventoryGroupFilterLabel
+            )
+              ? reportInventoryGroupFilterLabel
+              : "Inventory Tool Balance"
+          } Report_${reportInventoryCampusFilterLabel || "All Campuses"}`
         : (lang === "km" ? "របាយការណ៍សមតុល្យស្តុក" : "Inventory Stock Balance Report");
       columns = visibleInventoryReportColumnDefs.map((column) => column.label);
       rows = reportInventoryRows.map((row) => [
@@ -42613,11 +42675,8 @@ export default function App() {
                       .map((entry) => {
                         const color = scheduleCalendarCampusColor(entry.campus);
                         const campusText = reportCampusName(entry.campus);
-                        const lineTwo = entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup);
-                        const lineThree =
-                          entry.assetCount > 1
-                            ? `${entry.assetCount} ${lang === "km" ? "ទ្រព្យ" : "assets"}`
-                            : `${entry.assetCount} ${lang === "km" ? "ទ្រព្យ" : "asset"}`;
+                        const lineTwo = entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup);
+                        const lineThree = entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup);
                         return `<div class="schedule-calendar-entry" style="background:${escapeHtml(color)};">
                           <strong>${escapeHtml(campusText)}</strong>
                           <span>${escapeHtml(lineTwo)}</span>
@@ -42644,9 +42703,9 @@ export default function App() {
                       <td>${index + 1}</td>
                       <td>${escapeHtml(formatDate(row.date))}</td>
                       <td>${escapeHtml(reportCampusName(row.campus))}</td>
+                      <td>${escapeHtml(row.items.join(", ") || "-")}</td>
                       <td>${escapeHtml(reportScheduleGroupLabel(row.scheduleGroup))}</td>
                       <td>${escapeHtml(row.scheduleNote || "-")}</td>
-                      <td>${row.assetCount}</td>
                       <td>${escapeHtml(row.locations.join(", ") || "-")}</td>
                     </tr>`
                   )
@@ -42664,10 +42723,10 @@ export default function App() {
                       <th>No.</th>
                       <th>${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}</th>
                       <th>${escapeHtml(lang === "km" ? "សាខា" : "Campus")}</th>
+                      <th>${escapeHtml(lang === "km" ? "ការងារ / ធាតុ" : "Task / Item")}</th>
                       <th>${escapeHtml(lang === "km" ? "ក្រុម" : "Group")}</th>
                       <th>${escapeHtml(lang === "km" ? "សម្គាល់" : "Schedule Note")}</th>
-                      <th>${escapeHtml(lang === "km" ? "ចំនួនទ្រព្យ" : "Assets")}</th>
-                      <th>${escapeHtml(lang === "km" ? "ទីតាំង" : "Locations")}</th>
+                      <th>${escapeHtml(lang === "km" ? "ពេលវេលា / ទីតាំង" : "Time / Locations")}</th>
                     </tr>
                   </thead>
                   <tbody>${detailRows}</tbody>
@@ -42694,7 +42753,6 @@ export default function App() {
                       : `<tr><td colspan="${visibleInventoryReportColumnDefs.length + 1}">${escapeHtml(lang === "km" ? "មិនមានឧបករណ៍នៅក្នុងផ្នែកនេះទេ។" : "No tools in this section.")}</td></tr>`;
                     return `<section class="inventory-preview-subsection">
                       <div class="inventory-preview-subsection-head">
-                        <h4>${escapeHtml(section.title)}</h4>
                         <div class="inventory-preview-page-meta">
                           <span>${escapeHtml(lang === "km" ? "ចំនួន" : "Items")}: ${section.rows.length}</span>
                           <span>${escapeHtml(lang === "km" ? "ស្តុកទាប" : "Low Stock")}: ${section.rows.filter((row) => row.lowStock).length}</span>
@@ -42713,7 +42771,6 @@ export default function App() {
                   <div class="inventory-preview-page-head">
                     <div>
                       <div class="inventory-preview-page-kicker">${escapeHtml(lang === "km" ? `ទំព័ររបាយការណ៍ឧបករណ៍ ${pageIndex + 1}` : `Tool Report Page ${pageIndex + 1}`)}</div>
-                      <h3>${escapeHtml(page.title)}</h3>
                       <p>${escapeHtml(page.description)}</p>
                     </div>
                     <div class="inventory-preview-page-meta">
@@ -54534,7 +54591,7 @@ function formatTicketRequestSource(value?: string) {
 
         {tab === "inventory" && (
           <div className={`inventory-shell ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
-            {!maintenanceQuickMode && !(inventoryView === "dashboard" && inventoryDashboardGroup === "SUPPLY") ? (
+            {!maintenanceQuickMode && inventoryView !== "review" && inventoryView !== "list" && !(inventoryView === "dashboard" && inventoryDashboardGroup === "SUPPLY") ? (
               <section className={`panel ${inventoryBusinessGroupThemeClass(inventoryDashboardGroup)}`}>
                 <div className="panel-row">
                   <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</h2>
@@ -54799,6 +54856,21 @@ function formatTicketRequestSource(value?: string) {
                   <label className="field">
                     <span>Group</span>
                     <div className="detail-value">{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</div>
+                  </label>
+                  <label className="field">
+                    <span>{inventoryDashboardGroup === "SUPPLY" ? "Responsible Type" : "Property Type"}</span>
+                    <select
+                      className="input"
+                      value={inventoryItemFilterOwnerType}
+                      onChange={(e) => setInventoryItemFilterOwnerType(e.target.value)}
+                    >
+                      <option value="ALL">{inventoryDashboardGroup === "SUPPLY" ? "All Responsible Types" : "All Property Types"}</option>
+                      {inventoryItemOwnerTypeOptions.map((ownerType) => (
+                        <option key={`inventory-item-owner-type-${ownerType}`} value={ownerType}>
+                          {ownerTypeLabel(ownerType)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
 
@@ -55193,6 +55265,15 @@ function formatTicketRequestSource(value?: string) {
                       <option value="ZERO">Zero Available</option>
                     </select>
                   </label>
+                  <label className="field">
+                    <span>Search</span>
+                    <input
+                      className="input"
+                      placeholder="Search code, tool name, location..."
+                      value={inventoryItemFilterQuery}
+                      onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
+                    />
+                  </label>
                 </div>
 
                 <div className="inventory-tool-list-cards">
@@ -55278,7 +55359,7 @@ function formatTicketRequestSource(value?: string) {
                   {!maintenanceQuickMode ? <div className="detail-value">{toolReviewMonth}</div> : null}
                 </div>
 
-                <div className="panel-filters" style={{ marginBottom: 16 }}>
+                <div className="panel-filters tool-review-filter-bar" style={{ marginBottom: 16 }}>
                   <label className="field">
                     <span>Review Month</span>
                     <input className="input" type="month" value={toolReviewMonth} onChange={(e) => setToolReviewMonth(e.target.value)} />
@@ -55349,7 +55430,7 @@ function formatTicketRequestSource(value?: string) {
                       />
                     </label>
                   ) : null}
-                  <label className="field field-wide">
+                  <label className="field tool-review-search-field">
                     <span>Search</span>
                     <input
                       className="input"
@@ -67062,10 +67143,8 @@ function formatTicketRequestSource(value?: string) {
                               }}
                             >
                               <div style={{ fontSize: 10, fontWeight: 800, lineHeight: 1.2 }}>{reportCampusName(entry.campus)}</div>
-                              <div style={{ fontSize: 10, lineHeight: 1.2 }}>{entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
-                              <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.82 }}>
-                                {entry.assetCount} {entry.assetCount > 1 ? (lang === "km" ? "ទ្រព្យ" : "assets") : (lang === "km" ? "ទ្រព្យ" : "asset")}
-                              </div>
+                              <div style={{ fontSize: 10, lineHeight: 1.2 }}>{entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
+                              <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.82 }}>{entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
                             </div>
                           ))}
                         </div>
@@ -67081,10 +67160,10 @@ function formatTicketRequestSource(value?: string) {
                         <th>No.</th>
                         <th>{lang === "km" ? "កាលបរិច្ឆេទ" : "Date"}</th>
                         <th>{t.campus}</th>
+                        <th>{lang === "km" ? "ការងារ / ធាតុ" : "Task / Item"}</th>
                         <th>{lang === "km" ? "ក្រុម" : "Group"}</th>
                         <th>{lang === "km" ? "សម្គាល់" : "Schedule Note"}</th>
-                        <th>{lang === "km" ? "ចំនួនទ្រព្យ" : "Assets"}</th>
-                        <th>{lang === "km" ? "ទីតាំង" : "Locations"}</th>
+                        <th>{lang === "km" ? "ពេលវេលា / ទីតាំង" : "Time / Locations"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -67094,9 +67173,9 @@ function formatTicketRequestSource(value?: string) {
                             <td>{index + 1}</td>
                             <td>{formatDate(row.date)}</td>
                             <td>{reportCampusName(row.campus)}</td>
+                            <td>{row.items.join(", ") || "-"}</td>
                             <td>{reportScheduleGroupLabel(row.scheduleGroup)}</td>
                             <td>{row.scheduleNote || "-"}</td>
-                            <td>{row.assetCount}</td>
                             <td>{row.locations.join(", ") || "-"}</td>
                           </tr>
                         ))
@@ -67586,7 +67665,6 @@ function formatTicketRequestSource(value?: string) {
                             <div className="report-inventory-page-kicker">
                               {lang === "km" ? `ទំព័ររបាយការណ៍ឧបករណ៍ ${pageIndex + 1}` : `Tool Report Page ${pageIndex + 1}`}
                             </div>
-                            <h4>{page.title}</h4>
                             <p className="report-inventory-page-copy">{page.description}</p>
                           </div>
                           <div className="report-inventory-page-stats">
@@ -67602,9 +67680,6 @@ function formatTicketRequestSource(value?: string) {
                           {page.sections.map((section) => (
                             <section key={`report-inventory-page-section-${page.key}-${section.key}`} className="report-inventory-subsection">
                               <div className="report-inventory-subsection-head">
-                                <div>
-                                  <h5>{section.title}</h5>
-                                </div>
                                 <div className="report-inventory-subsection-stats">
                                   <span>
                                     {section.rows.length} {lang === "km" ? "ធាតុ" : "items"}
