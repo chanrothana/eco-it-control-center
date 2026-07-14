@@ -8543,6 +8543,7 @@ type LocationPickerProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  className?: string;
   searchPlaceholder?: string;
   emptyText?: string;
 };
@@ -8838,6 +8839,7 @@ function LocationPicker({
   onChange,
   placeholder = "Select location",
   disabled,
+  className,
   searchPlaceholder = "Search location...",
   emptyText = "No location found.",
 }: LocationPickerProps) {
@@ -8893,7 +8895,10 @@ function LocationPicker({
   );
 
   return (
-    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div
+      className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""} ${className || ""}`.trim()}
+      ref={wrapRef}
+    >
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -37516,6 +37521,38 @@ export default function App() {
     },
     [maintenanceQuickTemplate]
   );
+  const maintenanceQuickTemplateAssetMatches = useCallback(
+    (asset: Asset) => {
+      const assetType = String(asset.type || "").trim().toUpperCase();
+      if (maintenanceQuickTemplate === "manual") return true;
+      if (maintenanceQuickTemplate === "aircon_cleaning") {
+        return asset.category === "FACILITY" && assetType === "AC";
+      }
+      if (maintenanceQuickTemplate === "computer_service") {
+        return asset.category === "IT" && assetType === DESKTOP_PARENT_TYPE;
+      }
+      if (maintenanceQuickTemplate === "laptop_service") {
+        return asset.category === "IT" && assetType === LAPTOP_TYPE;
+      }
+      if (maintenanceQuickTemplate === "ipad_service") {
+        return asset.category === "IT" && assetType === "TAB";
+      }
+      if (maintenanceQuickTemplate === "tv_service") {
+        return asset.category === "IT" && assetType === TV_TYPE_CODE;
+      }
+      if (maintenanceQuickTemplate === "walkie_service") {
+        return asset.category === "FACILITY" && assetType === WALKIE_TALKIE_TYPE_CODE;
+      }
+      if (maintenanceQuickTemplate === "it_maintenance") {
+        return asset.category === "IT";
+      }
+      if (maintenanceQuickTemplate === "facility_maintenance") {
+        return asset.category === "FACILITY";
+      }
+      return true;
+    },
+    [maintenanceQuickTemplate]
+  );
   const applyMaintenanceQuickTemplate = useCallback(
     (template: MaintenanceQuickTemplateKey) => {
       const today = new Date();
@@ -37578,6 +37615,76 @@ export default function App() {
     reportMaintenanceCategoryFilter,
     reportMaintenanceItemFilter,
   ]);
+  const maintenanceCompletionTargetAssets = useMemo(() => {
+    return assets
+      .filter((asset) => {
+        if (reportAssetIdFilter && String(asset.assetId || "").trim() !== reportAssetIdFilter) return false;
+        if (reportMaintenanceCampusFilter !== "ALL" && asset.campus !== reportMaintenanceCampusFilter) return false;
+        if (reportMaintenanceCategoryFilter !== "ALL" && asset.category !== reportMaintenanceCategoryFilter) return false;
+        const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+        if (reportMaintenanceItemFilter !== "ALL" && itemName !== reportMaintenanceItemFilter) return false;
+        if (!maintenanceQuickTemplateAssetMatches(asset)) return false;
+        return true;
+      })
+      .map((asset) => ({
+        id: asset.id,
+        assetId: String(asset.assetId || "").trim(),
+        campus: String(asset.campus || "").trim(),
+        location: String(asset.location || "").trim() || "-",
+        itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
+      }))
+      .sort(
+        (a, b) =>
+          campusLabel(a.campus).localeCompare(campusLabel(b.campus)) ||
+          a.location.localeCompare(b.location, undefined, { sensitivity: "base", numeric: true }) ||
+          a.assetId.localeCompare(b.assetId, undefined, { sensitivity: "base", numeric: true })
+      );
+  }, [
+    assets,
+    assetItemName,
+    campusLabel,
+    maintenanceQuickTemplateAssetMatches,
+    reportAssetIdFilter,
+    reportMaintenanceCampusFilter,
+    reportMaintenanceCategoryFilter,
+    reportMaintenanceItemFilter,
+  ]);
+  const maintenanceCompletionLatestRowByAssetId = useMemo(() => {
+    const getRowStamp = (row: (typeof maintenanceCompletionRows)[number]) =>
+      Date.parse(String(row.updatedAt || row.createdAt || row.date || "")) || 0;
+    const map = new Map<string, (typeof maintenanceCompletionRows)[number]>();
+    for (const row of maintenanceCompletionRows) {
+      const existing = map.get(row.assetId);
+      if (!existing || getRowStamp(row) >= getRowStamp(existing)) {
+        map.set(row.assetId, row);
+      }
+    }
+    return map;
+  }, [maintenanceCompletionRows]);
+  const maintenanceCompletionDoneAssetIds = useMemo(() => {
+    return new Set(
+      maintenanceCompletionRows
+        .filter((row) => String(row.completion || "").trim().toLowerCase() === "done")
+        .map((row) => String(row.assetId || "").trim())
+        .filter(Boolean)
+    );
+  }, [maintenanceCompletionRows]);
+  const maintenanceCompletionPendingAssets = useMemo(() => {
+    return maintenanceCompletionTargetAssets
+      .filter((asset) => !maintenanceCompletionDoneAssetIds.has(asset.assetId))
+      .map((asset) => {
+        const latestRow = maintenanceCompletionLatestRowByAssetId.get(asset.assetId);
+        return {
+          ...asset,
+          lastStatus: latestRow ? String(latestRow.completion || "").trim() || "Not Yet" : "",
+          lastDate: latestRow?.date || "",
+        };
+      });
+  }, [
+    maintenanceCompletionDoneAssetIds,
+    maintenanceCompletionLatestRowByAssetId,
+    maintenanceCompletionTargetAssets,
+  ]);
   const reportMaintenanceItemOptions = useMemo(() => {
     return Array.from(
       new Set(
@@ -37605,8 +37712,8 @@ export default function App() {
   }, [maintenanceCompletionRows]);
 
   const maintenanceCompletionSummary = useMemo(() => {
-    const done = maintenanceCompletionRows.filter((r) => r.completion === "Done").length;
-    const notYet = maintenanceCompletionRows.filter((r) => r.completion !== "Done").length;
+    const done = maintenanceCompletionDoneAssetIds.size;
+    const notYet = maintenanceCompletionPendingAssets.length;
     const withEvidence = maintenanceCompletionRows.filter(
       (r) =>
         Boolean(String(r.reportFile || "").trim()) ||
@@ -37620,8 +37727,13 @@ export default function App() {
       const value = Number(normalized);
       return Number.isFinite(value) ? sum + value : sum;
     }, 0);
-    return { done, notYet, total: maintenanceCompletionRows.length, withEvidence, totalCost };
-  }, [maintenanceCompletionRows]);
+    return { done, notYet, total: maintenanceCompletionTargetAssets.length, withEvidence, totalCost };
+  }, [
+    maintenanceCompletionDoneAssetIds,
+    maintenanceCompletionPendingAssets.length,
+    maintenanceCompletionRows,
+    maintenanceCompletionTargetAssets.length,
+  ]);
   const maintenanceCompletionRangeLabel = useMemo(() => {
     const from = reportDateFrom || "-";
     const to = reportDateTo || "-";
@@ -41834,6 +41946,14 @@ export default function App() {
         : reportType === "inventory_balance"
           ? "preview-report-table preview-report-table-inventory"
         : "preview-report-table";
+    const reportHeadingTitle =
+      reportType === "maintenance_completion"
+        ? "Maintenance Report for ED"
+        : title;
+    const reportHeadingSubtitle =
+      reportType === "maintenance_completion"
+        ? maintenanceCompletionRangeLabel
+        : "";
 
     const reportContentHtml =
       reportType === "asset_full_record"
@@ -42008,6 +42128,64 @@ export default function App() {
                 </table>
               </div>
             </div>`;
+          })()
+        : reportType === "maintenance_completion"
+        ? (() => {
+            const pendingHeading = reportAssetIdFilter
+              ? (lang === "km" ? "ស្ថានភាពទ្រព្យដែលបានជ្រើស" : "Selected Asset Status")
+              : (lang === "km" ? "ទ្រព្យមិនទាន់ធ្វើ" : "Assets Not Yet Done");
+            const pendingIntro = reportAssetIdFilter
+              ? maintenanceCompletionPendingAssets.length
+                ? (lang === "km"
+                    ? "ទ្រព្យដែលបានជ្រើសមិនទាន់មានកំណត់ត្រា Done ក្នុងរយៈពេលនេះ។"
+                    : "The selected asset does not have a Done record in this date range.")
+                : (lang === "km"
+                    ? "ទ្រព្យដែលបានជ្រើសបានបញ្ចប់រួចរាល់ក្នុងរយៈពេលនេះ។"
+                    : "The selected asset is already completed in this date range.")
+              : maintenanceCompletionPendingAssets.length
+                ? (lang === "km"
+                    ? `មានទ្រព្យ ${maintenanceCompletionPendingAssets.length} មិនទាន់ធ្វើរួចរាល់។`
+                    : `${maintenanceCompletionPendingAssets.length} asset(s) are still missing completion in this date range.`)
+                : (lang === "km"
+                    ? "ទ្រព្យដែលបានជ្រើសទាំងអស់បានបញ្ចប់រួចរាល់ក្នុងរយៈពេលនេះ។"
+                    : "All selected assets are already completed in this date range.");
+            const pendingListHtml = maintenanceCompletionPendingAssets.length
+              ? `<div class="maintenance-pending-list">${maintenanceCompletionPendingAssets
+                  .map((asset) => {
+                    const locationLine =
+                      reportMaintenanceCampusFilter === "ALL"
+                        ? `${reportCampusName(asset.campus)} | ${asset.location}`
+                        : asset.location;
+                    const statusLine = asset.lastDate
+                      ? `${formatDate(asset.lastDate)} | ${asset.lastStatus || "Not Yet"}`
+                      : (lang === "km" ? "មិនទាន់មានកំណត់ត្រា" : "No record yet");
+                    return `<article class="maintenance-pending-item">
+                      <div class="maintenance-pending-item-main">${escapeHtml(asset.assetId)}</div>
+                      <div class="maintenance-pending-item-sub">${escapeHtml(locationLine)}</div>
+                      <div class="maintenance-pending-item-sub">${escapeHtml(statusLine)}</div>
+                    </article>`;
+                  })
+                  .join("")}</div>`
+              : `<div class="maintenance-pending-empty">${escapeHtml(
+                  lang === "km"
+                    ? "គ្មានទ្រព្យខកខានក្នុងតម្រងដែលបានជ្រើស។"
+                    : "No missing assets in the selected filter."
+                )}</div>`;
+            return `
+              <section class="maintenance-pending-panel">
+                <div class="maintenance-pending-panel-head">
+                  <h3>${escapeHtml(pendingHeading)}</h3>
+                  <p>${escapeHtml(pendingIntro)}</p>
+                </div>
+                ${pendingListHtml}
+              </section>
+              <div class="preview-table-wrap">
+                <table class="${previewTableClassName}">
+                  ${buildPreviewColgroupHtml(initialColumnWidths)}
+                  ${buildPreviewHeadHtml(columns)}
+                  <tbody>${tableHtml}</tbody>
+                </table>
+              </div>`;
           })()
         : reportType === "qr_labels"
         ? qrFilteredRows.length
@@ -42350,17 +42528,25 @@ export default function App() {
             max-width: 28vw;
           }
           .report-head h1 {
-            font-size: 16px;
+            font-size: 18px;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: #5a705f;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
           }
           .report-head h2 {
             font-size: 28px;
             font-weight: 800;
             color: #1f2e26;
             line-height: 1.12;
+          }
+          .report-head-subtitle {
+            margin-top: 6px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: #5c695f;
+            line-height: 1.2;
           }
           .report-head.report-head-centered {
             margin-bottom: 12px;
@@ -42454,6 +42640,57 @@ export default function App() {
           }
           .report-summary-entry {
             display: block;
+          }
+          .maintenance-pending-panel {
+            margin: 0 0 14px;
+            border: 1px solid #d7ccb8;
+            border-radius: 14px;
+            background: #fffdf8;
+            padding: 12px 14px;
+          }
+          .maintenance-pending-panel-head h3 {
+            margin: 0;
+            font-size: 14px;
+            color: #223128;
+          }
+          .maintenance-pending-panel-head p {
+            margin: 6px 0 0;
+            font-size: 12px;
+            color: #59685f;
+            line-height: 1.4;
+          }
+          .maintenance-pending-list {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+          }
+          .maintenance-pending-item {
+            border: 1px solid #e2d8c7;
+            border-radius: 10px;
+            background: #fff;
+            padding: 9px 10px;
+          }
+          .maintenance-pending-item-main {
+            font-size: 13px;
+            font-weight: 800;
+            color: #294036;
+            margin-bottom: 4px;
+          }
+          .maintenance-pending-item-sub {
+            font-size: 11px;
+            color: #5c695f;
+            line-height: 1.35;
+          }
+          .maintenance-pending-empty {
+            margin-top: 10px;
+            border: 1px dashed #d7ccb8;
+            border-radius: 10px;
+            background: #fff;
+            padding: 12px;
+            color: #4f6257;
+            font-size: 12px;
+            font-weight: 700;
           }
           .preview-table-wrap { width: 100%; overflow-x: auto; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; background: #fff; }
@@ -42755,6 +42992,9 @@ export default function App() {
             .report-summary-box-value-item-grid {
               grid-template-columns: repeat(2, minmax(0, 1fr));
             }
+            .maintenance-pending-list {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
           }
         </style>
       </head>
@@ -42785,7 +43025,8 @@ export default function App() {
             <div class="report-head${reportType === "inventory_balance" && reportInventoryIsToolGroup ? " report-head-centered" : ""}">
               <div class="report-head-left">
                 <h1>${escapeHtml(lang === "km" ? "សាលា អេកូ អន្តរជាតិ" : "Eco International School")}</h1>
-                <h2>${escapeHtml(title)}</h2>
+                <h2>${escapeHtml(reportHeadingTitle)}</h2>
+                ${reportHeadingSubtitle ? `<div class="report-head-subtitle">${escapeHtml(reportHeadingSubtitle)}</div>` : ""}
               </div>
               <img loading="lazy" decoding="async" class="report-head-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
             </div>
@@ -64813,6 +65054,7 @@ function formatTicketRequestSource(value?: string) {
                   <LocationPicker
                     value={maintenanceQuickTemplate}
                     onChange={(value) => applyMaintenanceQuickTemplate(value as MaintenanceQuickTemplateKey)}
+                    className="report-campus-picker report-template-picker"
                     options={maintenanceQuickTemplateOptions.map((option) => ({
                       value: option.value,
                       label: option.label,

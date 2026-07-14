@@ -18349,6 +18349,8 @@ label.backup-action-btn {
 .asset-picker-list {
   max-height: 280px;
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: grid;
   gap: 6px;
 }
@@ -29083,6 +29085,7 @@ tr.row-maint-maintenance:hover td {
     padding: 16px !important;
     border-radius: 28px !important;
     border: 1px solid #d1def5 !important;
+    z-index: 160 !important;
     background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
     box-shadow:
       0 22px 48px rgba(35, 63, 118, 0.14),
@@ -29120,7 +29123,12 @@ tr.row-maint-maintenance:hover td {
   .workspace-main .report-campus-picker .asset-picker-list {
     gap: 10px !important;
     max-height: 360px !important;
+    padding-bottom: 4px;
     padding-top: 2px;
+  }
+
+  .workspace-main .report-template-picker .asset-picker-list {
+    max-height: min(420px, calc(100vh - 260px)) !important;
   }
 
   .workspace-main .report-campus-picker .asset-picker-option,
