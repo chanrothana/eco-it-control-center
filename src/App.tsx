@@ -44575,6 +44575,7 @@ export default function App() {
     try {
       const normalizedBeforePhotos = normalizeMaintenancePhotoList(publicQrRecordForm.beforePhotos || []);
       const normalizedAfterPhotos = normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || []);
+      const recordedAt = new Date().toISOString();
       const telegramPhoto = await buildMaintenanceTelegramComparisonPhoto(
         normalizedBeforePhotos[0] || "",
         normalizedAfterPhotos[0] || ""
@@ -44583,6 +44584,7 @@ export default function App() {
         method: "POST",
         body: JSON.stringify({
           date: publicQrRecordForm.date,
+          createdAt: recordedAt,
           type: publicQrRecordForm.type.trim(),
           completion: publicQrRecordForm.completion,
           condition: publicQrRecordForm.condition.trim(),
@@ -44651,6 +44653,7 @@ export default function App() {
     try {
       const normalizedBeforePhotos = normalizeMaintenancePhotoList(publicQrRecordForm.beforePhotos || []);
       const normalizedAfterPhotos = normalizeMaintenancePhotoList(publicQrRecordForm.afterPhotos || []);
+      const recordedAt = new Date().toISOString();
       const telegramPhoto = await buildMaintenanceTelegramComparisonPhoto(
         normalizedBeforePhotos[0] || "",
         normalizedAfterPhotos[0] || ""
@@ -44661,6 +44664,7 @@ export default function App() {
           method: "POST",
           body: JSON.stringify({
             date: publicQrRecordForm.date,
+            createdAt: recordedAt,
             type: publicQrRecordForm.type.trim(),
             completion: publicQrRecordForm.completion,
             condition: publicQrRecordForm.condition.trim(),
@@ -62703,18 +62707,21 @@ function formatTicketRequestSource(value?: string) {
               </div>
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
-              <select
-                className="input"
-                value={maintenanceCampusFilter}
-                onChange={(e) => setMaintenanceCampusFilter(e.target.value)}
-              >
-                <option value="ALL">{t.allCampuses}</option>
-                {maintenanceCampusOptions.map((campus) => (
-                  <option key={`maintenance-logbook-campus-filter-${campus}`} value={campus}>
-                    {campusLabel(campus)}
-                  </option>
-                ))}
-              </select>
+              <SearchableMultiSelectPicker
+                className="report-campus-picker"
+                summary={maintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(maintenanceCampusFilter)}
+                options={maintenanceCampusOptions.map((campus) => ({
+                  value: campus,
+                  label: campusLabel(campus),
+                }))}
+                selectedValues={maintenanceCampusFilter === "ALL" ? ["ALL"] : [maintenanceCampusFilter]}
+                allOptionLabel={t.allCampuses}
+                allOptionChecked={maintenanceCampusFilter === "ALL"}
+                onToggleAllOption={() => setMaintenanceCampusFilter("ALL")}
+                onToggleValue={(value, checked) => setMaintenanceCampusFilter(checked ? value : "ALL")}
+                searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+              />
               <details className="filter-menu">
                 <summary>
                   {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
@@ -62945,17 +62952,18 @@ function formatTicketRequestSource(value?: string) {
               <h2>{lang === "km" ? "ប្រវត្តិថែទាំ" : "Maintenance History"}</h2>
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
-              <LocationPicker
-                value={maintenanceCampusFilter}
-                onChange={setMaintenanceCampusFilter}
-                options={[
-                  { value: "ALL", label: t.allCampuses },
-                  ...maintenanceCampusOptions.map((campus) => ({
-                    value: campus,
-                    label: campusLabel(campus),
-                  })),
-                ]}
-                placeholder={t.allCampuses}
+              <SearchableMultiSelectPicker
+                className="report-campus-picker"
+                summary={maintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(maintenanceCampusFilter)}
+                options={maintenanceCampusOptions.map((campus) => ({
+                  value: campus,
+                  label: campusLabel(campus),
+                }))}
+                selectedValues={maintenanceCampusFilter === "ALL" ? ["ALL"] : [maintenanceCampusFilter]}
+                allOptionLabel={t.allCampuses}
+                allOptionChecked={maintenanceCampusFilter === "ALL"}
+                onToggleAllOption={() => setMaintenanceCampusFilter("ALL")}
+                onToggleValue={(value, checked) => setMaintenanceCampusFilter(checked ? value : "ALL")}
                 searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                 emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
               />
@@ -66674,12 +66682,12 @@ function formatTicketRequestSource(value?: string) {
                   {!isPhoneView ? (
                     <button
                       type="button"
-                      className="tab report-filter-reset-btn report-filter-reset-btn-inline"
+                      className="tab report-filter-reset-btn report-filter-reset-btn-inline report-control-icon-btn report-control-icon-btn-reset report-filter-reset-btn-icon-only"
                       onClick={resetReportFilters}
                       aria-label={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                       title={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                     >
-                      {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
+                      <RotateCcw size={16} aria-hidden={true} />
                     </button>
                   ) : null}
                 </>
@@ -66818,10 +66826,13 @@ function formatTicketRequestSource(value?: string) {
               ) : null}
               {reportType === "qr_labels" || reportType === "asset_full_record" ? (
                 <>
+                  {(() => {
+                    const qrCampusOptions = Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean))).sort(compareCampusByCode);
+                    return (
                   <SearchableMultiSelectPicker
                     className="report-campus-picker"
                     summary={summarizeMultiFilter(qrCampusFilter, t.allCampuses, reportCampusName)}
-                    options={Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean))).map((campus) => ({
+                    options={qrCampusOptions.map((campus) => ({
                       value: campus,
                       label: reportCampusName(campus),
                     }))}
@@ -66834,7 +66845,7 @@ function formatTicketRequestSource(value?: string) {
                           prev,
                           checked,
                           "ALL",
-                          Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean)))
+                          qrCampusOptions
                         )
                       )
                     }
@@ -66844,13 +66855,15 @@ function formatTicketRequestSource(value?: string) {
                           prev,
                           checked,
                           value,
-                          Array.from(new Set(qrLabelRows.map((row) => row.campus).filter(Boolean)))
+                          qrCampusOptions
                         )
                       )
                     }
                     searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                   />
+                    );
+                  })()}
                   <SearchableMultiSelectPicker
                     summary={summarizeMultiFilter(qrLocationFilter, lang === "km" ? "គ្រប់ទីតាំង" : "All Locations", reportLocationName)}
                     options={qrLocationFilterOptions.map((location) => ({ value: location, label: reportLocationName(location) }))}

@@ -5045,7 +5045,7 @@ h2 {
 }
 
 .report-filter-row-inventory {
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 54px;
   justify-content: start;
   align-items: end;
 }
@@ -5705,6 +5705,13 @@ h2 {
 .report-filter-reset-btn {
   grid-column: auto;
   width: 100%;
+}
+
+.report-filter-reset-btn-icon-only {
+  width: 54px;
+  min-width: 54px;
+  padding: 0;
+  justify-self: stretch;
 }
 
 .report-filter-print-btn {
