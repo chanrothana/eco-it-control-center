@@ -458,7 +458,13 @@ type MaintenanceQuickTemplateKey =
   | "tv_service"
   | "walkie_service"
   | "it_maintenance"
-  | "facility_maintenance";
+  | "facility_maintenance"
+  | "safety_maintenance"
+  | "fire_extinguisher_service"
+  | "smoke_detector_service"
+  | "emergency_light_service"
+  | "fire_bell_service"
+  | "fire_control_panel_service";
 type InventoryReportColumnKey =
   | "code"
   | "photo"
@@ -2552,6 +2558,38 @@ function renderStaffNameWithAvatar(
   );
 }
 
+function renameAssignedStaffValue(value: string | undefined, previousName: string, nextName: string) {
+  return String(value || "").trim() === previousName ? nextName : String(value || "");
+}
+
+function renameAssignedStaffInAsset(asset: Asset, previousName: string, nextName: string): Asset {
+  const nextAssignedTo = renameAssignedStaffValue(asset.assignedTo, previousName, nextName);
+  const nextCustodyHistory = Array.isArray(asset.custodyHistory)
+    ? asset.custodyHistory.map((entry) => ({
+        ...entry,
+        fromUser: renameAssignedStaffValue(entry.fromUser, previousName, nextName),
+        toUser: renameAssignedStaffValue(entry.toUser, previousName, nextName),
+      }))
+    : asset.custodyHistory;
+  if (nextAssignedTo === String(asset.assignedTo || "") && nextCustodyHistory === asset.custodyHistory) {
+    return asset;
+  }
+  return {
+    ...asset,
+    assignedTo: nextAssignedTo,
+    custodyHistory: nextCustodyHistory,
+  };
+}
+
+function renameAssignedStaffInTicket(ticket: Ticket, previousName: string, nextName: string): Ticket {
+  const nextAssignedTo = renameAssignedStaffValue(ticket.assignedTo, previousName, nextName);
+  if (nextAssignedTo === String(ticket.assignedTo || "")) return ticket;
+  return {
+    ...ticket,
+    assignedTo: nextAssignedTo,
+  };
+}
+
 const ASSET_STATUS_OPTIONS = [
   { value: "Active", en: "Active", km: "កំពុងប្រើ" },
   { value: "Maintenance", en: "Maintenance", km: "កំពុងជួសជុល" },
@@ -2878,6 +2916,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
     { itemEn: "Monitor", itemKm: "ម៉ូនីទ័រ", code: "MON" },
     { itemEn: "Keyboard", itemKm: "ក្តារចុច", code: "KBD" },
     { itemEn: "Mouse", itemKm: "កណ្ដុរ", code: "MSE" },
+    { itemEn: "Mouse Pad", itemKm: "បន្ទះកណ្ដុរ", code: "MPD" },
     { itemEn: "Digital Camera", itemKm: "កាមេរ៉ាឌីជីថល", code: "DCM" },
     { itemEn: "Camera Battery", itemKm: "ថ្មកាមេរ៉ា", code: "BAT" },
     { itemEn: "Battery Charger", itemKm: "ឆ្នាំងសាកថ្ម", code: "CHB" },
@@ -2953,7 +2992,7 @@ const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
 const REMOTE_TYPE_CODE = "RMT";
-const QR_OPTIONAL_COMPUTER_COMPONENT_TYPES = ["KBD", "MSE"] as const;
+const QR_OPTIONAL_COMPUTER_COMPONENT_TYPES = ["KBD", "MSE", "MPD"] as const;
 const AIRCON_FRONT_UNIT_TYPE_CODE = "FPN";
 const AIRCON_OUTDOOR_UNIT_TYPE_CODE = "RPN";
 const WALKIE_CHARGER_TYPE_CODE = "ADP";
@@ -3030,7 +3069,7 @@ const PC_TYPE_OPTIONS = [
   { value: "Mac Mini", en: "Mac Mini", km: "Mac Mini" },
   { value: "Other", en: "Other", km: "ផ្សេងៗ" },
 ] as const;
-type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE" | "UWF" | "WBC";
+type SetPackChildType = "MON" | "MON2" | "KBD" | "MSE" | "MPD" | "UWF" | "WBC";
 type LaptopAccessoryType = "ADP" | "MSE" | "KBD" | "MON";
 type CameraComponentType = "BAT" | "CHB" | "MCD" | "BAG";
 type ProjectorComponentType = "PBG" | "RMT" | "ADP" | "HDC";
@@ -3074,6 +3113,7 @@ function defaultSetPackDraft(): Record<SetPackChildType, SetPackChildDraft> {
     MON2: { ...defaultSetPackChildDraft(), enabled: false },
     KBD: defaultSetPackChildDraft(),
     MSE: defaultSetPackChildDraft(),
+    MPD: { ...defaultSetPackChildDraft(), enabled: false },
     UWF: { ...defaultSetPackChildDraft(), enabled: false },
     WBC: { ...defaultSetPackChildDraft(), enabled: false },
   };
@@ -3121,7 +3161,7 @@ function defaultPianoComponentDraft(): Record<PianoComponentType, SetPackChildDr
   };
 }
 
-function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "UWF" | "WBC" {
+function setPackAssetType(type: SetPackChildType): "MON" | "KBD" | "MSE" | "MPD" | "UWF" | "WBC" {
   if (type === "MON2") return "MON";
   return type;
 }
@@ -3234,6 +3274,7 @@ const TEXT = {
     includeMonitor2: "Include 2nd Monitor",
     includeKeyboard: "Include Keyboard",
     includeMouse: "Include Mouse",
+    includeMousePad: "Include Mouse Pad",
     includeUsbWifi: "Include USB WiFi",
     includeWebcam: "Include Webcam",
     laptopAccessories: "Laptop Accessories",
@@ -3477,6 +3518,7 @@ const TEXT = {
     includeMonitor2: "រួមបញ្ចូល Monitor ទី២",
     includeKeyboard: "រួមបញ្ចូល Keyboard",
     includeMouse: "រួមបញ្ចូល Mouse",
+    includeMousePad: "រួមបញ្ចូល Mouse Pad",
     includeUsbWifi: "រួមបញ្ចូល USB WiFi",
     includeWebcam: "រួមបញ្ចូល Webcam",
     laptopAccessories: "គ្រឿងបន្ថែម Laptop",
@@ -11402,6 +11444,7 @@ export default function App() {
     MON2: 0,
     KBD: 0,
     MSE: 0,
+    MPD: 0,
     UWF: 0,
     WBC: 0,
   });
@@ -11410,6 +11453,7 @@ export default function App() {
     MON2: false,
     KBD: false,
     MSE: false,
+    MPD: false,
     UWF: false,
     WBC: false,
   });
@@ -11514,6 +11558,7 @@ export default function App() {
     MON2: false,
     KBD: false,
     MSE: false,
+    MPD: false,
     UWF: false,
     WBC: false,
   });
@@ -15749,6 +15794,7 @@ export default function App() {
     const baseMon = calcNextSeq(assets, assetForm.campus, "IT", "MON");
     const baseKbd = calcNextSeq(assets, assetForm.campus, "IT", "KBD");
     const baseMse = calcNextSeq(assets, assetForm.campus, "IT", "MSE");
+    const baseMpd = calcNextSeq(assets, assetForm.campus, "IT", "MPD");
     const baseUwf = calcNextSeq(assets, assetForm.campus, "IT", "UWF");
     const baseWbc = calcNextSeq(assets, assetForm.campus, "IT", "WBC");
     return {
@@ -15756,6 +15802,7 @@ export default function App() {
       MON2: buildAssetId(assetForm.campus, "IT", "MON", baseMon + 1),
       KBD: buildAssetId(assetForm.campus, "IT", "KBD", baseKbd),
       MSE: buildAssetId(assetForm.campus, "IT", "MSE", baseMse),
+      MPD: buildAssetId(assetForm.campus, "IT", "MPD", baseMpd),
       UWF: buildAssetId(assetForm.campus, "IT", "UWF", baseUwf),
       WBC: buildAssetId(assetForm.campus, "IT", "WBC", baseWbc),
     };
@@ -19501,6 +19548,7 @@ export default function App() {
       MON2: false,
       KBD: false,
       MSE: false,
+      MPD: false,
       UWF: false,
       WBC: false,
     });
@@ -19509,6 +19557,7 @@ export default function App() {
       MON2: prev.MON2 + 1,
       KBD: prev.KBD + 1,
       MSE: prev.MSE + 1,
+      MPD: prev.MPD + 1,
       UWF: prev.UWF + 1,
       WBC: prev.WBC + 1,
     }));
@@ -19698,10 +19747,11 @@ export default function App() {
       { type: "MON", label: t.includeMonitor },
       { type: "KBD", label: t.includeKeyboard },
       { type: "MSE", label: t.includeMouse },
+      { type: "MPD", label: t.includeMousePad },
       { type: "UWF", label: t.includeUsbWifi },
       { type: "WBC", label: t.includeWebcam },
     ],
-    [t.includeMonitor, t.includeKeyboard, t.includeMouse, t.includeUsbWifi, t.includeWebcam]
+    [t.includeMonitor, t.includeKeyboard, t.includeMouse, t.includeMousePad, t.includeUsbWifi, t.includeWebcam]
   );
   const createSetPackChildMeta = useMemo(
     () =>
@@ -21482,6 +21532,7 @@ export default function App() {
         MON2: false,
         KBD: false,
         MSE: false,
+        MPD: false,
         UWF: false,
         WBC: false,
       });
@@ -21490,6 +21541,7 @@ export default function App() {
         MON2: prev.MON2 + 1,
         KBD: prev.KBD + 1,
         MSE: prev.MSE + 1,
+        MPD: prev.MPD + 1,
         UWF: prev.UWF + 1,
         WBC: prev.WBC + 1,
       }));
@@ -22165,6 +22217,7 @@ export default function App() {
           MON2: false,
           KBD: false,
           MSE: false,
+          MPD: false,
           UWF: false,
           WBC: false,
         });
@@ -22173,6 +22226,7 @@ export default function App() {
           MON2: prev.MON2 + 1,
           KBD: prev.KBD + 1,
           MSE: prev.MSE + 1,
+          MPD: prev.MPD + 1,
           UWF: prev.UWF + 1,
           WBC: prev.WBC + 1,
         }));
@@ -24703,6 +24757,12 @@ export default function App() {
     const photo = String(userForm.photo || "").trim();
     const sex = normalizeStaffSex(userForm.sex);
     const status = normalizeStaffStatus(userForm.status);
+    const previousUser = editingUserId !== null ? users.find((u) => u.id === editingUserId) || null : null;
+    const previousFullName = String(previousUser?.fullName || "").trim();
+    const shouldRenameAssignedStaff =
+      editingUserId !== null &&
+      previousFullName &&
+      previousFullName !== fullName;
     if (!fullName || !position || !campus) return;
 
     const emailTaken = email
@@ -24758,6 +24818,32 @@ export default function App() {
           await loadStaffUsers();
         }
       }
+      if (shouldRenameAssignedStaff) {
+        setAssets((prev) => prev.map((asset) => renameAssignedStaffInAsset(asset, previousFullName, fullName)));
+        setTickets((prev) => prev.map((ticket) => renameAssignedStaffInTicket(ticket, previousFullName, fullName)));
+        setAssetAssignedToMultiFilter((prev) =>
+          prev.includes(previousFullName)
+            ? prev.map((value) => (value === previousFullName ? fullName : value))
+            : prev
+        );
+        setStaffBorrowingAssignedToFilter((prev) => (prev === previousFullName ? fullName : prev));
+        setAssetForm((prev) => ({
+          ...prev,
+          assignedTo: prev.assignedTo === previousFullName ? fullName : prev.assignedTo,
+        }));
+        setAssetEditForm((prev) => ({
+          ...prev,
+          assignedTo: prev.assignedTo === previousFullName ? fullName : prev.assignedTo,
+        }));
+        setTicketForm((prev) => ({
+          ...prev,
+          assignedTo: prev.assignedTo === previousFullName ? fullName : prev.assignedTo,
+        }));
+        setTicketEditForm((prev) => ({
+          ...prev,
+          assignedTo: prev.assignedTo === previousFullName ? fullName : prev.assignedTo,
+        }));
+      }
       resetUserSetupForm();
       setUserSetupModalOpen(false);
     } catch (err) {
@@ -24785,6 +24871,16 @@ export default function App() {
           const nextUsers = [localUser, ...users];
           setUsers(nextUsers);
           writeUserFallback(nextUsers);
+        }
+        if (shouldRenameAssignedStaff) {
+          setAssets((prev) => prev.map((asset) => renameAssignedStaffInAsset(asset, previousFullName, fullName)));
+          setTickets((prev) => prev.map((ticket) => renameAssignedStaffInTicket(ticket, previousFullName, fullName)));
+          setAssetAssignedToMultiFilter((prev) =>
+            prev.includes(previousFullName)
+              ? prev.map((value) => (value === previousFullName ? fullName : value))
+              : prev
+          );
+          setStaffBorrowingAssignedToFilter((prev) => (prev === previousFullName ? fullName : prev));
         }
         resetUserSetupForm();
         setUserSetupModalOpen(false);
@@ -26220,6 +26316,8 @@ export default function App() {
             approvalDecisionBy: authUser?.displayName || authUser?.username || reviewedBy,
             approvalDecisionAt: new Date().toISOString(),
             approvalDecisionNote: "",
+            txnSource: "TOOL_REVIEW",
+            forceAlert: true,
           }),
         });
         const savedTxns = (Array.isArray(res.txns) && res.txns.length ? res.txns : (res.txn ? [res.txn] : [])).filter(Boolean) as InventoryTxn[];
@@ -31227,7 +31325,7 @@ export default function App() {
       setError("Please select a valid service/task date.");
       return;
     }
-    if (normalizedDate < todayYmd) {
+    if (!isSuperAdmin && normalizedDate < todayYmd) {
       setError("Cannot set service/task schedule to a past date.");
       return;
     }
@@ -34946,10 +35044,12 @@ export default function App() {
     if (monitors[1]) map.MON2 = monitors[1];
     const keyboard = childrenByScope.find((a) => a.type === "KBD");
     const mouse = childrenByScope.find((a) => a.type === "MSE");
+    const mousePad = childrenByScope.find((a) => a.type === "MPD");
     const usbWifi = childrenByScope.find((a) => a.type === "UWF");
     const webcam = childrenByScope.find((a) => a.type === "WBC");
     if (keyboard) map.KBD = keyboard;
     if (mouse) map.MSE = mouse;
+    if (mousePad) map.MPD = mousePad;
     if (usbWifi) map.UWF = usbWifi;
     if (webcam) map.WBC = webcam;
     return map;
@@ -35035,19 +35135,20 @@ export default function App() {
   useEffect(() => {
     if (!editingAsset) {
       setEditCreateSetPack(false);
-      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false, UWF: false, WBC: false });
+      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false, MPD: false, UWF: false, WBC: false });
       return;
     }
     const isDesktopParent = editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE;
     if (!isDesktopParent) {
       setEditCreateSetPack(false);
-      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false, UWF: false, WBC: false });
+      setEditSetPackEnabled({ MON: false, MON2: false, KBD: false, MSE: false, MPD: false, UWF: false, WBC: false });
       return;
     }
     const hasAnyChild = editingIsDesktopAio
       ? (
         Boolean(editingSetPackChildren.KBD) ||
         Boolean(editingSetPackChildren.MSE) ||
+        Boolean(editingSetPackChildren.MPD) ||
         Boolean(editingSetPackChildren.UWF) ||
         Boolean(editingSetPackChildren.WBC)
       )
@@ -35056,6 +35157,7 @@ export default function App() {
         Boolean(editingSetPackChildren.MON2) ||
         Boolean(editingSetPackChildren.KBD) ||
         Boolean(editingSetPackChildren.MSE) ||
+        Boolean(editingSetPackChildren.MPD) ||
         Boolean(editingSetPackChildren.UWF) ||
         Boolean(editingSetPackChildren.WBC)
       );
@@ -35065,6 +35167,7 @@ export default function App() {
       MON2: editingIsDesktopAio ? false : Boolean(editingSetPackChildren.MON2),
       KBD: Boolean(editingSetPackChildren.KBD),
       MSE: Boolean(editingSetPackChildren.MSE),
+      MPD: Boolean(editingSetPackChildren.MPD),
       UWF: Boolean(editingSetPackChildren.UWF),
       WBC: Boolean(editingSetPackChildren.WBC),
     });
@@ -38104,6 +38207,12 @@ export default function App() {
             { value: "walkie_service", label: "ED Quick: កំណត់ត្រាវិទ្យុទាក់ទង" },
             { value: "it_maintenance", label: "ED Quick: ថែទាំ IT ទាំងអស់" },
             { value: "facility_maintenance", label: "ED Quick: ថែទាំ Facility ទាំងអស់" },
+            { value: "safety_maintenance", label: "ED Quick: ថែទាំសុវត្ថិភាពទាំងអស់" },
+            { value: "fire_extinguisher_service", label: "ED Quick: កំណត់ត្រាបំពង់ពន្លត់អគ្គិភ័យ" },
+            { value: "smoke_detector_service", label: "ED Quick: កំណត់ត្រាឧបករណ៍ចាប់ផ្សែង" },
+            { value: "emergency_light_service", label: "ED Quick: កំណត់ត្រាភ្លើងអាសន្ន" },
+            { value: "fire_bell_service", label: "ED Quick: កំណត់ត្រាកណ្តឹងអគ្គិភ័យ" },
+            { value: "fire_control_panel_service", label: "ED Quick: កំណត់ត្រាផ្ទាំងបញ្ជាអគ្គិភ័យ" },
           ]
         : [
             { value: "manual", label: "Manual / Custom" },
@@ -38115,6 +38224,12 @@ export default function App() {
             { value: "walkie_service", label: "ED Quick: Walkie Records" },
             { value: "it_maintenance", label: "ED Quick: All IT Maintenance" },
             { value: "facility_maintenance", label: "ED Quick: All Facility Maintenance" },
+            { value: "safety_maintenance", label: "ED Quick: All Safety Maintenance" },
+            { value: "fire_extinguisher_service", label: "ED Quick: Fire Extinguisher Records" },
+            { value: "smoke_detector_service", label: "ED Quick: Smoke Detector Records" },
+            { value: "emergency_light_service", label: "ED Quick: Emergency Light Records" },
+            { value: "fire_bell_service", label: "ED Quick: Fire Bell Records" },
+            { value: "fire_control_panel_service", label: "ED Quick: Fire Control Panel Records" },
           ],
     [lang]
   );
@@ -38153,6 +38268,24 @@ export default function App() {
       if (maintenanceQuickTemplate === "facility_maintenance") {
         return row.category === "FACILITY";
       }
+      if (maintenanceQuickTemplate === "safety_maintenance") {
+        return row.category === "SAFETY";
+      }
+      if (maintenanceQuickTemplate === "fire_extinguisher_service") {
+        return row.category === "SAFETY" && assetType === "FE";
+      }
+      if (maintenanceQuickTemplate === "smoke_detector_service") {
+        return row.category === "SAFETY" && assetType === "SD";
+      }
+      if (maintenanceQuickTemplate === "emergency_light_service") {
+        return row.category === "SAFETY" && assetType === "EL";
+      }
+      if (maintenanceQuickTemplate === "fire_bell_service") {
+        return row.category === "SAFETY" && assetType === "FB";
+      }
+      if (maintenanceQuickTemplate === "fire_control_panel_service") {
+        return row.category === "SAFETY" && assetType === "FCP";
+      }
       return true;
     },
     [maintenanceQuickTemplate]
@@ -38184,6 +38317,24 @@ export default function App() {
       }
       if (maintenanceQuickTemplate === "facility_maintenance") {
         return asset.category === "FACILITY";
+      }
+      if (maintenanceQuickTemplate === "safety_maintenance") {
+        return asset.category === "SAFETY";
+      }
+      if (maintenanceQuickTemplate === "fire_extinguisher_service") {
+        return asset.category === "SAFETY" && assetType === "FE";
+      }
+      if (maintenanceQuickTemplate === "smoke_detector_service") {
+        return asset.category === "SAFETY" && assetType === "SD";
+      }
+      if (maintenanceQuickTemplate === "emergency_light_service") {
+        return asset.category === "SAFETY" && assetType === "EL";
+      }
+      if (maintenanceQuickTemplate === "fire_bell_service") {
+        return asset.category === "SAFETY" && assetType === "FB";
+      }
+      if (maintenanceQuickTemplate === "fire_control_panel_service") {
+        return asset.category === "SAFETY" && assetType === "FCP";
       }
       return true;
     },
@@ -38221,6 +38372,36 @@ export default function App() {
       if (template === "walkie_service" || template === "facility_maintenance") {
         setReportMaintenanceCategoryFilter("FACILITY");
         setReportMaintenanceItemFilter("ALL");
+        return;
+      }
+      if (template === "safety_maintenance") {
+        setReportMaintenanceCategoryFilter("SAFETY");
+        setReportMaintenanceItemFilter("ALL");
+        return;
+      }
+      if (template === "fire_extinguisher_service") {
+        setReportMaintenanceCategoryFilter("SAFETY");
+        setReportMaintenanceItemFilter("Fire Extinguisher");
+        return;
+      }
+      if (template === "smoke_detector_service") {
+        setReportMaintenanceCategoryFilter("SAFETY");
+        setReportMaintenanceItemFilter("Smoke Detector");
+        return;
+      }
+      if (template === "emergency_light_service") {
+        setReportMaintenanceCategoryFilter("SAFETY");
+        setReportMaintenanceItemFilter("Emergency Light");
+        return;
+      }
+      if (template === "fire_bell_service") {
+        setReportMaintenanceCategoryFilter("SAFETY");
+        setReportMaintenanceItemFilter("Fire Bell");
+        return;
+      }
+      if (template === "fire_control_panel_service") {
+        setReportMaintenanceCategoryFilter("SAFETY");
+        setReportMaintenanceItemFilter("Fire Control Panel");
         return;
       }
       setReportMaintenanceCategoryFilter("ALL");

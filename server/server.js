@@ -359,6 +359,7 @@ const TYPE_CODES = {
     "MON",
     "KBD",
     "MSE",
+    "MPD",
     "DCM",
     "BAT",
     "CHB",
@@ -390,6 +391,7 @@ const TYPE_LABELS = {
   MON: "Monitor",
   KBD: "Keyboard",
   MSE: "Mouse",
+  MPD: "Mouse Pad",
   DCM: "Digital Camera",
   BAT: "Camera Battery",
   CHB: "Battery Charger",
@@ -3864,6 +3866,95 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   };
 }
 
+async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
+  if (!txn || typeof txn !== "object") return false;
+  const txnType = normalizeInventoryTxnType(txn.type);
+  if (txnType !== "IN" && txnType !== "OUT") return false;
+  if (txnType === "OUT") return sendTelegramInventoryOutRecordedAlert(txn, db);
+  const itemCode = toText(txn.itemCode) || "-";
+  const itemName = toText(txn.itemName) || "Item";
+  const qty = Number(txn.qty || 0);
+  const campus = formatTelegramCampusKhmer(txn.campus);
+  const date = toText(txn.date) || "-";
+  const recordedBy = toText(txn.by) || toText(txn.approvalRequestedBy) || "staff";
+  const reason = toText(txn.note);
+  const settings =
+    db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+      ? db.settings
+      : {};
+  const items = normalizeInventoryItems(settings.inventoryItems);
+  const txns = normalizeInventoryTxns(settings.inventoryTxns);
+  const item = items.find((row) => Number(row.id) === Number(txn.itemId));
+  const remainingStock = item ? calcInventoryCurrentStock(item, txns) : null;
+  const stockUnit = toText(item && item.unit) || "";
+  const lines = [
+    "ជូនដំណឹង ECO IT - ស្តុក",
+    "បន្ថែមសម្ភារៈ (Item In)",
+    `មុខទំនិញ: ${itemCode} - ${itemName}`,
+    `បរិមាណ: ${qty} | សាខា: ${campus}`,
+    `កាលបរិច្ឆេទ: ${date}`,
+    `កត់ត្រាដោយ: ${recordedBy}`,
+  ];
+  if (remainingStock !== null) {
+    lines.push(`ស្តុកបច្ចុប្បន្ន: ${remainingStock}${stockUnit ? ` ${stockUnit}` : ""}`);
+  }
+  if (reason) {
+    lines.push(`មូលហេតុ: ${reason}`);
+  }
+  const report = await sendTelegramMessage(lines.join("\n"), {
+    db,
+    photoUrl: resolveInventoryItemPhotoForTelegram(db, txn),
+    includeResults: true,
+  });
+  return {
+    ok: Boolean(report && report.ok),
+    messageRefs: normalizeTelegramMessageRefs(report && report.results),
+  };
+}
+
+async function sendTelegramToolReviewAlert(reportEntry, db = null) {
+  if (!reportEntry || typeof reportEntry !== "object") return false;
+  const expectedQty = Math.max(0, Number(reportEntry.expectedQty || 0));
+  const countedQty = Math.max(0, Number(reportEntry.countedQty || 0));
+  const itemCode = toText(reportEntry.itemCode) || "-";
+  const itemName = toText(reportEntry.itemName) || "Tool";
+  const campus = formatTelegramCampusKhmer(reportEntry.campus);
+  const location = toText(reportEntry.location) || "-";
+  const month = toText(reportEntry.month) || "-";
+  const reviewedBy = toText(reportEntry.reviewedBy) || "staff";
+  const note = toText(reportEntry.note);
+  const condition = toText(reportEntry.condition) || "-";
+  const unit = toText(reportEntry.unit) || "pcs";
+  const actionLabel =
+    countedQty > expectedQty
+      ? "បន្ថែមស្តុក (Add Stock)"
+      : countedQty < expectedQty
+        ? "ដកចេញពីស្តុក (Take Out Stock)"
+        : "ផ្ទៀងផ្ទាត់ចំនួន (Verify Tool)";
+  const lines = [
+    "ជូនដំណឹង ECO IT - ស្តុក",
+    actionLabel,
+    `មុខទំនិញ: ${itemCode} - ${itemName}`,
+    `សាខា: ${campus} | ទីតាំង: ${location}`,
+    `ខែពិនិត្យ: ${month}`,
+    `ចំនួន: ${expectedQty} -> ${countedQty} ${unit}`,
+    `ស្ថានភាព: ${condition}`,
+    `កត់ត្រាដោយ: ${reviewedBy}`,
+  ];
+  if (note) {
+    lines.push(`មូលហេតុ: ${note}`);
+  }
+  const report = await sendTelegramMessage(lines.join("\n"), {
+    db,
+    photoUrl: toText(reportEntry.photo),
+    includeResults: true,
+  });
+  return {
+    ok: Boolean(report && report.ok),
+    messageRefs: normalizeTelegramMessageRefs(report && report.results),
+  };
+}
+
 function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, options = {}) {
   if (!asset || !entry) return "";
   const mode = toText(options.mode) || "general";
@@ -6638,6 +6729,53 @@ function validateStaffUser(body) {
   return { fullName, position, campus, campuses, email, telegramChatId, photo, sex, status };
 }
 
+function renameAssignedStaffValue(value, previousName, nextName) {
+  return toText(value) === previousName ? nextName : value;
+}
+
+function renameStaffReferencesInDb(db, previousName, nextName) {
+  if (!previousName || !nextName || previousName === nextName) return false;
+  let changed = false;
+  if (Array.isArray(db.assets)) {
+    db.assets = db.assets.map((asset) => {
+      if (!asset || typeof asset !== "object") return asset;
+      const nextAssignedTo = renameAssignedStaffValue(asset.assignedTo, previousName, nextName);
+      const nextCustodyHistory = Array.isArray(asset.custodyHistory)
+        ? asset.custodyHistory.map((entry) => {
+            if (!entry || typeof entry !== "object") return entry;
+            return {
+              ...entry,
+              fromUser: renameAssignedStaffValue(entry.fromUser, previousName, nextName),
+              toUser: renameAssignedStaffValue(entry.toUser, previousName, nextName),
+            };
+          })
+        : asset.custodyHistory;
+      const assetChanged =
+        nextAssignedTo !== asset.assignedTo || nextCustodyHistory !== asset.custodyHistory;
+      if (!assetChanged) return asset;
+      changed = true;
+      return {
+        ...asset,
+        assignedTo: nextAssignedTo,
+        custodyHistory: nextCustodyHistory,
+      };
+    });
+  }
+  if (Array.isArray(db.tickets)) {
+    db.tickets = db.tickets.map((ticket) => {
+      if (!ticket || typeof ticket !== "object") return ticket;
+      const nextAssignedTo = renameAssignedStaffValue(ticket.assignedTo, previousName, nextName);
+      if (nextAssignedTo === ticket.assignedTo) return ticket;
+      changed = true;
+      return {
+        ...ticket,
+        assignedTo: nextAssignedTo,
+      };
+    });
+  }
+  return changed;
+}
+
 function validateTicket(body) {
   const campus = normalizeCampusInput(body.campus);
   const category = normalizeCategoryInput(body.category);
@@ -7723,6 +7861,15 @@ const server = http.createServer(async (req, res) => {
         toolReviewReports: normalizeToolReviewReports(mergedReports),
       };
       await writeDb(db);
+      try {
+        const expectedQty = Math.max(0, Number(nextReport.expectedQty || 0));
+        const countedQty = Math.max(0, Number(nextReport.countedQty || 0));
+        if (expectedQty === countedQty) {
+          await sendTelegramToolReviewAlert(nextReport, db);
+        }
+      } catch (err) {
+        console.warn("[ALERT] Failed to send tool verification Telegram alert:", err instanceof Error ? err.message : err);
+      }
       sendJson(res, 200, {
         ok: true,
         report: nextReport,
@@ -7988,7 +8135,9 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: "User email already exists." });
         return;
       }
+      const previousFullName = toText(users[idx].fullName);
       users[idx] = { ...users[idx], ...cleaned };
+      renameStaffReferencesInDb(db, previousFullName, users[idx].fullName);
       db.settings = {
         ...settings,
         staffUsers: users,
@@ -8988,6 +9137,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const photo = await normalizePhotoValue(body.photo, "inventory");
+      const forceAlert = Boolean(body.forceAlert);
       const duplicateTxnPayload = {
         itemId: item.id,
         date,
@@ -8997,7 +9147,7 @@ const server = http.createServer(async (req, res) => {
         note: toText(body.note),
         photo,
       };
-      if (type === "OUT" && !isCampusTransfer) {
+      if (type === "OUT" && !isCampusTransfer && !forceAlert) {
         const duplicateTxn = txns.find((row) => isDuplicateInventoryOutTxn(row, duplicateTxnPayload));
         if (duplicateTxn) {
           sendJson(res, 200, {
@@ -9135,12 +9285,12 @@ const server = http.createServer(async (req, res) => {
       }
       await writeDb(db);
       let telegramAlertSent = false;
-      if (normalizeInventoryTxnType(txn.type) === "OUT") {
+      if (normalizeInventoryTxnType(txn.type) === "OUT" || normalizeInventoryTxnType(txn.type) === "IN") {
         let telegramReport = null;
-        if (approvalStatus === "PENDING") {
+        if (normalizeInventoryTxnType(txn.type) === "OUT" && approvalStatus === "PENDING") {
           telegramReport = await sendTelegramInventoryOutApprovalAlert(txn, approverTargets, db);
         } else {
-          telegramReport = await sendTelegramInventoryOutRecordedAlert(txn, db);
+          telegramReport = await sendTelegramInventoryTxnRecordedAlert(txn, db);
         }
         telegramAlertSent = Boolean(telegramReport && telegramReport.ok);
         if (telegramAlertSent) {
