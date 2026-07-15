@@ -176,13 +176,16 @@ function getMaintenanceAlertSlotInfo(date = new Date()) {
   const parts = getAppDateTimeParts(date);
   const ymd = getAppTodayYmd(date);
   const hour = Number(parts.hour || 0);
-  if (hour === 10) {
-    return { ymd, slot: "10", label: "10:00" };
-  }
-  if (hour === 15) {
-    return { ymd, slot: "15", label: "15:00" };
-  }
-  return null;
+  const minute = Number(parts.minute || 0);
+  const currentMinutes = hour * 60 + minute;
+  return {
+    ymd,
+    hour,
+    minute,
+    currentMinutes,
+    slot: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+    label: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+  };
 }
 
 function formatTelegramAlertSnapshot(date = new Date()) {
@@ -198,6 +201,32 @@ function formatTelegramAlertSnapshot(date = new Date()) {
     }
   } catch {}
   return date.toISOString();
+}
+
+function normalizeMaintenanceScheduleTime(value) {
+  const raw = toText(value).trim();
+  const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return "";
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return "";
+  }
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function maintenanceScheduleTimeToMinutes(value) {
+  const normalized = normalizeMaintenanceScheduleTime(value);
+  if (!normalized) return null;
+  const [hourText, minuteText] = normalized.split(":");
+  return Number(hourText) * 60 + Number(minuteText);
+}
+
+function formatMaintenanceScheduleDateTime(dateYmd, time) {
+  const dateText = toText(dateYmd).trim() || "-";
+  const normalizedTime = normalizeMaintenanceScheduleTime(time);
+  if (!normalizedTime) return dateText;
+  return `${dateText} ${normalizedTime}`;
 }
 
 function formatMaintenanceTelegramDateTime(entry) {
@@ -1564,6 +1593,130 @@ function inventoryTransferMatchName(itemName) {
 function getSettingsObject(db) {
   if (!db.settings || typeof db.settings !== "object") db.settings = {};
   return db.settings;
+}
+
+const SUBMIT_DEDUP_WINDOW_MS = 60 * 60 * 1000;
+const SUBMIT_DEDUP_LOG_LIMIT = 400;
+const SUBMIT_DEDUP_EXCLUDED_PATH_PREFIXES = [
+  "/api/auth/",
+  "/api/settings",
+  "/api/alerts/telegram/",
+  "/api/backup/",
+  "/api/admin/",
+  "/api/notifications/",
+];
+const SUBMIT_DEDUP_VOLATILE_KEYS = new Set([
+  "id",
+  "created",
+  "createdAt",
+  "updatedAt",
+  "updatedBy",
+  "lastViewedAt",
+  "lastOpenedAt",
+  "token",
+  "ts",
+]);
+const maintenanceTelegramInFlight = new Set();
+
+function normalizeSubmitDedupeValue(value) {
+  if (Array.isArray(value)) return value.map((item) => normalizeSubmitDedupeValue(item));
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((out, key) => {
+        if (SUBMIT_DEDUP_VOLATILE_KEYS.has(key)) return out;
+        out[key] = normalizeSubmitDedupeValue(value[key]);
+        return out;
+      }, {});
+  }
+  if (typeof value === "string") return value.trim();
+  return value;
+}
+
+function shouldApplySubmitDedupe(pathname, user = null) {
+  if (!pathname || !pathname.startsWith("/api/")) return false;
+  if (user && toText(user.role) === "Super Admin") return false;
+  return !SUBMIT_DEDUP_EXCLUDED_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+function buildSubmitDedupeFingerprint(pathname, actorKey, body) {
+  const normalized = normalizeSubmitDedupeValue(body && typeof body === "object" ? body : {});
+  const raw = JSON.stringify({
+    pathname: toText(pathname),
+    actorKey: toText(actorKey),
+    body: normalized,
+  });
+  return crypto.createHash("sha1").update(raw).digest("hex");
+}
+
+function pruneSubmitDedupeLog(entries, now = Date.now()) {
+  const rows = Array.isArray(entries) ? entries : [];
+  return rows
+    .filter((row) => row && typeof row === "object")
+    .filter((row) => {
+      const stamp = Date.parse(toText(row.at));
+      return Number.isFinite(stamp) && now - stamp <= SUBMIT_DEDUP_WINDOW_MS;
+    })
+    .slice(0, SUBMIT_DEDUP_LOG_LIMIT);
+}
+
+async function enforceSubmitDedupe(pathname, body, user, req) {
+  if (!shouldApplySubmitDedupe(pathname, user)) {
+    return { blocked: false };
+  }
+  const actorKey =
+    user && user.id
+      ? `user:${user.id}`
+      : `public:${getClientIp(req)}:${getRequestUserAgent(req)}`;
+  const fingerprint = buildSubmitDedupeFingerprint(pathname, actorKey, body);
+  const now = Date.now();
+  const db = await readDb();
+  const settings = getSettingsObject(db);
+  const pruned = pruneSubmitDedupeLog(settings.submitDedupeLog, now);
+  const existing = pruned.find(
+    (row) =>
+      toText(row.fingerprint) === fingerprint &&
+      toText(row.pathname) === toText(pathname) &&
+      toText(row.actorKey) === actorKey
+  );
+  if (existing) {
+    const blockedAt = Date.parse(toText(existing.at));
+    const retryAfterMs = Number.isFinite(blockedAt) ? Math.max(0, SUBMIT_DEDUP_WINDOW_MS - (now - blockedAt)) : SUBMIT_DEDUP_WINDOW_MS;
+    settings.submitDedupeLog = pruned;
+    if (db.settings !== settings) db.settings = settings;
+    await writeDb(db);
+    return { blocked: true, retryAfterMs };
+  }
+  settings.submitDedupeLog = [
+    {
+      fingerprint,
+      pathname: toText(pathname),
+      actorKey,
+      at: new Date(now).toISOString(),
+    },
+    ...pruned,
+  ].slice(0, SUBMIT_DEDUP_LOG_LIMIT);
+  if (db.settings !== settings) db.settings = settings;
+  await writeDb(db);
+  return { blocked: false };
+}
+
+function normalizeMaintenanceTelegramSendLog(settings) {
+  const rows = settings && typeof settings === "object" && Array.isArray(settings.maintenanceTelegramSendLog)
+    ? settings.maintenanceTelegramSendLog
+    : [];
+  return pruneSubmitDedupeLog(rows);
+}
+
+function buildMaintenanceTelegramDedupeKey(asset, entry, options = {}) {
+  return [
+    toText(options.mode) || "general",
+    toText(options.ticketNo),
+    toText(asset && asset.assetId),
+    toText(entry && entry.id),
+    toText(entry && entry.createdAt),
+    toText(entry && entry.date),
+  ].join("||");
 }
 
 function getInventoryState(db) {
@@ -3230,9 +3383,11 @@ function buildMaintenanceTelegramPreviewUrl(assetId, options = {}) {
   const url = new URL(`${PUBLIC_APP_URL}/api/alerts/telegram/maintenance-preview`);
   url.searchParams.set("assetId", normalizedAssetId);
   const maintenanceDate = toText(options.maintenanceDate).trim();
+  const maintenanceTime = toText(options.maintenanceTime).trim();
   const status = toText(options.status).trim();
   const task = toText(options.task).trim();
   if (maintenanceDate) url.searchParams.set("date", maintenanceDate);
+  if (maintenanceTime) url.searchParams.set("time", maintenanceTime);
   if (status) url.searchParams.set("status", status);
   if (task) url.searchParams.set("task", task);
   return url.toString();
@@ -3258,6 +3413,7 @@ async function buildMaintenanceTelegramPreviewSvg(asset, options = {}) {
   const campus = toText(asset.campus) || "-";
   const location = toText(asset.location) || "-";
   const dueDate = toText(options.maintenanceDate || asset.nextMaintenanceDate) || "-";
+  const dueTime = normalizeMaintenanceScheduleTime(options.maintenanceTime || asset.scheduleTime);
   const status = toText(options.status) || "Scheduled";
   const task = toText(options.task || asset.scheduleNote) || "-";
   const photoPath = resolveUploadedAbsolutePath(toText(asset.photo));
@@ -3298,8 +3454,8 @@ async function buildMaintenanceTelegramPreviewSvg(asset, options = {}) {
   <text x="258" y="230" fill="#ffffff" font-size="24" font-family="Arial, sans-serif">${escapeSvgText(status)}</text>
   <text x="258" y="274" fill="#9fc0ff" font-size="18" font-family="Arial, sans-serif">Location</text>
   <text x="258" y="300" fill="#ffffff" font-size="24" font-family="Arial, sans-serif">${escapeSvgText(campus)} / ${escapeSvgText(location)}</text>
-  <text x="258" y="344" fill="#9fc0ff" font-size="18" font-family="Arial, sans-serif">Due Date</text>
-  <text x="258" y="370" fill="#ffffff" font-size="24" font-family="Arial, sans-serif">${escapeSvgText(dueDate)}</text>
+  <text x="258" y="344" fill="#9fc0ff" font-size="18" font-family="Arial, sans-serif">Due Date / Time</text>
+  <text x="258" y="370" fill="#ffffff" font-size="24" font-family="Arial, sans-serif">${escapeSvgText(formatMaintenanceScheduleDateTime(dueDate, dueTime))}</text>
   <rect x="28" y="286" width="200" height="104" rx="20" ry="20" fill="rgba(255,255,255,0.09)" />
   <text x="46" y="318" fill="#9fc0ff" font-size="16" font-family="Arial, sans-serif">Task</text>
   <text x="46" y="348" fill="#ffffff" font-size="22" font-family="Arial, sans-serif">${escapeSvgText(task)}</text>
@@ -3422,14 +3578,10 @@ async function sendTelegramMaintenanceBatch(rows, db = null) {
     const normalized = toText(label).trim().toLowerCase();
     if (!normalized) return "Scheduled reminder";
     if (normalized === "due today") return "Due today";
-    if (normalized === "7 days before") return "Due in 7 days";
+    if (normalized === "2 hours before") return "Starts in about 2 hours";
     if (normalized.includes("day") && normalized.includes("before")) {
       const days = normalized.split(" ")[0];
       return `Due in ${days} day${days === "1" ? "" : "s"}`;
-    }
-    if (normalized.includes("overdue")) {
-      const days = normalized.split(" ")[0];
-      return `${days} day${days === "1" ? "" : "s"} overdue`;
     }
     return toText(label);
   };
@@ -3441,10 +3593,13 @@ async function sendTelegramMaintenanceBatch(rows, db = null) {
     const campus = toText(row.campus) || "-";
     const location = toText(row.location) || "-";
     const note = toText(row.scheduleNote || row.message || "").trim() || "-";
+    const scheduleTime = normalizeMaintenanceScheduleTime(row.scheduleTime);
+    const dueDateTime = formatMaintenanceScheduleDateTime(dateText, scheduleTime);
     const alertLabel = summarizeLabel(row.alertLabel);
     const photoUrl =
       buildMaintenanceTelegramPreviewUrl(assetId, {
         maintenanceDate: dateText,
+        maintenanceTime: scheduleTime,
         status: alertLabel,
         task: note,
       }) || resolveTelegramPhotoUrl(toText(row.photo || ""));
@@ -3459,7 +3614,7 @@ async function sendTelegramMaintenanceBatch(rows, db = null) {
       `<b>Item</b>: ${escapeTelegramHtml(itemName)}`,
       `<b>Status</b>: ${escapeTelegramHtml(alertLabel)}`,
       `<b>Location</b>: ${escapeTelegramHtml(campus)} / ${escapeTelegramHtml(location)}`,
-      `<b>Due Date</b>: ${escapeTelegramHtml(dateText)}`,
+      `<b>Due Date / Time</b>: ${escapeTelegramHtml(dueDateTime)}`,
       `<b>Task</b>: ${escapeTelegramHtml(note)}`,
       appLink
         ? `Tap the Asset ID to open the maintenance record page directly.`
@@ -3522,26 +3677,38 @@ function buildMaintenanceTelegramReminderRows(db) {
     const assetIdNum = Number(asset && asset.id) || 0;
     if (!scheduleDate || !assetIdNum) continue;
     const days = daysUntilYmd(scheduleDate);
-    if (days === null || days > 7) continue;
+    if (days === null || days < 0 || days > 2) continue;
     if (hasCompletedMaintenanceOnDateServer(asset, scheduleDate)) continue;
-    const slotStamp = `${slotInfo.ymd}@${slotInfo.slot}`;
-    const dedupeKey = `${assetIdNum}:${scheduleDate}:${slotStamp}`;
-    if (dailyLog[dedupeKey] === slotStamp) continue;
+    const morningWindowStart = 8 * 60;
+    const morningWindowEnd = morningWindowStart + MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES;
+    const scheduleTime = normalizeMaintenanceScheduleTime(asset && asset.scheduleTime);
+    const scheduleMinutes = maintenanceScheduleTimeToMinutes(scheduleTime);
+    let stage = "";
     let alertLabel = "";
     let title = "";
-    if (days === 7) {
-      alertLabel = "7 days before";
-      title = `Maintenance due in 7 days: ${toText(asset.assetId) || "Unknown Asset"}`;
-    } else if (days > 0) {
-      alertLabel = `${days} day${days === 1 ? "" : "s"} before`;
-      title = `Maintenance follow-up: ${toText(asset.assetId) || "Unknown Asset"}`;
+    if (days === 2) {
+      if (slotInfo.currentMinutes < morningWindowStart || slotInfo.currentMinutes >= morningWindowEnd) continue;
+      stage = "d2";
+      alertLabel = "2 days before";
+      title = `Maintenance reminder (2 days before): ${toText(asset.assetId) || "Unknown Asset"}`;
+    } else if (days === 1) {
+      if (slotInfo.currentMinutes < morningWindowStart || slotInfo.currentMinutes >= morningWindowEnd) continue;
+      stage = "d1";
+      alertLabel = "1 day before";
+      title = `Maintenance reminder (1 day before): ${toText(asset.assetId) || "Unknown Asset"}`;
     } else if (days === 0) {
-      alertLabel = "Due today";
-      title = `Maintenance due today: ${toText(asset.assetId) || "Unknown Asset"}`;
-    } else {
-      alertLabel = `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} overdue`;
-      title = `Maintenance overdue: ${toText(asset.assetId) || "Unknown Asset"}`;
+      const fallbackMinutes = morningWindowStart;
+      const targetMinutes = Math.max(0, (scheduleMinutes === null ? fallbackMinutes : scheduleMinutes - 120));
+      const targetWindowEnd = targetMinutes + MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES;
+      if (slotInfo.currentMinutes < targetMinutes || slotInfo.currentMinutes >= targetWindowEnd) continue;
+      stage = "h2";
+      alertLabel = scheduleTime ? "2 hours before" : "Due today";
+      title = `Maintenance reminder (${scheduleTime ? "2 hours before" : "today"}): ${toText(asset.assetId) || "Unknown Asset"}`;
     }
+    if (!stage) continue;
+    const slotStamp = `${slotInfo.ymd}@${stage}`;
+    const dedupeKey = `${assetIdNum}:${scheduleDate}:${stage}`;
+    if (dailyLog[dedupeKey] === slotStamp) continue;
     reminderRows.push({
       key: dedupeKey,
       assetDbId: assetIdNum,
@@ -3551,10 +3718,12 @@ function buildMaintenanceTelegramReminderRows(db) {
       location: toText(asset && asset.location),
       photo: toText(asset && asset.photo),
       scheduleDate,
+      scheduleTime,
       scheduleNote: toText(asset && asset.scheduleNote),
       title,
       alertLabel,
       days,
+      stage,
     });
   }
   reminderRows.sort((a, b) => {
@@ -3796,56 +3965,79 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
 }
 
 async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, options = {}) {
+  const dedupeKey = buildMaintenanceTelegramDedupeKey(asset, entry, options);
+  const settings = getSettingsObject(db || {});
+  const recentTelegramLog = normalizeMaintenanceTelegramSendLog(settings);
+  if (maintenanceTelegramInFlight.has(dedupeKey)) {
+    return false;
+  }
+  if (recentTelegramLog.some((row) => toText(row.key) === dedupeKey)) {
+    return false;
+  }
+  maintenanceTelegramInFlight.add(dedupeKey);
   const message = buildMaintenanceRecordTelegramMessage(asset, entry, user, options);
   const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(asset, entry);
   let telegramAlertSent = false;
-
-  if (photoAlerts.length === 1) {
-    const primaryText = message || photoAlerts[0].caption;
-    const report = await sendTelegramMaintenanceMessage(primaryText, {
-      db,
-      photoUrl: photoAlerts[0].media,
-      parseMode: message ? "HTML" : "",
-      includeResults: true,
-    });
-    if (report && report.ok) {
-      return true;
-    }
-    if (message) {
-      const fallback = await sendTelegramMaintenanceMessage(message, {
+  try {
+    if (photoAlerts.length === 1) {
+      const primaryText = message || photoAlerts[0].caption;
+      const report = await sendTelegramMaintenanceMessage(primaryText, {
         db,
-        parseMode: "HTML",
+        photoUrl: photoAlerts[0].media,
+        parseMode: message ? "HTML" : "",
         includeResults: true,
       });
-      return Boolean(fallback && fallback.ok);
+      if (report && report.ok) {
+        telegramAlertSent = true;
+      } else if (message) {
+        const fallback = await sendTelegramMaintenanceMessage(message, {
+          db,
+          parseMode: "HTML",
+          includeResults: true,
+        });
+        telegramAlertSent = Boolean(fallback && fallback.ok);
+      }
+    } else {
+      if (message) {
+        const report = await sendTelegramMaintenanceMessage(message, {
+          db,
+          includeResults: true,
+          parseMode: "HTML",
+        });
+        telegramAlertSent = Boolean(report && report.ok);
+      }
+
+      if (photoAlerts.length >= 2) {
+        const report = await sendTelegramMaintenanceMediaGroup(photoAlerts, { db });
+        telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
+      } else {
+        for (const item of photoAlerts) {
+          // eslint-disable-next-line no-await-in-loop
+          const report = await sendTelegramMaintenanceMessage(item.caption, {
+            db,
+            photoUrl: item.media,
+          });
+          telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
+        }
+      }
     }
-    return false;
-  }
 
-  if (message) {
-    const report = await sendTelegramMaintenanceMessage(message, {
-      db,
-      includeResults: true,
-      parseMode: "HTML",
-    });
-    telegramAlertSent = Boolean(report && report.ok);
-  }
-
-  if (photoAlerts.length >= 2) {
-    const report = await sendTelegramMaintenanceMediaGroup(photoAlerts, { db });
-    telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
-  } else {
-    for (const item of photoAlerts) {
-      // eslint-disable-next-line no-await-in-loop
-      const report = await sendTelegramMaintenanceMessage(item.caption, {
-        db,
-        photoUrl: item.media,
-      });
-      telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
+    if (telegramAlertSent) {
+      settings.maintenanceTelegramSendLog = [
+        {
+          key: dedupeKey,
+          at: new Date().toISOString(),
+        },
+        ...recentTelegramLog,
+      ].slice(0, SUBMIT_DEDUP_LOG_LIMIT);
+      if (db && db.settings !== settings) db.settings = settings;
+      await writeDb(db);
     }
-  }
 
-  return telegramAlertSent;
+    return telegramAlertSent;
+  } finally {
+    maintenanceTelegramInFlight.delete(dedupeKey);
+  }
 }
 
 function ensureGeneralMaintenanceAsset(db, campus) {
@@ -3894,6 +4086,7 @@ function ensureGeneralMaintenanceAsset(db, campus) {
     tonerLastPageCount: 0,
     tonerNotes: "",
     nextMaintenanceDate: "",
+    scheduleTime: "",
     nextVerificationDate: "",
     verificationFrequency: "NONE",
     scheduleNote: "",
@@ -6158,6 +6351,7 @@ function validateAsset(body, settings) {
   const vendor = toText(body.vendor);
   const notes = toText(body.notes);
   const nextMaintenanceDate = toText(body.nextMaintenanceDate);
+  const scheduleTime = toText(body.scheduleTime);
   const scheduleNote = toText(body.scheduleNote);
   const scheduleGroup = toText(body.scheduleGroup);
   const repeatMode = toUpper(body.repeatMode) || "NONE";
@@ -6232,6 +6426,7 @@ function validateAsset(body, settings) {
     vendor,
     notes,
     nextMaintenanceDate,
+    scheduleTime,
     scheduleNote,
     scheduleGroup,
     repeatMode,
@@ -7097,6 +7292,9 @@ function selectBestAssetByAssetId(assets, assetId) {
 }
 
 async function parseBody(req) {
+  if (Object.prototype.hasOwnProperty.call(req, "__parsedBody")) {
+    return req.__parsedBody;
+  }
   const chunks = [];
   let size = 0;
 
@@ -7108,10 +7306,14 @@ async function parseBody(req) {
     chunks.push(chunk);
   }
 
-  if (!chunks.length) return {};
+  if (!chunks.length) {
+    req.__parsedBody = {};
+    return req.__parsedBody;
+  }
   const raw = Buffer.concat(chunks).toString("utf8");
   try {
-    return JSON.parse(raw);
+    req.__parsedBody = JSON.parse(raw);
+    return req.__parsedBody;
   } catch {
     const err = new Error("Invalid JSON payload");
     err.statusCode = 400;
@@ -7132,6 +7334,22 @@ const server = http.createServer(async (req, res) => {
     }
 
     const url = new URL(req.url, `http://${HOST}:${PORT}`);
+
+    if (req.method === "POST" && url.pathname.startsWith("/api/")) {
+      const user = getAuthUser(req);
+      if (shouldApplySubmitDedupe(url.pathname, user)) {
+        const body = await parseBody(req);
+        const dedupe = await enforceSubmitDedupe(url.pathname, body, user, req);
+        if (dedupe.blocked) {
+          sendJson(res, 409, {
+            error: "Duplicate submit blocked. Please wait up to 1 hour before sending the same form again.",
+            duplicateSuppressed: true,
+            retryAfterMs: dedupe.retryAfterMs,
+          });
+          return;
+        }
+      }
+    }
 
     if (
       !url.pathname.startsWith("/api/") &&
@@ -7235,6 +7453,7 @@ const server = http.createServer(async (req, res) => {
       }
       const svg = await buildMaintenanceTelegramPreviewSvg(asset, {
         maintenanceDate: toText(url.searchParams.get("date")),
+        maintenanceTime: toText(url.searchParams.get("time")),
         status: toText(url.searchParams.get("status")),
         task: toText(url.searchParams.get("task")),
       });
@@ -10277,12 +10496,19 @@ const server = http.createServer(async (req, res) => {
       }
       const telegramAlertMode = toText(body && body.telegramAlertMode);
       const scheduleSourceDate = normalizeLooseDateToYmd(body && body.scheduleSourceDate);
+      const scheduleTaskId = toText(body && body.scheduleTaskId);
+      const scheduleTaskKind = toText(body && body.scheduleTaskKind);
+      const scheduleTaskTitle = toText(body && body.scheduleTaskTitle);
       const createdAt = normalizeMaintenanceEntryCreatedAt(body && body.createdAt, date);
 
       const entry = {
         id: Date.now(),
         date,
         createdAt,
+        scheduleSourceDate,
+        scheduleTaskId,
+        scheduleTaskKind,
+        scheduleTaskTitle,
         type,
         completion,
         condition,
@@ -10402,11 +10628,19 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const createdAt = normalizeMaintenanceEntryCreatedAt(body && body.createdAt, date);
+      const scheduleSourceDate = normalizeLooseDateToYmd(body && body.scheduleSourceDate);
+      const scheduleTaskId = toText(body && body.scheduleTaskId);
+      const scheduleTaskKind = toText(body && body.scheduleTaskKind);
+      const scheduleTaskTitle = toText(body && body.scheduleTaskTitle);
 
       const entry = {
         id: Date.now(),
         date,
         createdAt,
+        scheduleSourceDate,
+        scheduleTaskId,
+        scheduleTaskKind,
+        scheduleTaskTitle,
         type,
         completion,
         condition,

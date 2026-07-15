@@ -107,6 +107,7 @@ type Asset = {
   tonerLastPageCount?: number;
   tonerNotes?: string;
   nextMaintenanceDate?: string;
+  scheduleTime?: string;
   nextVerificationDate?: string;
   verificationFrequency?: "NONE" | "MONTHLY" | "TERMLY";
   scheduleNote?: string;
@@ -155,6 +156,10 @@ type MaintenanceEntry = {
   date: string;
   createdAt?: string;
   updatedAt?: string;
+  scheduleSourceDate?: string;
+  scheduleTaskId?: string;
+  scheduleTaskKind?: string;
+  scheduleTaskTitle?: string;
   type: string;
   note: string;
   completion?: "Done" | "Not Yet";
@@ -1457,6 +1462,7 @@ type ScheduleCalendarRow =
       groupLabel: string;
       modeLabel: string;
       photo: string;
+      completed: boolean;
       asset: Asset;
     }
   | {
@@ -1470,6 +1476,7 @@ type ScheduleCalendarRow =
       groupLabel: string;
       modeLabel: string;
       photo: string;
+      completed: boolean;
       event: CalendarEvent;
       serviceType: ServiceTaskScheduleType;
     };
@@ -11078,6 +11085,7 @@ export default function App() {
   const [dashboardQuickCountOpen, setDashboardQuickCountOpen] = useState(true);
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [reportScheduleMonth, setReportScheduleMonth] = useState(() => toYmd(new Date()).slice(0, 7));
+  const [reportScheduleView, setReportScheduleView] = useState<"summary" | "details">("summary");
   const [reportDateFrom, setReportDateFrom] = useState(() => `${toYmd(new Date()).slice(0, 7)}-01`);
   const [reportDateTo, setReportDateTo] = useState(() => {
     const now = new Date();
@@ -11690,6 +11698,14 @@ export default function App() {
   const [maintenanceRecordSaving, setMaintenanceRecordSaving] = useState(false);
   const [maintenanceRecordMessage, setMaintenanceRecordMessage] = useState("");
   const [scheduleMaintenanceRecordModalOpen, setScheduleMaintenanceRecordModalOpen] = useState(false);
+  const [scheduleMaintenanceGeneralContext, setScheduleMaintenanceGeneralContext] = useState<null | {
+    campus: string;
+    taskId: string;
+    title: string;
+    subtitle: string;
+    time: string;
+    note: string;
+  }>(null);
   const [maintenanceQuickGeneralTask, setMaintenanceQuickGeneralTask] = useState(true);
   const [maintenanceRecordDatePickerOpen, setMaintenanceRecordDatePickerOpen] = useState(false);
   const [maintenanceRecordDateMonth, setMaintenanceRecordDateMonth] = useState(() => {
@@ -13521,6 +13537,9 @@ export default function App() {
     repeatWeekday: 6,
     repeatCycleStep: 1,
   });
+  const [scheduleSingleFilterCampus, setScheduleSingleFilterCampus] = useState("ALL");
+  const [scheduleSingleFilterCategory, setScheduleSingleFilterCategory] = useState("ALL");
+  const [scheduleSingleFilterSearch, setScheduleSingleFilterSearch] = useState("");
   const [scheduleDatePickerOpen, setScheduleDatePickerOpen] = useState(false);
   const [scheduleDateMonth, setScheduleDateMonth] = useState(() => {
     const now = new Date();
@@ -13561,6 +13580,7 @@ export default function App() {
     category: "SAFETY",
     types: ["FE"],
     date: "",
+    time: "09:00",
     note: "",
     group: "",
     repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
@@ -31131,6 +31151,7 @@ export default function App() {
 
     const payload = {
       nextMaintenanceDate: normalizedDate,
+      scheduleTime: normalizeCalendarEventTime(bulkScheduleForm.time),
       scheduleNote:
         bulkScheduleForm.repeatMode === "WDP_FILTER_CYCLE"
           ? getWdpFilterCycleNote(Number(bulkScheduleForm.repeatCycleStep || 1))
@@ -31180,6 +31201,7 @@ export default function App() {
       setBulkScheduleForm((f) => ({
         ...f,
         date: "",
+        time: "09:00",
         note: "",
         group: "",
       }));
@@ -31411,7 +31433,7 @@ export default function App() {
     }
     if (!requireMaintenanceRecordAction()) return false;
     const assetId = Number(maintenanceRecordForm.assetId);
-    const isQuickGeneralTask = maintenanceQuickMode && maintenanceQuickGeneralTask;
+    const isQuickGeneralTask = (maintenanceQuickMode || scheduleMaintenanceUsesGeneralTask) && maintenanceQuickGeneralTask;
     if (!assetId && !isQuickGeneralTask) return false;
     if (
       !maintenanceRecordForm.date ||
@@ -31468,6 +31490,10 @@ export default function App() {
         id: Date.now(),
         date: resolvedDate,
         createdAt: combineYmdAndTimeToIso(resolvedDate, resolvedTime),
+        scheduleSourceDate: String(maintenanceRecordForm.scheduleSourceDate || "").trim(),
+        scheduleTaskId: scheduleMaintenanceGeneralContext?.taskId || "",
+        scheduleTaskKind: scheduleMaintenanceGeneralContext ? "service" : (maintenanceRecordForm.scheduleSourceDate ? "asset" : ""),
+        scheduleTaskTitle: scheduleMaintenanceGeneralContext?.title || "",
         type: maintenanceRecordForm.type.trim(),
         completion: maintenanceRecordForm.completion,
         condition: maintenanceRecordForm.condition.trim(),
@@ -31564,6 +31590,10 @@ export default function App() {
                   }
                 : "",
               telegramPhoto: entry.telegramPhoto || "",
+              scheduleSourceDate: maintenanceRecordForm.scheduleSourceDate || "",
+              scheduleTaskId: scheduleMaintenanceGeneralContext?.taskId || "",
+              scheduleTaskKind: scheduleMaintenanceGeneralContext ? "service" : "",
+              scheduleTaskTitle: scheduleMaintenanceGeneralContext?.title || "",
               workflow: entry.workflow,
             }),
           });
@@ -31651,6 +31681,7 @@ export default function App() {
         setMaintenanceRecordMessage(successMessage);
         setSetupMessage(successMessage);
         setScheduleMaintenanceRecordModalOpen(false);
+        setScheduleMaintenanceGeneralContext(null);
       } else if (maintenanceQuickMode) {
         setMaintenanceRecordMessage(successMessage);
       } else {
@@ -33503,10 +33534,45 @@ export default function App() {
     const preferredDate = String(scheduledDate || asset.nextMaintenanceDate || "").trim() || toYmd(new Date());
     setError("");
     setMaintenanceRecordMessage("");
+    setScheduleMaintenanceGeneralContext(null);
     setMaintenanceQuickGeneralTask(false);
     setMaintenanceRecordScheduleJumpMode(true);
     setMaintenanceRecordDatePickerOpen(false);
     setMaintenanceRecordForm(createMaintenanceRecordForm(asset, preferredDate, currentOperatorName, preferredDate));
+    setScheduleMaintenanceRecordModalOpen(true);
+  }
+
+  function openScheduleGeneralTaskRecordModal(row: Extract<ScheduleCalendarRow, { kind: "service" }>) {
+    const preferredDate = String(row.date || "").trim() || toYmd(new Date());
+    const preferredCampus =
+      row.campus && row.campus !== "ALL"
+        ? row.campus
+        : maintenanceRecordCampusFilter !== "ALL"
+          ? maintenanceRecordCampusFilter
+          : campusFilter !== "ALL"
+            ? campusFilter
+            : allowedCampusOptions[0] || CAMPUS_LIST[0];
+    const defaultNote = [row.title, row.note].filter(Boolean).join(" - ");
+    const defaultTime = /^\d{2}:\d{2}$/.test(String(row.modeLabel || "").trim()) ? String(row.modeLabel || "").trim() : toHm(new Date());
+    setError("");
+    setMaintenanceRecordMessage("");
+    setMaintenanceRecordCampusFilter(preferredCampus || "ALL");
+    setScheduleMaintenanceGeneralContext({
+      campus: preferredCampus || "ALL",
+      taskId: String(row.event.id || ""),
+      title: row.title,
+      subtitle: row.subtitle,
+      time: defaultTime,
+      note: row.note || "",
+    });
+    setMaintenanceQuickGeneralTask(true);
+    setMaintenanceRecordScheduleJumpMode(false);
+    setMaintenanceRecordDatePickerOpen(false);
+    setMaintenanceRecordForm({
+      ...createMaintenanceRecordForm(undefined, preferredDate, currentOperatorName, preferredDate),
+      time: defaultTime,
+      note: defaultNote,
+    });
     setScheduleMaintenanceRecordModalOpen(true);
   }
 
@@ -33664,8 +33730,11 @@ export default function App() {
     () => resolvedAssets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
     [resolvedAssets, maintenanceRecordForm.assetId]
   );
+  const scheduleMaintenanceUsesGeneralTask = Boolean(scheduleMaintenanceGeneralContext) && maintenanceQuickGeneralTask;
   const maintenanceRecordIsComplete = useMemo(() => (
-    (maintenanceQuickMode ? (maintenanceQuickGeneralTask || Boolean(maintenanceRecordForm.assetId)) : Boolean(maintenanceRecordForm.assetId)) &&
+    (maintenanceQuickMode
+      ? (maintenanceQuickGeneralTask || Boolean(maintenanceRecordForm.assetId))
+      : (scheduleMaintenanceUsesGeneralTask || Boolean(maintenanceRecordForm.assetId))) &&
     Boolean(maintenanceRecordForm.date) &&
     Boolean(maintenanceRecordForm.note.trim()) &&
     (
@@ -33675,7 +33744,7 @@ export default function App() {
         (maintenanceRecordForm.afterPhotos || []).length > 0
       )
     )
-  ), [maintenanceQuickGeneralTask, maintenanceQuickMode, maintenanceRecordForm]);
+  ), [maintenanceQuickGeneralTask, maintenanceQuickMode, maintenanceRecordForm, scheduleMaintenanceUsesGeneralTask]);
   const detailAsset = useMemo(() => {
     if (assetDetailId == null) return null;
     return (
@@ -35307,6 +35376,57 @@ export default function App() {
       return a.assetId.localeCompare(b.assetId);
     });
   }, [assets, assetItemName]);
+  const scheduleSingleFilterSearchDeferred = useDeferredValue(scheduleSingleFilterSearch);
+  const scheduleSingleFilterCampusOptions = useMemo(
+    () => Array.from(new Set(scheduleSelectAssets.map((a) => a.campus).filter(Boolean))).sort(compareCampusByCode),
+    [scheduleSelectAssets]
+  );
+  const scheduleSingleFilterCategoryOptions = useMemo(() => {
+    let list = scheduleSelectAssets;
+    if (scheduleSingleFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleSingleFilterCampus);
+    }
+    return Array.from(new Set(list.map((a) => String(a.category || "").trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [scheduleSelectAssets, scheduleSingleFilterCampus]);
+  const scheduleSingleFilteredAssets = useMemo(() => {
+    let list = scheduleSelectAssets;
+    if (scheduleSingleFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleSingleFilterCampus);
+    }
+    if (scheduleSingleFilterCategory !== "ALL") {
+      list = list.filter((a) => String(a.category || "").trim() === scheduleSingleFilterCategory);
+    }
+    const query = scheduleSingleFilterSearchDeferred.trim().toLowerCase();
+    if (!query) return list;
+    return list.filter((asset) => {
+      const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+      return `${asset.assetId} ${itemName} ${asset.name} ${asset.location} ${asset.campus} ${asset.category} ${asset.type}`
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [
+    scheduleSelectAssets,
+    scheduleSingleFilterCampus,
+    scheduleSingleFilterCategory,
+    scheduleSingleFilterSearchDeferred,
+    assetItemName,
+  ]);
+  const scheduleSingleSelectedAssetVisible = useMemo(
+    () => scheduleSingleFilteredAssets.some((asset) => String(asset.id) === scheduleForm.assetId),
+    [scheduleSingleFilteredAssets, scheduleForm.assetId]
+  );
+  useEffect(() => {
+    if (!scheduleSingleFilterCategoryOptions.includes(scheduleSingleFilterCategory)) {
+      setScheduleSingleFilterCategory("ALL");
+    }
+  }, [scheduleSingleFilterCategory, scheduleSingleFilterCategoryOptions]);
+  useEffect(() => {
+    if (scheduleForm.assetId && !scheduleSingleSelectedAssetVisible) {
+      setScheduleForm((f) => ({ ...f, assetId: "" }));
+    }
+  }, [scheduleForm.assetId, scheduleSingleSelectedAssetVisible]);
   const scheduleQuickSelectedAsset = useMemo(
     () => assets.find((a) => String(a.id) === scheduleQuickForm.assetId) || null,
     [assets, scheduleQuickForm.assetId]
@@ -36646,6 +36766,31 @@ export default function App() {
     return "#d6e6dc";
   }, []);
   const reportScheduleMonthLabel = useMemo(() => formatMonthYear(reportScheduleMonth), [reportScheduleMonth]);
+  const completedScheduleAssetKeys = useMemo(() => {
+    const doneKeys = new Set<string>();
+    resolvedAssets.forEach((asset) => {
+      (asset.maintenanceHistory || []).forEach((entry) => {
+        if (String(entry.completion || "") !== "Done") return;
+        const sourceDate = String(entry.scheduleSourceDate || entry.date || "").trim();
+        if (!sourceDate) return;
+        doneKeys.add(`${asset.id}||${sourceDate}`);
+      });
+    });
+    return doneKeys;
+  }, [resolvedAssets]);
+  const completedScheduleServiceKeys = useMemo(() => {
+    const doneKeys = new Set<string>();
+    resolvedAssets.forEach((asset) => {
+      (asset.maintenanceHistory || []).forEach((entry) => {
+        if (String(entry.completion || "") !== "Done") return;
+        const sourceDate = String(entry.scheduleSourceDate || entry.date || "").trim();
+        const taskId = String(entry.scheduleTaskId || "").trim();
+        if (!sourceDate || !taskId || String(entry.scheduleTaskKind || "").trim() !== "service") return;
+        doneKeys.add(`${asset.campus}||${sourceDate}||${taskId}`);
+      });
+    });
+    return doneKeys;
+  }, [resolvedAssets]);
   const reportScheduleCalendarRows = useMemo(() => {
     const [yearText, monthText] = reportScheduleMonth.split("-");
     const year = Number(yearText);
@@ -36657,8 +36802,12 @@ export default function App() {
       scheduleGroup: string;
       scheduleNote: string;
       timeLabel: string;
+      statusLabel: string;
       assetCount: number;
+      completedCount: number;
+      completed: boolean;
       assetIds: string[];
+      completedAssetIds: string[];
       locations: string[];
       items: string[];
     }>;
@@ -36673,8 +36822,12 @@ export default function App() {
         scheduleGroup: string;
         scheduleNote: string;
         timeLabel: string;
+        statusLabel: string;
         assetCount: number;
+        completedCount: number;
+        completed: boolean;
         assetIds: string[];
+        completedAssetIds: string[];
         locations: string[];
         items: string[];
       }
@@ -36682,12 +36835,13 @@ export default function App() {
     reportScheduleAssets.forEach((asset) => {
       if (reportScheduleCampusFilter !== "ALL" && String(asset.campus || "") !== reportScheduleCampusFilter) return;
       if (reportScheduleGroupFilter !== "ALL" && String(asset.scheduleGroup || "").trim() !== reportScheduleGroupFilter) return;
-      const addOccurrence = (dateKey: string) => {
+      const addOccurrence = (dateKey: string, isCompleted = false) => {
         if (!dateKey || dateKey < startYmd || dateKey > endYmd) return;
         const scheduleNote = String(asset.scheduleNote || "").trim();
         const group = String(asset.scheduleGroup || "").trim() || inferScheduleGroupValue(asset);
         const campus = String(asset.campus || "").trim();
-        const key = [dateKey, campus, group, scheduleNote].join("||");
+        const timeLabel = normalizeCalendarEventTime(asset.scheduleTime) || "";
+        const key = [dateKey, campus, group, scheduleNote, timeLabel, isCompleted ? "done" : "pending"].join("||");
         if (!grouped.has(key)) {
           grouped.set(key, {
             key,
@@ -36695,15 +36849,23 @@ export default function App() {
             campus,
             scheduleGroup: group,
             scheduleNote,
-            timeLabel: "",
+            timeLabel,
+            statusLabel: isCompleted ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់" : "Pending"),
             assetCount: 0,
+            completedCount: 0,
+            completed: false,
             assetIds: [],
+            completedAssetIds: [],
             locations: [],
             items: [],
           });
         }
         const row = grouped.get(key)!;
         row.assetCount += 1;
+        if (isCompleted) {
+          row.completedCount += 1;
+          if (asset.assetId && !row.completedAssetIds.includes(asset.assetId)) row.completedAssetIds.push(asset.assetId);
+        }
         if (asset.assetId && !row.assetIds.includes(asset.assetId)) row.assetIds.push(asset.assetId);
         const location = String(asset.location || "").trim();
         if (location && !row.locations.includes(location)) row.locations.push(location);
@@ -36712,17 +36874,27 @@ export default function App() {
       };
       if (asset.repeatMode === "MONTHLY_WEEKDAY") {
         const next = nthWeekdayOfMonth(year, monthIndex, Number(asset.repeatWeekday || 6), Number(asset.repeatWeekOfMonth || 1));
-        if (next) addOccurrence(toYmd(next));
+        if (next && !completedScheduleAssetKeys.has(`${asset.id}||${toYmd(next)}`)) addOccurrence(toYmd(next), false);
         return;
       }
-      addOccurrence(String(asset.nextMaintenanceDate || ""));
+      const nextDate = String(asset.nextMaintenanceDate || "");
+      if (nextDate && !completedScheduleAssetKeys.has(`${asset.id}||${nextDate}`)) {
+        addOccurrence(nextDate, false);
+      }
+      (asset.maintenanceHistory || []).forEach((entry) => {
+        if (String(entry.completion || "") !== "Done") return;
+        const sourceDate = String(entry.scheduleSourceDate || "").trim();
+        if (!sourceDate || sourceDate < startYmd || sourceDate > endYmd) return;
+        addOccurrence(sourceDate, true);
+      });
     });
     reportScheduleServiceRows.forEach((row) => {
       if (reportScheduleCampusFilter !== "ALL" && row.campus !== "ALL" && row.campus !== reportScheduleCampusFilter) return;
       if (reportScheduleCampusFilter !== "ALL" && row.campus === "ALL") return;
       if (reportScheduleGroupFilter !== "ALL" && row.scheduleGroup !== reportScheduleGroupFilter) return;
       if (!row.date || row.date < startYmd || row.date > endYmd) return;
-      const key = [row.date, row.campus, row.scheduleGroup, row.scheduleNote, row.entryLabel].join("||");
+      const isCompleted = completedScheduleServiceKeys.has(`${row.campus}||${row.date}||${row.id.replace(/^service-/, "")}`);
+      const key = [row.date, row.campus, row.scheduleGroup, row.scheduleNote, row.entryLabel, isCompleted ? "done" : "pending"].join("||");
       grouped.set(key, {
         key,
         date: row.date,
@@ -36730,22 +36902,44 @@ export default function App() {
         scheduleGroup: row.scheduleGroup,
         scheduleNote: row.scheduleNote,
         timeLabel: row.timeLabel,
+        statusLabel: isCompleted ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់" : "Pending"),
         assetCount: 1,
+        completedCount: isCompleted ? 1 : 0,
+        completed: isCompleted,
         assetIds: [],
-        locations: [row.timeLabel],
+        completedAssetIds: [],
+        locations: [],
         items: [row.entryLabel],
       });
     });
-    return Array.from(grouped.values()).sort((a, b) => {
+    return Array.from(grouped.values())
+      .map((row) => ({
+        ...row,
+        completed: row.assetCount > 0 && row.completedCount >= row.assetCount,
+        statusLabel:
+          row.completedCount <= 0
+            ? (lang === "km" ? "មិនទាន់" : "Pending")
+            : row.completedCount >= row.assetCount
+              ? row.assetCount > 1
+                ? (lang === "km" ? `រួចរាល់ ${row.completedCount}/${row.assetCount}` : `Done ${row.completedCount}/${row.assetCount}`)
+                : (lang === "km" ? "រួចរាល់" : "Done")
+              : (lang === "km" ? `បានធ្វើ ${row.completedCount}/${row.assetCount}` : `${row.completedCount}/${row.assetCount} Done`),
+      }))
+      .sort((a, b) => {
       const dateCompare = a.date.localeCompare(b.date);
       if (dateCompare) return dateCompare;
+      if (a.completed !== b.completed) return a.completed ? -1 : 1;
       const campusCompare = compareCampusByCode(a.campus, b.campus);
       if (campusCompare) return campusCompare;
       const groupCompare = a.scheduleGroup.localeCompare(b.scheduleGroup);
       if (groupCompare) return groupCompare;
+      const timeCompare = a.timeLabel.localeCompare(b.timeLabel);
+      if (timeCompare) return timeCompare;
       return a.scheduleNote.localeCompare(b.scheduleNote);
-    });
+      });
   }, [
+    completedScheduleAssetKeys,
+    completedScheduleServiceKeys,
     reportScheduleAssets,
     reportScheduleServiceRows,
     reportScheduleMonth,
@@ -36753,6 +36947,134 @@ export default function App() {
     reportScheduleGroupFilter,
     assetItemName,
     inferScheduleGroupValue,
+    lang,
+  ]);
+  const reportScheduleDetailRows = useMemo(() => {
+    const [yearText, monthText] = reportScheduleMonth.split("-");
+    const year = Number(yearText);
+    const monthIndex = Number(monthText) - 1;
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 0 || monthIndex > 11) return [] as Array<{
+      key: string;
+      date: string;
+      campus: string;
+      scheduleGroup: string;
+      scheduleNote: string;
+      timeLabel: string;
+      statusLabel: string;
+      assetCount: number;
+      completedCount: number;
+      completed: boolean;
+      assetIds: string[];
+      completedAssetIds: string[];
+      locations: string[];
+      items: string[];
+    }>;
+    const startYmd = toYmd(new Date(year, monthIndex, 1));
+    const endYmd = toYmd(new Date(year, monthIndex + 1, 0));
+    const rows: Array<{
+      key: string;
+      date: string;
+      campus: string;
+      scheduleGroup: string;
+      scheduleNote: string;
+      timeLabel: string;
+      statusLabel: string;
+      assetCount: number;
+      completedCount: number;
+      completed: boolean;
+      assetIds: string[];
+      completedAssetIds: string[];
+      locations: string[];
+      items: string[];
+    }> = [];
+    const seen = new Set<string>();
+
+    reportScheduleAssets.forEach((asset) => {
+      if (reportScheduleCampusFilter !== "ALL" && String(asset.campus || "") !== reportScheduleCampusFilter) return;
+      if (reportScheduleGroupFilter !== "ALL" && String(asset.scheduleGroup || "").trim() !== reportScheduleGroupFilter) return;
+      const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+      const group = String(asset.scheduleGroup || "").trim() || inferScheduleGroupValue(asset);
+      const location = String(asset.location || "").trim();
+      const scheduleNote = String(asset.scheduleNote || "").trim();
+      const timeLabel = normalizeCalendarEventTime(asset.scheduleTime) || "";
+      const itemLabel = [asset.assetId, itemName].filter(Boolean).join(" - ") || itemName || asset.assetId || "-";
+      const pushRow = (dateKey: string, completed: boolean) => {
+        if (!dateKey || dateKey < startYmd || dateKey > endYmd) return;
+        const key = `${asset.id}||${dateKey}||${completed ? "done" : "pending"}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        rows.push({
+          key,
+          date: dateKey,
+          campus: String(asset.campus || "").trim(),
+          scheduleGroup: group,
+          scheduleNote,
+          timeLabel,
+          statusLabel: completed ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់" : "Pending"),
+          assetCount: 1,
+          completedCount: completed ? 1 : 0,
+          completed,
+          assetIds: asset.assetId ? [asset.assetId] : [],
+          completedAssetIds: completed && asset.assetId ? [asset.assetId] : [],
+          locations: location ? [location] : [],
+          items: [itemLabel],
+        });
+      };
+
+      const nextDate = String(asset.nextMaintenanceDate || "");
+      if (nextDate && !completedScheduleAssetKeys.has(`${asset.id}||${nextDate}`)) {
+        pushRow(nextDate, false);
+      }
+      (asset.maintenanceHistory || []).forEach((entry) => {
+        if (String(entry.completion || "") !== "Done") return;
+        const sourceDate = String(entry.scheduleSourceDate || "").trim();
+        pushRow(sourceDate, true);
+      });
+    });
+
+    reportScheduleServiceRows.forEach((row) => {
+      if (reportScheduleCampusFilter !== "ALL" && row.campus !== "ALL" && row.campus !== reportScheduleCampusFilter) return;
+      if (reportScheduleCampusFilter !== "ALL" && row.campus === "ALL") return;
+      if (reportScheduleGroupFilter !== "ALL" && row.scheduleGroup !== reportScheduleGroupFilter) return;
+      if (!row.date || row.date < startYmd || row.date > endYmd) return;
+      const isCompleted = completedScheduleServiceKeys.has(`${row.campus}||${row.date}||${row.id.replace(/^service-/, "")}`);
+      rows.push({
+        key: `${row.id}||${isCompleted ? "done" : "pending"}`,
+        date: row.date,
+        campus: row.campus,
+        scheduleGroup: row.scheduleGroup,
+        scheduleNote: row.scheduleNote,
+        timeLabel: row.timeLabel,
+        statusLabel: isCompleted ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់" : "Pending"),
+        assetCount: 1,
+        completedCount: isCompleted ? 1 : 0,
+        completed: isCompleted,
+        assetIds: [],
+        completedAssetIds: [],
+        locations: [],
+        items: [row.entryLabel],
+      });
+    });
+
+    return rows.sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare) return dateCompare;
+      if (a.completed !== b.completed) return a.completed ? -1 : 1;
+      const campusCompare = compareCampusByCode(a.campus, b.campus);
+      if (campusCompare) return campusCompare;
+      return (a.items[0] || "").localeCompare(b.items[0] || "");
+    });
+  }, [
+    assetItemName,
+    completedScheduleAssetKeys,
+    completedScheduleServiceKeys,
+    inferScheduleGroupValue,
+    lang,
+    reportScheduleAssets,
+    reportScheduleCampusFilter,
+    reportScheduleGroupFilter,
+    reportScheduleMonth,
+    reportScheduleServiceRows,
   ]);
   const reportScheduleCalendarSummary = useMemo(
     () => ({
@@ -36798,6 +37120,54 @@ export default function App() {
       };
     });
   }, [reportScheduleMonth, reportScheduleCalendarByDate]);
+  const reportScheduleDisplayRows = useMemo(
+    () => (reportScheduleView === "details" ? reportScheduleDetailRows : reportScheduleCalendarRows),
+    [reportScheduleCalendarRows, reportScheduleDetailRows, reportScheduleView]
+  );
+  const reportScheduleDisplaySummary = useMemo(
+    () => ({
+      totalDays: new Set(reportScheduleDisplayRows.map((row) => row.date)).size,
+      totalGroups: reportScheduleDisplayRows.length,
+      totalAssets: reportScheduleDisplayRows.reduce((sum, row) => sum + row.assetCount, 0),
+      campusCount: new Set(reportScheduleDisplayRows.map((row) => row.campus).filter(Boolean)).size,
+    }),
+    [reportScheduleDisplayRows]
+  );
+  const reportScheduleDisplayByDate = useMemo(() => {
+    const map = new Map<string, typeof reportScheduleDisplayRows>();
+    reportScheduleDisplayRows.forEach((row) => {
+      if (!map.has(row.date)) map.set(row.date, []);
+      map.get(row.date)?.push(row);
+    });
+    return map;
+  }, [reportScheduleDisplayRows]);
+  const reportScheduleDisplayDays = useMemo(() => {
+    const [yearText, monthText] = reportScheduleMonth.split("-");
+    const year = Number(yearText);
+    const monthIndex = Number(monthText) - 1;
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || monthIndex < 0 || monthIndex > 11) return [] as Array<{
+      ymd: string;
+      day: number;
+      weekday: number;
+      inMonth: boolean;
+      entries: typeof reportScheduleDisplayRows;
+    }>;
+    const firstDay = new Date(year, monthIndex, 1);
+    const startOffset = firstDay.getDay();
+    const gridStart = new Date(year, monthIndex, 1 - startOffset);
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(gridStart);
+      date.setDate(gridStart.getDate() + index);
+      const ymd = toYmd(date);
+      return {
+        ymd,
+        day: date.getDate(),
+        weekday: date.getDay(),
+        inMonth: date.getMonth() === monthIndex,
+        entries: reportScheduleDisplayByDate.get(ymd) || [],
+      };
+    });
+  }, [reportScheduleDisplayByDate, reportScheduleMonth]);
   const renderScheduleLocationList = useCallback((locations: string[]) => {
     const cleaned = locations.map((location) => String(location || "").trim()).filter(Boolean);
     if (!cleaned.length) return "-";
@@ -36893,6 +37263,7 @@ export default function App() {
         Number(asset.repeatWeekday || 6)
       ),
       photo: asset.photo || "",
+      completed: completedScheduleAssetKeys.has(`${asset.id}||${String(asset.nextMaintenanceDate || "")}`),
       asset,
     }));
     const serviceRows: ScheduleCalendarRow[] = calendarEvents
@@ -36913,6 +37284,7 @@ export default function App() {
           groupLabel: calendarEventTypeLabel(parsed.serviceType),
           modeLabel: normalizeCalendarEventTime(row.time) || (lang === "km" ? "គ្មានម៉ោង" : "No time"),
           photo: "",
+          completed: completedScheduleServiceKeys.has(`${parsed.campus}||${String(row.date || "")}||${String(row.id || "")}`),
           event: row,
           serviceType: parsed.serviceType,
         };
@@ -36940,6 +37312,8 @@ export default function App() {
     lang,
     maintenanceRepeatLabel,
     parseServiceScheduleEvent,
+    completedScheduleAssetKeys,
+    completedScheduleServiceKeys,
     scheduleGroupFilter,
     scheduleListCampusFilter,
     scheduleListLocationFilter,
@@ -39906,7 +40280,7 @@ export default function App() {
       return `${selectedReportTypeLabel} - ${assetMasterCampusTitle}`;
     }
     if (reportType === "schedule_calendar") {
-      return `${selectedReportTypeLabel} - ${reportScheduleMonthLabel}`;
+      return lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar";
     }
     if (reportType === "qr_labels") {
       if (qrLabelEntityType === "rental_printer") {
@@ -39915,7 +40289,7 @@ export default function App() {
       return reportAssetIdFilter ? `${selectedReportTypeLabel} - ${reportAssetIdFilter}` : selectedReportTypeLabel;
     }
     return selectedReportTypeLabel;
-  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle, reportScheduleMonthLabel, lang, qrLabelEntityType, reportAssetIdFilter]);
+  }, [reportType, selectedReportTypeLabel, assetMasterCampusTitle, lang, qrLabelEntityType, reportAssetIdFilter]);
   const reportTypeGuideText = useMemo(() => {
     const guides: Record<ReportType, string> =
       lang === "km"
@@ -40013,6 +40387,13 @@ export default function App() {
         }`
       );
       chips.push(`${lang === "km" ? "ក្រុម" : "Group"}: ${reportScheduleGroupLabel(reportScheduleGroupFilter)}`);
+      chips.push(
+        `${lang === "km" ? "របៀបបង្ហាញ" : "View"}: ${
+          reportScheduleView === "details"
+            ? (lang === "km" ? "លម្អិត" : "Details")
+            : (lang === "km" ? "សង្ខេប" : "Summary")
+        }`
+      );
     }
     if (reportAssetFilterLabel) chips.push(reportAssetFilterLabel);
     return chips;
@@ -40027,6 +40408,7 @@ export default function App() {
     reportAssetFilterLabel,
     reportScheduleCampusFilter,
     reportScheduleGroupFilter,
+    reportScheduleView,
     reportScheduleGroupLabel,
     reportScheduleMonthLabel,
     reportType,
@@ -41637,9 +42019,7 @@ export default function App() {
         ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
       ]);
     } else if (reportType === "schedule_calendar") {
-      title = `Maintenance Schedule Calendar - ${reportScheduleMonthLabel}${
-        reportScheduleCampusFilter === "ALL" ? "" : ` - ${reportCampusName(reportScheduleCampusFilter)}`
-      }`;
+      title = lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar";
       columns = [];
       rows = [];
     } else if (reportType === "overdue") {
@@ -41862,6 +42242,7 @@ export default function App() {
         const label = String(header || "").trim().toLowerCase();
         if (index === 0 && (label === "no." || label === "no" || label === "ល.រ")) return 5;
         if (label.includes("date")) return 10;
+        if (label.includes("time") || label.includes("ពេលវេលា")) return 8;
         if (label.includes("asset id")) return 14;
         if (label.includes("កូដ")) return 11;
         if (label.includes("រូប")) return 8;
@@ -42057,9 +42438,13 @@ export default function App() {
               value: reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter),
             },
             { label: lang === "km" ? "ក្រុម" : "Group", value: reportScheduleGroupLabel(reportScheduleGroupFilter) },
-            { label: lang === "km" ? "ថ្ងៃមានកាលវិភាគ" : "Scheduled Days", value: reportScheduleCalendarSummary.totalDays },
-            { label: lang === "km" ? "ក្រុមការងារ" : "Calendar Entries", value: reportScheduleCalendarSummary.totalGroups },
-            { label: lang === "km" ? "ទ្រព្យសរុប" : "Total Assets", value: reportScheduleCalendarSummary.totalAssets },
+            {
+              label: lang === "km" ? "របៀបបង្ហាញ" : "View",
+              value: reportScheduleView === "details" ? (lang === "km" ? "លម្អិត" : "Details") : (lang === "km" ? "សង្ខេប" : "Summary"),
+            },
+            { label: lang === "km" ? "ថ្ងៃមានកាលវិភាគ" : "Scheduled Days", value: reportScheduleDisplaySummary.totalDays },
+            { label: lang === "km" ? "ក្រុមការងារ" : "Calendar Entries", value: reportScheduleDisplaySummary.totalGroups },
+            { label: lang === "km" ? "ទ្រព្យសរុប" : "Total Assets", value: reportScheduleDisplaySummary.totalAssets },
           ])
         : reportType === "staff_borrowing"
         ? buildPrintSummaryGrid([
@@ -42305,7 +42690,11 @@ export default function App() {
             lang === "km" ? "ខែ" : "Month"
           )}: ${escapeHtml(reportScheduleMonthLabel)} | ${escapeHtml(lang === "km" ? "សាខា" : "Campus")}: ${escapeHtml(
             reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)
-          )} | ${escapeHtml(lang === "km" ? "ក្រុម" : "Group")}: ${escapeHtml(reportScheduleGroupLabel(reportScheduleGroupFilter))}</p>`
+          )} | ${escapeHtml(lang === "km" ? "ក្រុម" : "Group")}: ${escapeHtml(reportScheduleGroupLabel(reportScheduleGroupFilter))} | ${escapeHtml(
+            lang === "km" ? "របៀបបង្ហាញ" : "View"
+          )}: ${escapeHtml(
+            reportScheduleView === "details" ? (lang === "km" ? "លម្អិត" : "Details") : (lang === "km" ? "សង្ខេប" : "Summary")
+          )}</p>`
         : `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
             lang === "km" ? "តម្រងសាខា" : "Campus Filter"
           )}: ${escapeHtml(filterLabel)}</p>`;
@@ -42334,10 +42723,23 @@ export default function App() {
     const reportHeadingTitle =
       reportType === "maintenance_completion"
         ? "Maintenance Report for ED"
+        : reportType === "schedule_calendar"
+          ? (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar")
         : title;
     const reportHeadingSubtitle =
       reportType === "maintenance_completion"
         ? maintenanceCompletionRangeLabel
+        : reportType === "schedule_calendar"
+          ? [
+              reportScheduleMonthLabel,
+              `${lang === "km" ? "សាខា" : "Campus"}: ${
+                reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)
+              }`,
+              `${lang === "km" ? "ក្រុម" : "Group"}: ${reportScheduleGroupLabel(reportScheduleGroupFilter)}`,
+              `${lang === "km" ? "របៀបបង្ហាញ" : "View"}: ${
+                reportScheduleView === "details" ? (lang === "km" ? "លម្អិត" : "Details") : (lang === "km" ? "សង្ខេប" : "Summary")
+              }`,
+            ].join("\n")
         : reportType === "asset_master"
           ? (assetMasterCampusFilter.includes("ALL")
               ? t.allCampuses
@@ -42827,7 +43229,7 @@ export default function App() {
               : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
               .map((label, index) => `<div class="schedule-calendar-weekday${index === 0 ? " is-sun" : index === 6 ? " is-sat" : ""}">${escapeHtml(label)}</div>`)
               .join("");
-            const dayCells = reportScheduleCalendarDays
+            const dayCells = reportScheduleDisplayDays
               .map((day) => {
                 const entryBlocks = day.entries.length
                   ? day.entries
@@ -42835,13 +43237,16 @@ export default function App() {
                         const color = scheduleCalendarCampusColor(entry.campus);
                         const campusText = reportCampusName(entry.campus);
                         const lineTwo = entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup);
-                        const lineThree = entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup);
-                        const lineFour = entry.timeLabel && entry.scheduleNote ? entry.scheduleNote : "";
-                        return `<div class="schedule-calendar-entry" style="background:${escapeHtml(color)};">
+                        const lineThree = entry.statusLabel;
+                        const lineFour = entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup);
+                        const lineFive = entry.timeLabel && entry.scheduleNote ? entry.scheduleNote : "";
+                        return `<div class="schedule-calendar-entry${entry.completed ? " is-complete" : ""}" style="background:${escapeHtml(color)};">
                           <strong>${escapeHtml(campusText)}</strong>
                           <span>${escapeHtml(lineTwo)}</span>
                           <span>${escapeHtml(lineThree)}</span>
                           ${lineFour ? `<span>${escapeHtml(lineFour)}</span>` : ""}
+                          ${entry.completedAssetIds.length ? `<span>${escapeHtml(entry.completedAssetIds.join(", "))}</span>` : ""}
+                          ${lineFive ? `<span>${escapeHtml(lineFive)}</span>` : ""}
                         </div>`;
                       })
                       .join("")
@@ -42857,16 +43262,41 @@ export default function App() {
                 scheduleCalendarCampusColor(campus)
               )};"></span><span>${escapeHtml(reportCampusName(campus))}</span></div>`)
               .join("");
-            const detailRows = reportScheduleCalendarRows.length
-              ? reportScheduleCalendarRows
+            const schedulePreviewHeaders = [
+              "No.",
+              lang === "km" ? "កាលបរិច្ឆេទ" : "Date",
+              lang === "km" ? "សាខា" : "Campus",
+              lang === "km" ? "ការងារ / ធាតុ" : "Task / Item",
+              lang === "km" ? "ក្រុម" : "Group",
+              lang === "km" ? "សម្គាល់" : "Schedule Note",
+              lang === "km" ? "ស្ថានភាព" : "Status",
+              lang === "km" ? "ពេលវេលា" : "Time",
+              lang === "km" ? "ទីតាំង" : "Location",
+            ];
+            const schedulePreviewDataRows = reportScheduleDisplayRows.map((row, index) => [
+              String(index + 1),
+              formatDate(row.date),
+              reportCampusName(row.campus),
+              row.items.join(", ") || "-",
+              reportScheduleGroupLabel(row.scheduleGroup),
+              row.scheduleNote || "-",
+              row.statusLabel || "-",
+              row.timeLabel || "-",
+              row.locations.join(", ") || "-",
+            ]);
+            const schedulePreviewColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(schedulePreviewHeaders, schedulePreviewDataRows));
+            const detailRows = reportScheduleDisplayRows.length
+              ? reportScheduleDisplayRows
                   .map(
-                    (row, index) => `<tr>
+                    (row, index) => `<tr${row.completed ? ` class="schedule-preview-row-complete"` : ""}>
                       <td>${index + 1}</td>
                       <td>${escapeHtml(formatDate(row.date))}</td>
                       <td>${escapeHtml(reportCampusName(row.campus))}</td>
                       <td>${escapeHtml(row.items.join(", ") || "-")}</td>
                       <td>${escapeHtml(reportScheduleGroupLabel(row.scheduleGroup))}</td>
                       <td>${escapeHtml(row.scheduleNote || "-")}</td>
+                      <td>${escapeHtml(row.statusLabel || "-")}${row.completedAssetIds.length ? `<div style="font-size:11px;line-height:1.35;margin-top:4px;">${escapeHtml(row.completedAssetIds.join(", "))}</div>` : ""}</td>
+                      <td>${escapeHtml(row.timeLabel || "-")}</td>
                       <td>${
                         row.locations.length
                           ? row.locations
@@ -42877,25 +43307,16 @@ export default function App() {
                     </tr>`
                   )
                   .join("")
-              : `<tr><td colspan="7">${escapeHtml(lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month.")}</td></tr>`;
+              : `<tr><td colspan="9">${escapeHtml(lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month.")}</td></tr>`;
             return `<div class="schedule-calendar-print">
               <div class="schedule-calendar-grid-wrap">
                 <div class="schedule-calendar-grid">${weekdayHeaders}${dayCells}</div>
               </div>
               <div class="schedule-calendar-legend">${legendItems}</div>
               <div class="preview-table-wrap" style="margin-top:16px;">
-                <table class="preview-report-table">
-                  <thead>
-                    <tr>
-                      <th>No.</th>
-                      <th>${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}</th>
-                      <th>${escapeHtml(lang === "km" ? "សាខា" : "Campus")}</th>
-                      <th>${escapeHtml(lang === "km" ? "ការងារ / ធាតុ" : "Task / Item")}</th>
-                      <th>${escapeHtml(lang === "km" ? "ក្រុម" : "Group")}</th>
-                      <th>${escapeHtml(lang === "km" ? "សម្គាល់" : "Schedule Note")}</th>
-                      <th>${escapeHtml(lang === "km" ? "ពេលវេលា / ទីតាំង" : "Time / Locations")}</th>
-                    </tr>
-                  </thead>
+                <table class="preview-report-table preview-report-table-schedule">
+                  ${schedulePreviewColgroup}
+                  ${buildPreviewHeadHtml(schedulePreviewHeaders)}
                   <tbody>${detailRows}</tbody>
                 </table>
               </div>
@@ -43347,6 +43768,30 @@ export default function App() {
             overflow-wrap: normal;
             hyphens: none;
           }
+          .preview-report-table-schedule {
+            table-layout: auto;
+          }
+          .preview-report-table-schedule th:nth-child(1),
+          .preview-report-table-schedule td:nth-child(1),
+          .preview-report-table-schedule th:nth-child(2),
+          .preview-report-table-schedule td:nth-child(2),
+          .preview-report-table-schedule th:nth-child(7),
+          .preview-report-table-schedule td:nth-child(7),
+          .preview-report-table-schedule th:nth-child(8),
+          .preview-report-table-schedule td:nth-child(8) {
+            white-space: nowrap;
+          }
+          .preview-report-table-schedule th:nth-child(1),
+          .preview-report-table-schedule td:nth-child(1),
+          .preview-report-table-schedule th:nth-child(7),
+          .preview-report-table-schedule td:nth-child(7),
+          .preview-report-table-schedule th:nth-child(8),
+          .preview-report-table-schedule td:nth-child(8) {
+            text-align: center;
+          }
+          .preview-report-table-schedule td:nth-child(9) {
+            min-width: 180px;
+          }
           .report-signature-section {
             display: flex;
             flex-wrap: wrap;
@@ -43548,14 +43993,25 @@ export default function App() {
             min-height: 36px;
             box-shadow: inset 0 0 0 1px rgba(72, 63, 45, 0.08);
           }
+          .schedule-calendar-entry.is-complete {
+            opacity: 0.68;
+          }
           .schedule-calendar-entry strong,
           .schedule-calendar-entry span {
             display: block;
             line-height: 1.2;
           }
+          .schedule-calendar-entry.is-complete strong,
+          .schedule-calendar-entry.is-complete span {
+            text-decoration: line-through;
+          }
           .schedule-calendar-entry strong { font-size: 10px; margin-bottom: 2px; }
           .schedule-calendar-entry span { font-size: 9px; }
           .schedule-calendar-entry-empty { min-height: 36px; }
+          .schedule-preview-row-complete td {
+            text-decoration: line-through;
+            color: #7d7d7d;
+          }
           .schedule-calendar-legend {
             display: flex;
             flex-wrap: wrap;
@@ -43701,7 +44157,12 @@ export default function App() {
               <div class="report-head-left">
                 <h1>${escapeHtml(lang === "km" ? "សាលា អេកូ អន្តរជាតិ" : "Eco International School")}</h1>
                 <h2>${escapeHtml(reportHeadingTitle)}</h2>
-                ${reportHeadingSubtitle ? `<div class="report-head-subtitle">${escapeHtml(reportHeadingSubtitle)}</div>` : ""}
+                ${reportHeadingSubtitle
+                  ? `<div class="report-head-subtitle">${reportHeadingSubtitle
+                      .split("\n")
+                      .map((line) => escapeHtml(line))
+                      .join("<br />")}</div>`
+                  : ""}
               </div>
               <img loading="lazy" decoding="async" class="report-head-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
             </div>
@@ -58504,7 +58965,7 @@ function formatTicketRequestSource(value?: string) {
             </h3>
             {bulkScheduleMode === "asset" ? (
             <>
-            <div className="form-grid transfer-record-grid">
+            <div className="form-grid transfer-record-grid schedule-single-filter-grid">
               <label className="field">
                 <span>{t.campus}</span>
                 <LocationPicker
@@ -58628,6 +59089,15 @@ function formatTicketRequestSource(value?: string) {
                     />
                   </div>
                 ) : null}
+              </label>
+              <label className="field">
+                <span>Start Time</span>
+                <input
+                  className="input"
+                  type="time"
+                  value={bulkScheduleForm.time}
+                  onChange={(e) => setBulkScheduleForm((f) => ({ ...f, time: normalizeCalendarEventTime(e.target.value) || "09:00" }))}
+                />
               </label>
               <label className="field">
                 <span>Repeat</span>
@@ -58836,11 +59306,61 @@ function formatTicketRequestSource(value?: string) {
               <>
             <h3 className="section-title">Fill Maintenance Schedule</h3>
             <div className="form-grid transfer-record-grid">
+              <div className="schedule-single-top-row field-wide">
+                <label className="field">
+                  <span>{t.campus}</span>
+                  <select
+                    className="input"
+                    value={scheduleSingleFilterCampus}
+                    onChange={(e) => setScheduleSingleFilterCampus(e.target.value)}
+                  >
+                    <option value="ALL">{t.allCampuses}</option>
+                    {scheduleSingleFilterCampusOptions.map((campus) => (
+                      <option key={`schedule-single-campus-${campus}`} value={campus}>
+                        {campusLabel(campus)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{t.category}</span>
+                  <select
+                    className="input"
+                    value={scheduleSingleFilterCategory}
+                    onChange={(e) => setScheduleSingleFilterCategory(e.target.value)}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់ប្រភេទ" : "All Categories"}</option>
+                    {scheduleSingleFilterCategoryOptions.map((category) => {
+                      const categoryOption = CATEGORY_OPTIONS.find((option) => option.value === category);
+                      const label = categoryOption ? (lang === "km" ? categoryOption.km : categoryOption.en) : category;
+                      return (
+                        <option key={`schedule-single-category-${category}`} value={category}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ស្វែងរកទ្រព្យ" : "Search Asset"}</span>
+                  <input
+                    className="input"
+                    value={scheduleSingleFilterSearch}
+                    onChange={(e) => setScheduleSingleFilterSearch(e.target.value)}
+                    placeholder={lang === "km" ? "ស្វែងរក ID, ឈ្មោះ, ទីតាំង..." : "Search ID, name, location..."}
+                  />
+                </label>
+              </div>
               <label className="field field-wide">
                 <span>Asset</span>
+                <div className="schedule-single-filter-help">
+                  {lang === "km"
+                    ? `បង្ហាញ ${scheduleSingleFilteredAssets.length} ទ្រព្យ`
+                    : `Showing ${scheduleSingleFilteredAssets.length} asset${scheduleSingleFilteredAssets.length === 1 ? "" : "s"}`}
+                </div>
                 <AssetPicker
                   value={scheduleForm.assetId}
-                  assets={scheduleSelectAssets}
+                  assets={scheduleSingleFilteredAssets}
                   getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.type})`}
                   onChange={(assetId) => {
                     const asset = assets.find((a) => String(a.id) === assetId);
@@ -59108,7 +59628,7 @@ function formatTicketRequestSource(value?: string) {
                     selectedDateScheduleRows.map((row) => (
                       <article
                         key={`selected-mobile-${row.id}`}
-                        className={`schedule-mobile-card ${row.kind === "asset" ? assetStatusRowClass(row.asset.status || "") : ""}`}
+                        className={`schedule-mobile-card ${row.completed ? "schedule-mobile-card-complete" : ""} ${row.kind === "asset" ? assetStatusRowClass(row.asset.status || "") : ""}`}
                       >
                         <div className="schedule-mobile-card-head">
                           <strong>{row.title}</strong>
@@ -59125,11 +59645,15 @@ function formatTicketRequestSource(value?: string) {
                           <div>{t.scheduleNote}: {row.note || "-"}</div>
                         </div>
                         <div className="maintenance-schedule-action-row">
-                          {row.kind === "asset" ? (
+                          {row.kind === "asset" || row.campus !== "ALL" ? (
                             <button
                               className="btn-primary btn-small maintenance-schedule-icon-btn"
                               disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                              onClick={() => openScheduleMaintenanceRecordModal(row.asset, row.date)}
+                              onClick={() =>
+                                row.kind === "asset"
+                                  ? openScheduleMaintenanceRecordModal(row.asset, row.date)
+                                  : openScheduleGeneralTaskRecordModal(row)
+                              }
                               title="Record"
                               aria-label="Record"
                             >
@@ -59187,7 +59711,7 @@ function formatTicketRequestSource(value?: string) {
                     <tbody>
                       {selectedDateScheduleRows.length ? (
                         selectedDateScheduleRows.map((row) => (
-                          <tr key={`selected-${row.id}`}>
+                          <tr key={`selected-${row.id}`} className={row.completed ? "maintenance-schedule-row-complete" : ""}>
                             <td>{formatDate(row.date || "-")}</td>
                             <td>
                               <div className="maintenance-schedule-cell-title">{row.title}</div>
@@ -59210,11 +59734,15 @@ function formatTicketRequestSource(value?: string) {
                             <td>{row.note || "-"}</td>
                             <td>
                               <div className="maintenance-schedule-action-row">
-                                {row.kind === "asset" ? (
+                                {row.kind === "asset" || row.campus !== "ALL" ? (
                                   <button
                                     className="btn-primary btn-small maintenance-schedule-icon-btn"
                                     disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                                    onClick={() => openScheduleMaintenanceRecordModal(row.asset, row.date)}
+                                    onClick={() =>
+                                      row.kind === "asset"
+                                        ? openScheduleMaintenanceRecordModal(row.asset, row.date)
+                                        : openScheduleGeneralTaskRecordModal(row)
+                                    }
                                     title="Record"
                                     aria-label="Record"
                                   >
@@ -59271,7 +59799,7 @@ function formatTicketRequestSource(value?: string) {
                     filteredScheduleCalendarRows.map((row) => (
                       <article
                         key={`schedule-list-mobile-${row.id}`}
-                        className={`schedule-mobile-card ${row.kind === "asset" ? assetStatusRowClass(row.asset.status || "") : ""}`}
+                        className={`schedule-mobile-card ${row.completed ? "schedule-mobile-card-complete" : ""} ${row.kind === "asset" ? assetStatusRowClass(row.asset.status || "") : ""}`}
                       >
                         <div className="schedule-mobile-card-head">
                           <strong>{row.title}</strong>
@@ -59288,11 +59816,15 @@ function formatTicketRequestSource(value?: string) {
                           <div>{t.scheduleNote}: {row.note || "-"}</div>
                         </div>
                         <div className="maintenance-schedule-action-row">
-                          {row.kind === "asset" ? (
+                          {row.kind === "asset" || row.campus !== "ALL" ? (
                             <button
                               className="btn-primary btn-small maintenance-schedule-icon-btn"
                               disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                              onClick={() => openScheduleMaintenanceRecordModal(row.asset, row.date)}
+                              onClick={() =>
+                                row.kind === "asset"
+                                  ? openScheduleMaintenanceRecordModal(row.asset, row.date)
+                                  : openScheduleGeneralTaskRecordModal(row)
+                              }
                               title="Record"
                               aria-label="Record"
                             >
@@ -59350,7 +59882,7 @@ function formatTicketRequestSource(value?: string) {
                     <tbody>
                       {filteredScheduleCalendarRows.length ? (
                         filteredScheduleCalendarRows.map((row) => (
-                          <tr key={`schedule-list-row-${row.id}`}>
+                          <tr key={`schedule-list-row-${row.id}`} className={row.completed ? "maintenance-schedule-row-complete" : ""}>
                             <td>{formatDate(row.date || "-")}</td>
                             <td>
                               <div className="maintenance-schedule-cell-title">{row.title}</div>
@@ -59373,11 +59905,15 @@ function formatTicketRequestSource(value?: string) {
                             <td>{row.note || "-"}</td>
                             <td>
                               <div className="maintenance-schedule-action-row">
-                                {row.kind === "asset" ? (
+                                {row.kind === "asset" || row.campus !== "ALL" ? (
                                   <button
                                     className="btn-primary btn-small maintenance-schedule-icon-btn"
                                     disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                                    onClick={() => openScheduleMaintenanceRecordModal(row.asset, row.date)}
+                                    onClick={() =>
+                                      row.kind === "asset"
+                                        ? openScheduleMaintenanceRecordModal(row.asset, row.date)
+                                        : openScheduleGeneralTaskRecordModal(row)
+                                    }
                                     title="Record"
                                     aria-label="Record"
                                   >
@@ -66062,6 +66598,14 @@ function formatTicketRequestSource(value?: string) {
                       </option>
                     ))}
                   </select>
+                  <select
+                    className="input"
+                    value={reportScheduleView}
+                    onChange={(e) => setReportScheduleView(e.target.value as "summary" | "details")}
+                  >
+                    <option value="summary">{lang === "km" ? "សង្ខេប" : "Summary"}</option>
+                    <option value="details">{lang === "km" ? "លម្អិត" : "Details"}</option>
+                  </select>
                 </>
               ) : null}
               {reportType === "inventory_balance" ? (
@@ -67255,13 +67799,21 @@ function formatTicketRequestSource(value?: string) {
                       marginBottom: isPhoneView ? 10 : 12,
                       flexDirection: isPhoneView ? "column" : "row",
                     }}
-                  >
-                    <div>
-                      <div className="tiny" style={{ letterSpacing: "0.14em", textTransform: "uppercase", color: "#8a6f47", fontWeight: 800 }}>
-                        {lang === "km" ? "ប្រតិទិនកាលវិភាគផ្លូវការ" : "Official Calendar Preview"}
-                      </div>
-                      <strong style={{ fontSize: isPhoneView ? 15 : 24, lineHeight: 1.2, color: "#1f2e26", display: "block" }}>{selectedReportDisplayTitle}</strong>
-                    </div>
+	                  >
+	                    <div>
+	                      <div className="tiny" style={{ letterSpacing: "0.14em", textTransform: "uppercase", color: "#8a6f47", fontWeight: 800 }}>
+	                        {lang === "km" ? "ប្រតិទិនកាលវិភាគផ្លូវការ" : "Official Calendar Preview"}
+	                      </div>
+	                      <strong style={{ fontSize: isPhoneView ? 15 : 24, lineHeight: 1.2, color: "#1f2e26", display: "block" }}>
+	                        {lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar"}
+	                      </strong>
+	                      <div style={{ marginTop: 4, fontSize: isPhoneView ? 10 : 13, lineHeight: 1.45, color: "#5f695d", fontWeight: 700 }}>
+	                        <div>{reportScheduleMonthLabel}</div>
+	                        <div>{lang === "km" ? "សាខា" : "Campus"}: {reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)}</div>
+	                        <div>{lang === "km" ? "ក្រុម" : "Group"}: {reportScheduleGroupLabel(reportScheduleGroupFilter)}</div>
+	                        <div>{lang === "km" ? "របៀបបង្ហាញ" : "View"}: {reportScheduleView === "details" ? (lang === "km" ? "លម្អិត" : "Details") : (lang === "km" ? "សង្ខេប" : "Summary")}</div>
+	                      </div>
+	                    </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: isPhoneView ? 6 : 10 }}>
                       {reportScheduleCampusOptions.map((campus) => (
                         <span
@@ -67320,7 +67872,7 @@ function formatTicketRequestSource(value?: string) {
                         {weekday}
                       </div>
                     ))}
-                    {reportScheduleCalendarDays.map((day) => (
+	                    {reportScheduleDisplayDays.map((day) => (
                       <div
                         key={`report-schedule-day-${day.ymd}`}
                         style={{
@@ -67351,13 +67903,16 @@ function formatTicketRequestSource(value?: string) {
                               <div style={{ fontSize: isPhoneView ? 7 : 10, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{reportCampusName(entry.campus)}</div>
                               <div style={{ fontSize: isPhoneView ? 7 : 10, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
                               <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.82, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                {entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}
-                              </div>
-                              {!isPhoneView && entry.timeLabel && entry.scheduleNote ? (
-                                <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.74 }}>{entry.scheduleNote}</div>
-                              ) : null}
-                            </div>
-                          ))}
+	                                {entry.statusLabel}
+	                              </div>
+	                              <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.78, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+	                                {entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}
+	                              </div>
+	                              {!isPhoneView && entry.completedAssetIds.length ? (
+	                                <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.74 }}>{entry.completedAssetIds.join(", ")}</div>
+	                              ) : null}
+	                            </div>
+	                          ))}
                         </div>
                       </div>
                     ))}
@@ -67365,8 +67920,8 @@ function formatTicketRequestSource(value?: string) {
                 </div>
 
                 <div className="report-schedule-list">
-                  {reportScheduleCalendarRows.length ? (
-                    reportScheduleCalendarRows.map((row, index) => (
+	                  {reportScheduleDisplayRows.length ? (
+	                    reportScheduleDisplayRows.map((row, index) => (
                       <article key={`report-schedule-row-${row.key}`} className="report-schedule-card">
                         <div className="report-schedule-card-top">
                           <span className="report-schedule-card-index">{index + 1}</span>
@@ -67378,16 +67933,29 @@ function formatTicketRequestSource(value?: string) {
                             <strong>{row.items.join(", ") || "-"}</strong>
                             <span>{reportCampusName(row.campus)}</span>
                           </div>
-                          <div className="report-schedule-card-meta">
-                            <div className="report-schedule-card-field">
-                              <span>{lang === "km" ? "សម្គាល់" : "Schedule Note"}</span>
-                              <strong>{row.scheduleNote || "-"}</strong>
-                            </div>
-                            <div className="report-schedule-card-field">
-                              <span>{lang === "km" ? "ពេលវេលា / ទីតាំង" : "Time / Locations"}</span>
-                              <strong>{renderScheduleLocationList(row.locations)}</strong>
-                            </div>
-                          </div>
+	                          <div className="report-schedule-card-meta">
+	                            <div className="report-schedule-card-field">
+	                              <span>{lang === "km" ? "សម្គាល់" : "Schedule Note"}</span>
+	                              <strong>{row.scheduleNote || "-"}</strong>
+	                            </div>
+		                            <div className="report-schedule-card-field">
+		                              <span>{lang === "km" ? "ស្ថានភាព" : "Status"}</span>
+		                              <strong>{row.statusLabel || (row.completed ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់" : "Pending"))}</strong>
+		                              {row.completedAssetIds.length ? (
+		                                <span style={{ marginTop: 4, fontSize: 12, color: "#55708f", fontWeight: 700 }}>
+		                                  {row.completedAssetIds.join(", ")}
+		                                </span>
+		                              ) : null}
+		                            </div>
+	                            <div className="report-schedule-card-field">
+	                              <span>{lang === "km" ? "ពេលវេលា" : "Time"}</span>
+	                              <strong>{row.timeLabel || "-"}</strong>
+	                            </div>
+	                            <div className="report-schedule-card-field">
+	                              <span>{lang === "km" ? "ទីតាំង" : "Location"}</span>
+	                              <strong>{renderScheduleLocationList(row.locations)}</strong>
+	                            </div>
+	                          </div>
                         </div>
                       </article>
                     ))
@@ -73071,6 +73639,7 @@ function formatTicketRequestSource(value?: string) {
                 className="modal-backdrop schedule-maintenance-modal-backdrop"
                 onClick={() => {
                   setScheduleMaintenanceRecordModalOpen(false);
+                  setScheduleMaintenanceGeneralContext(null);
                   setMaintenanceRecordDatePickerOpen(false);
                 }}
               >
@@ -73091,22 +73660,33 @@ function formatTicketRequestSource(value?: string) {
                       title={t.close}
                       onClick={() => {
                         setScheduleMaintenanceRecordModalOpen(false);
+                        setScheduleMaintenanceGeneralContext(null);
                         setMaintenanceRecordDatePickerOpen(false);
                       }}
                     >
                       <span aria-hidden={true}>×</span>
                     </button>
                   </div>
-                  {maintenanceRecordSelectedAsset ? (
+                  {maintenanceRecordSelectedAsset || scheduleMaintenanceGeneralContext ? (
                     <>
                       <div className="schedule-maintenance-modal-asset">
                         <div className="schedule-maintenance-modal-asset-main">
-                          <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
-                          <span>{assetItemName(maintenanceRecordSelectedAsset.category, maintenanceRecordSelectedAsset.type, maintenanceRecordSelectedAsset.pcType || "")}</span>
+                          <strong>{maintenanceRecordSelectedAsset ? maintenanceRecordSelectedAsset.assetId : (lang === "km" ? "ការងារទូទៅ" : "General Task")}</strong>
+                          <span>
+                            {maintenanceRecordSelectedAsset
+                              ? assetItemName(maintenanceRecordSelectedAsset.category, maintenanceRecordSelectedAsset.type, maintenanceRecordSelectedAsset.pcType || "")
+                              : scheduleMaintenanceGeneralContext?.title || "-"}
+                          </span>
                         </div>
                         <div className="schedule-maintenance-modal-asset-meta">
-                          <span>{campusLabel(maintenanceRecordSelectedAsset.campus)}</span>
-                          <span>{maintenanceRecordSelectedAsset.location || "-"}</span>
+                          <span>
+                            {campusLabel(
+                              maintenanceRecordSelectedAsset?.campus ||
+                              scheduleMaintenanceGeneralContext?.campus ||
+                              maintenanceRecordCampusFilter
+                            )}
+                          </span>
+                          <span>{maintenanceRecordSelectedAsset?.location || scheduleMaintenanceGeneralContext?.subtitle || "-"}</span>
                         </div>
                       </div>
                       <div className="form-grid schedule-maintenance-modal-grid">
@@ -73242,20 +73822,33 @@ function formatTicketRequestSource(value?: string) {
                             />
                           </label>
                           <div className="field">
-                            <span>{lang === "km" ? "Asset Snapshot" : "Asset Snapshot"}</span>
+                            <span>{maintenanceRecordSelectedAsset ? (lang === "km" ? "Asset Snapshot" : "Asset Snapshot") : (lang === "km" ? "Task Snapshot" : "Task Snapshot")}</span>
                             <div className="panel-note schedule-maintenance-modal-asset-snapshot">
-                              <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
-                              {" | "}
-                              {assetItemName(
-                                maintenanceRecordSelectedAsset.category,
-                                maintenanceRecordSelectedAsset.type,
-                                maintenanceRecordSelectedAsset.pcType || "",
+                              {maintenanceRecordSelectedAsset ? (
+                                <>
+                                  <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
+                                  {" | "}
+                                  {assetItemName(
+                                    maintenanceRecordSelectedAsset.category,
+                                    maintenanceRecordSelectedAsset.type,
+                                    maintenanceRecordSelectedAsset.pcType || "",
+                                  )}
+                                  {" | "}
+                                  {campusLabel(maintenanceRecordSelectedAsset.campus)}
+                                  {" • "}
+                                  {maintenanceRecordSelectedAsset.location || "-"}
+                                  {maintenanceRecordSelectedAsset.serialNumber ? ` • SN: ${maintenanceRecordSelectedAsset.serialNumber}` : ""}
+                                </>
+                              ) : (
+                                <>
+                                  <strong>{scheduleMaintenanceGeneralContext?.title || (lang === "km" ? "ការងារទូទៅ" : "General Task")}</strong>
+                                  {" | "}
+                                  {campusLabel(scheduleMaintenanceGeneralContext?.campus || maintenanceRecordCampusFilter)}
+                                  {" • "}
+                                  {scheduleMaintenanceGeneralContext?.subtitle || "-"}
+                                  {scheduleMaintenanceGeneralContext?.time ? ` • ${scheduleMaintenanceGeneralContext.time}` : ""}
+                                </>
                               )}
-                              {" | "}
-                              {campusLabel(maintenanceRecordSelectedAsset.campus)}
-                              {" • "}
-                              {maintenanceRecordSelectedAsset.location || "-"}
-                              {maintenanceRecordSelectedAsset.serialNumber ? ` • SN: ${maintenanceRecordSelectedAsset.serialNumber}` : ""}
                             </div>
                           </div>
                         </div>

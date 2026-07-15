@@ -18857,6 +18857,18 @@ label.backup-action-btn {
   gap: 6px;
 }
 
+.schedule-single-filter-help {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #6a7f9f;
+}
+
+.schedule-single-top-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .type-code-picker-icon {
   width: 28px;
   height: 28px;
@@ -23495,7 +23507,7 @@ tr.row-maint-maintenance:hover td {
 
 .report-schedule-card-meta {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -24992,14 +25004,15 @@ tr.row-maint-maintenance:hover td {
 }
 
 .maintenance-schedule-table-wrap {
-  overflow-x: hidden !important;
-  overflow-y: hidden !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  max-height: 62vh;
 }
 
 .maintenance-schedule-table {
-  width: 100% !important;
-  min-width: 0 !important;
-  table-layout: fixed;
+  width: max-content !important;
+  min-width: 100% !important;
+  table-layout: auto;
 }
 
 .maintenance-schedule-table th,
@@ -25010,34 +25023,42 @@ tr.row-maint-maintenance:hover td {
   vertical-align: middle;
 }
 
+.maintenance-schedule-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
 .maintenance-schedule-table th:nth-child(1),
 .maintenance-schedule-table td:nth-child(1) {
-  width: 10%;
+  width: 112px;
+  min-width: 112px;
+  white-space: nowrap;
 }
 
 .maintenance-schedule-table th:nth-child(2),
 .maintenance-schedule-table td:nth-child(2) {
-  width: 18%;
+  min-width: 160px;
 }
 
 .maintenance-schedule-table th:nth-child(3),
 .maintenance-schedule-table td:nth-child(3) {
-  width: 22%;
+  min-width: 180px;
 }
 
 .maintenance-schedule-table th:nth-child(4),
 .maintenance-schedule-table td:nth-child(4) {
-  width: 14%;
+  min-width: 140px;
 }
 
 .maintenance-schedule-table th:nth-child(5),
 .maintenance-schedule-table td:nth-child(5) {
-  width: 20%;
+  min-width: 180px;
 }
 
 .maintenance-schedule-table th:last-child,
 .maintenance-schedule-table td:last-child {
-  width: 16%;
+  width: 148px;
   min-width: 132px;
   text-align: center;
 }
@@ -25082,6 +25103,23 @@ tr.row-maint-maintenance:hover td {
   font-size: 12px;
   line-height: 1.4;
   color: #5c7093;
+}
+
+.maintenance-schedule-row-complete td,
+.maintenance-schedule-row-complete .maintenance-schedule-cell-title,
+.maintenance-schedule-row-complete .maintenance-schedule-cell-subtitle,
+.schedule-mobile-card-complete .schedule-mobile-card-head,
+.schedule-mobile-card-complete .schedule-mobile-card-meta {
+  text-decoration: line-through;
+  color: #7a879c;
+}
+
+.maintenance-schedule-row-complete {
+  opacity: 0.72;
+}
+
+.schedule-mobile-card-complete {
+  opacity: 0.78;
 }
 
 @media (max-width: 980px) {
@@ -26203,6 +26241,10 @@ tr.row-maint-maintenance:hover td {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-single-top-row {
     grid-template-columns: 1fr;
   }
 
