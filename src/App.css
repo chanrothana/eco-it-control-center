@@ -25065,39 +25065,43 @@ tr.row-maint-maintenance:hover td {
 
 .maintenance-schedule-table th:last-child,
 .maintenance-schedule-table td:last-child {
-  width: 148px;
-  min-width: 132px;
+  width: 156px;
+  min-width: 156px;
   text-align: center;
 }
 
 .maintenance-schedule-action-stack {
   display: inline-flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 
 .maintenance-schedule-action-row {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 
 .maintenance-schedule-icon-btn {
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .maintenance-schedule-icon-btn svg {
   flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
 }
 
 .maintenance-schedule-cell-title {

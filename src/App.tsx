@@ -3203,6 +3203,39 @@ function canLinkToParentAsset(category: string, type: string): boolean {
   );
 }
 
+function resolveLinkedParentAsset(asset: Partial<Asset>, assetList: Asset[]): Asset | null {
+  const explicitParentAssetId = String(asset.parentAssetId || "").trim();
+  if (explicitParentAssetId) {
+    return assetList.find((entry) => String(entry.assetId || "").trim() === explicitParentAssetId) || null;
+  }
+  const setCode = String(asset.setCode || "").trim();
+  const campus = String(asset.campus || "").trim();
+  if (!setCode || !campus) return null;
+  const location = String(asset.location || "").trim();
+  const currentAssetId = String(asset.assetId || "").trim();
+  const candidates = assetList.filter((entry) => {
+    if (currentAssetId && String(entry.assetId || "").trim() === currentAssetId) return false;
+    if (String(entry.campus || "").trim() !== campus) return false;
+    if (String(entry.setCode || "").trim() !== setCode) return false;
+    if (String(entry.parentAssetId || "").trim()) return false;
+    return true;
+  });
+  if (!candidates.length) return null;
+  return (
+    candidates
+      .slice()
+      .sort((a, b) => {
+        const aDesktop = a.category === "IT" && String(a.type || "").trim().toUpperCase() === DESKTOP_PARENT_TYPE ? 1 : 0;
+        const bDesktop = b.category === "IT" && String(b.type || "").trim().toUpperCase() === DESKTOP_PARENT_TYPE ? 1 : 0;
+        if (aDesktop !== bDesktop) return bDesktop - aDesktop;
+        const aLocationMatch = location && String(a.location || "").trim() === location ? 1 : 0;
+        const bLocationMatch = location && String(b.location || "").trim() === location ? 1 : 0;
+        if (aLocationMatch !== bLocationMatch) return bLocationMatch - aLocationMatch;
+        return String(a.assetId || "").localeCompare(String(b.assetId || ""));
+      })[0] || null
+  );
+}
+
 function isSingleFurnitureType(type: string): boolean {
   return String(type || "").trim().toUpperCase() === "NBD";
 }
@@ -29448,6 +29481,10 @@ export default function App() {
   function startEditAsset(asset: Asset) {
     setEditingAssetId(asset.id);
     const photos = normalizeAssetPhotos(asset);
+    const linkedParentAsset = resolveLinkedParentAsset(asset, assets);
+    const resolvedParentAssetId = String(asset.parentAssetId || linkedParentAsset?.assetId || "").trim();
+    const resolvedSetCode = String(asset.setCode || linkedParentAsset?.setCode || "").trim();
+    const resolvedAssignedTo = String(asset.assignedTo || linkedParentAsset?.assignedTo || "").trim();
     const walkieChargerChild =
       String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
         ? assets
@@ -29550,12 +29587,12 @@ export default function App() {
       pcType: asset.category === "IT" && asset.type === DESKTOP_PARENT_TYPE
         ? asset.pcType || PC_TYPE_OPTIONS[0].value
         : "",
-      setCode: asset.setCode || "",
-      parentAssetId: asset.parentAssetId || "",
-      useExistingSet: canLinkToParentAsset(asset.category, asset.type) && !!asset.parentAssetId,
+      setCode: resolvedSetCode,
+      parentAssetId: resolvedParentAssetId,
+      useExistingSet: canLinkToParentAsset(asset.category, asset.type) && !!resolvedParentAssetId,
       componentRole: asset.componentRole || "",
       componentRequired: Boolean(asset.componentRequired),
-      assignedTo: asset.assignedTo || "",
+      assignedTo: resolvedAssignedTo,
       brand: asset.brand || "",
       model: asset.model || "",
       serialNumber: asset.serialNumber || "",
@@ -29624,15 +29661,41 @@ export default function App() {
     if (!requireAdminAction()) return;
     if (!(editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE)) return;
 
-    const payload = {
+    const inheritedAssignedTo =
+      String(editingAsset.status || "").trim().toLowerCase() === "active"
+        ? String(editingAsset.assignedTo || "").trim()
+        : "";
+    const payload: {
+      campus: string;
+      category: Asset["category"];
+      type: Asset["type"];
+      location: string;
+      setCode: string;
+      parentAssetId: string;
+      assignedTo: string;
+      custodyStatus: Asset["custodyStatus"];
+      brand: string;
+      model: string;
+      serialNumber: string;
+      specs: string;
+      purchaseDate: string;
+      warrantyUntil: string;
+      vendor: string;
+      notes: string;
+      nextMaintenanceDate: string;
+      scheduleNote: string;
+      photo: string;
+      photos: string[];
+      status: string;
+    } = {
       campus: editingAsset.campus,
       category: "IT",
       type: setPackAssetType(type),
       location: editingAsset.location,
       setCode: editingAsset.setCode || "",
       parentAssetId: editingAsset.assetId,
-      assignedTo: "",
-      custodyStatus: "IN_STOCK",
+      assignedTo: inheritedAssignedTo,
+      custodyStatus: inheritedAssignedTo ? "ASSIGNED" : "IN_STOCK",
       brand: "",
       model: "",
       serialNumber: "",
@@ -29662,7 +29725,7 @@ export default function App() {
         if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
         const allLocal = readAssetFallback();
         const seq = calcNextSeq(allLocal, payload.campus, payload.category, payload.type);
-        childAsset = {
+        const localChildAsset: Asset = {
           id: Date.now(),
           campus: payload.campus,
           category: payload.category,
@@ -29675,7 +29738,7 @@ export default function App() {
           setCode: payload.setCode,
           parentAssetId: payload.parentAssetId,
           assignedTo: payload.assignedTo,
-          custodyStatus: "IN_STOCK",
+          custodyStatus: payload.custodyStatus,
           brand: payload.brand,
           model: payload.model,
           serialNumber: payload.serialNumber,
@@ -29709,7 +29772,8 @@ export default function App() {
           status: payload.status,
           created: new Date().toISOString(),
         };
-        const nextLocal = [childAsset, ...allLocal];
+        childAsset = localChildAsset;
+        const nextLocal = [localChildAsset, ...allLocal];
         writeAssetFallback(nextLocal);
         setAssets(nextLocal);
         setStats(buildStatsFromAssets(nextLocal, campusFilter));
@@ -30176,6 +30240,7 @@ export default function App() {
       String(editingAsset.type || "").trim().toUpperCase() === "TAB";
     const needsUser =
       !!editingAsset &&
+      !editingUsesInheritedParentUser &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
       String(assetEditForm.status || "").trim().toLowerCase() === "active" &&
       !isSharedLocation(assetEditForm.location);
@@ -30185,7 +30250,7 @@ export default function App() {
     }
     const editAssignedTo =
       String(assetEditForm.status || "").trim().toLowerCase() === "active"
-        ? assetEditForm.assignedTo.trim()
+        ? (editingUsesInheritedParentUser ? editingInheritedAssignedTo : assetEditForm.assignedTo.trim())
         : "";
     if (editingShouldLinkToParent && !assetEditForm.parentAssetId.trim()) {
       alert(t.selectParentAsset);
@@ -35001,6 +35066,36 @@ export default function App() {
     () => String(assetEditForm.status || "").trim().toLowerCase() === "active",
     [assetEditForm.status]
   );
+  const editingResolvedParentAsset = useMemo(
+    () => {
+      if (!editingAsset || !assetEditForm.useExistingSet) return null;
+      const selectedParentAssetId = String(assetEditForm.parentAssetId || "").trim();
+      if (selectedParentAssetId) {
+        return assets.find((entry) => String(entry.assetId || "").trim() === selectedParentAssetId) || null;
+      }
+      return resolveLinkedParentAsset(
+        {
+          ...editingAsset,
+          campus: assetEditForm.campus || editingAsset.campus,
+          location: assetEditForm.location || editingAsset.location,
+          setCode: assetEditForm.setCode || editingAsset.setCode,
+        },
+        assets
+      );
+    },
+    [assets, editingAsset, assetEditForm.campus, assetEditForm.location, assetEditForm.parentAssetId, assetEditForm.setCode, assetEditForm.useExistingSet]
+  );
+  const editingUsesInheritedParentUser = useMemo(
+    () =>
+      !!editingAsset &&
+      assetEditForm.useExistingSet &&
+      !!String(assetEditForm.parentAssetId || editingResolvedParentAsset?.assetId || "").trim(),
+    [editingAsset, assetEditForm.parentAssetId, assetEditForm.useExistingSet, editingResolvedParentAsset]
+  );
+  const editingInheritedAssignedTo = useMemo(
+    () => (editingStatusActive ? String(editingResolvedParentAsset?.assignedTo || "").trim() : ""),
+    [editingResolvedParentAsset, editingStatusActive]
+  );
   const editingShowUserField = useMemo(
     () =>
       !!editingAsset &&
@@ -35027,10 +35122,11 @@ export default function App() {
   const editingUserRequired = useMemo(
     () =>
       !!editingAsset &&
+      !editingUsesInheritedParentUser &&
       USER_REQUIRED_TYPES.includes(editingAsset.type) &&
       editingStatusActive &&
       !isSharedLocation(assetEditForm.location),
-    [editingAsset, editingStatusActive, assetEditForm.location]
+    [editingAsset, editingStatusActive, assetEditForm.location, editingUsesInheritedParentUser]
   );
   const editingSetPackChildren = useMemo<Partial<Record<SetPackChildType, Asset>>>(() => {
     if (!editingAsset) return {};
@@ -35184,6 +35280,14 @@ export default function App() {
     setAssetEditForm((prev) => (prev.assignedTo ? { ...prev, assignedTo: "" } : prev));
   }, [editingStatusActive]);
   useEffect(() => {
+    if (!editingUsesInheritedParentUser) return;
+    setAssetEditForm((prev) => {
+      const nextAssignedTo = editingInheritedAssignedTo;
+      if (String(prev.assignedTo || "").trim() === nextAssignedTo) return prev;
+      return { ...prev, assignedTo: nextAssignedTo };
+    });
+  }, [editingInheritedAssignedTo, editingUsesInheritedParentUser]);
+  useEffect(() => {
     setAssetFormDateDrafts({
       purchaseDate: formatMateDateInput(assetForm.purchaseDate),
       warrantyUntil: formatMateDateInput(assetForm.warrantyUntil),
@@ -35196,9 +35300,9 @@ export default function App() {
     });
   }, [assetEditForm.purchaseDate, assetEditForm.warrantyUntil]);
   useEffect(() => {
-    if (editingShowUserField) return;
+    if (editingShowUserField || editingUsesInheritedParentUser) return;
     setAssetEditForm((prev) => (prev.assignedTo ? { ...prev, assignedTo: "" } : prev));
-  }, [editingShowUserField]);
+  }, [editingShowUserField, editingUsesInheritedParentUser]);
   const maintenanceDetailAsset = useMemo(
     () => assets.find((a) => a.id === maintenanceDetailAssetId) || null,
     [assets, maintenanceDetailAssetId]
@@ -51741,7 +51845,17 @@ function formatTicketRequestSource(value?: string) {
                             placeholder="SET-C2.2-001"
                           />
                         </label>
-                        {editingShowUserField && editingStatusActive ? (
+                        {editingUsesInheritedParentUser ? (
+                          <div className="field">
+                            <span>{t.user}</span>
+                            <div className="detail-value">{editingInheritedAssignedTo || "-"}</div>
+                            <p className="tiny">
+                              {editingResolvedParentAsset?.assetId
+                                ? `Inherited from parent asset ${editingResolvedParentAsset.assetId}.`
+                                : "Inherited from linked parent asset."}
+                            </p>
+                          </div>
+                        ) : editingShowUserField && editingStatusActive ? (
                           <label className="field">
                             <span>{t.user}</span>
                             <UserPicker
@@ -51778,7 +51892,17 @@ function formatTicketRequestSource(value?: string) {
                             ))}
                         </select>
                       </label>
-                      {editingShowUserField && editingStatusActive && !(editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE) ? (
+                      {editingUsesInheritedParentUser && !(editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE) ? (
+                        <div className="field">
+                          <span>{t.user}</span>
+                          <div className="detail-value">{editingInheritedAssignedTo || "-"}</div>
+                          <p className="tiny">
+                            {editingResolvedParentAsset?.assetId
+                              ? `Inherited from parent asset ${editingResolvedParentAsset.assetId}.`
+                              : "Inherited from linked parent asset."}
+                          </p>
+                        </div>
+                      ) : editingShowUserField && editingStatusActive && !(editingAsset.category === "IT" && editingAsset.type === DESKTOP_PARENT_TYPE) ? (
                         <label className="field">
                           <span>{t.user}</span>
                           <UserPicker
