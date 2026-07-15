@@ -627,6 +627,7 @@ type ToolReviewReport = {
   supervisor: string;
   note?: string;
   photo?: string;
+  previousPhoto?: string;
   created: string;
   updated?: string;
 };
@@ -680,6 +681,7 @@ type InventoryTxn = {
   receivedBy?: string;
   borrowStatus?: "BORROW_OPEN" | "PARTIAL_RETURN" | "CLOSED" | "CONSUMED";
   photo?: string;
+  previousPhoto?: string;
   approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
   approvalRequestedBy?: string;
   approvalRequestedUser?: string;
@@ -5786,6 +5788,7 @@ function normalizeToolReviewReportsClient(input: unknown): ToolReviewReport[] {
     supervisor: String(row.supervisor || "").trim(),
     note: String(row.note || "").trim(),
     photo: String(row.photo || "").trim(),
+    previousPhoto: String((row as { previousPhoto?: unknown }).previousPhoto || "").trim(),
     created: String(row.created || new Date().toISOString()),
     updated: String(row.updated || "").trim(),
   })).filter((row) => row.month && row.itemId && row.itemCode && row.itemName && row.campus);
@@ -26275,6 +26278,7 @@ export default function App() {
         `${expectedQty} -> ${countedQty} ${nextEntry.unit || "pcs"} | ${nextEntry.condition}`;
       const fullNote = cleanNote ? `${baseNote} | ${cleanNote}` : baseNote;
       const cleanedPhoto = String(nextEntry.photo || "").trim();
+      const previousPhoto = String(nextEntry.previousPhoto || "").trim();
 
       const draftTxn: InventoryTxn = {
         id: Date.now(),
@@ -26291,6 +26295,7 @@ export default function App() {
         fromCampus: selectedItem.campus,
         toCampus: selectedItem.campus,
         photo: cleanedPhoto,
+        previousPhoto,
         approvalStatus: "APPROVED",
         approvalRequestedBy: "",
         approvalRequestedAt: "",
@@ -26310,6 +26315,7 @@ export default function App() {
             by: reviewedBy,
             note: fullNote,
             photo: cleanedPhoto,
+            previousPhoto,
             approvalStatus: "APPROVED",
             approvalRequestedBy: "",
             approvalRequestedAt: "",
@@ -26397,6 +26403,7 @@ export default function App() {
       supervisor,
       note: String(toolReviewForm.note || "").trim(),
       photo: String(toolReviewForm.photo || "").trim(),
+      previousPhoto: toolReviewPreviousPhoto,
       created: toolReviewExistingEntry?.created || timestamp,
       updated: timestamp,
     };
