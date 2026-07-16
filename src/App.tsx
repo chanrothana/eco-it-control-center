@@ -2989,6 +2989,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   ],
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
+    { itemEn: "Generator", itemKm: "ម៉ាស៊ីនភ្លើង", code: "GNR" },
     { itemEn: "Fan", itemKm: "កង្ហារ", code: "FAN" },
     { itemEn: "Wall Fan", itemKm: "កង្ហារព្យួរជញ្ជាំង", code: "WFN" },
     { itemEn: "Ceiling Fan", itemKm: "កង្ហារពិដាន", code: "CFN" },
@@ -32228,9 +32229,15 @@ export default function App() {
       }
 
       const normalizedServerSavedAsset = serverSavedAsset ? normalizeAssetForUi(serverSavedAsset) : null;
-      const mergedLocal = duplicateSuppressed && normalizedServerSavedAsset
-        ? readAssetFallback().map((asset) => (asset.id === normalizedServerSavedAsset.id ? normalizedServerSavedAsset : asset))
-        : nextLocal;
+      const mergedLocal = (() => {
+        if (!normalizedServerSavedAsset) return nextLocal;
+        const baseList = duplicateSuppressed ? readAssetFallback() : nextLocal;
+        const existingIndex = baseList.findIndex((asset) => asset.id === normalizedServerSavedAsset.id);
+        if (existingIndex === -1) {
+          return [normalizedServerSavedAsset, ...baseList];
+        }
+        return baseList.map((asset) => (asset.id === normalizedServerSavedAsset.id ? normalizedServerSavedAsset : asset));
+      })();
       const savedAsset = mergedLocal.find((a) => a.id === assetId) || normalizedServerSavedAsset || maintenanceRecordSelectedAsset;
       writeAssetFallback(mergedLocal);
       setAssets(mergedLocal);
@@ -37427,6 +37434,7 @@ export default function App() {
       key: string;
       date: string;
       campus: string;
+      sourceType: "asset" | "service";
       scheduleGroup: string;
       scheduleNote: string;
       timeLabel: string;
@@ -37447,6 +37455,7 @@ export default function App() {
         key: string;
         date: string;
         campus: string;
+        sourceType: "asset" | "service";
         scheduleGroup: string;
         scheduleNote: string;
         timeLabel: string;
@@ -37475,6 +37484,7 @@ export default function App() {
             key,
             date: dateKey,
             campus,
+            sourceType: "asset",
             scheduleGroup: group,
             scheduleNote,
             timeLabel,
@@ -37527,6 +37537,7 @@ export default function App() {
         key,
         date: row.date,
         campus: row.campus,
+        sourceType: "service",
         scheduleGroup: row.scheduleGroup,
         scheduleNote: row.scheduleNote,
         timeLabel: row.timeLabel,
@@ -37585,6 +37596,7 @@ export default function App() {
       key: string;
       date: string;
       campus: string;
+      sourceType: "asset" | "service";
       scheduleGroup: string;
       scheduleNote: string;
       timeLabel: string;
@@ -37603,6 +37615,7 @@ export default function App() {
       key: string;
       date: string;
       campus: string;
+      sourceType: "asset" | "service";
       scheduleGroup: string;
       scheduleNote: string;
       timeLabel: string;
@@ -37635,6 +37648,7 @@ export default function App() {
           key,
           date: dateKey,
           campus: String(asset.campus || "").trim(),
+          sourceType: "asset",
           scheduleGroup: group,
           scheduleNote,
           timeLabel,
@@ -37670,6 +37684,7 @@ export default function App() {
         key: `${row.id}||${isCompleted ? "done" : "pending"}`,
         date: row.date,
         campus: row.campus,
+        sourceType: "service",
         scheduleGroup: row.scheduleGroup,
         scheduleNote: row.scheduleNote,
         timeLabel: row.timeLabel,
@@ -37926,11 +37941,13 @@ export default function App() {
         if (scheduleGroupFilter !== "ALL") return false;
         return true;
       });
-    return [...assetRows, ...serviceRows].sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      if (a.kind !== b.kind) return a.kind === "service" ? -1 : 1;
-      return a.title.localeCompare(b.title);
-    });
+    return [...assetRows, ...serviceRows]
+      .filter((row) => !row.completed)
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        if (a.kind !== b.kind) return a.kind === "service" ? -1 : 1;
+        return a.title.localeCompare(b.title);
+      });
   }, [
     assetItemName,
     assetScheduleGroupLabel,
@@ -42636,7 +42653,11 @@ export default function App() {
     setMobileMenuOpen(false);
   }, [pendingQrAssetId, pendingQrPrinterCode, authUser]);
 
-  async function printCurrentReport() {
+  async function printCurrentReport(fromUserGesture = false) {
+    if (!fromUserGesture) {
+      console.warn("[REPORT PRINT] Blocked print preview without direct user action.");
+      return;
+    }
     const generatedAt = formatDate(new Date().toISOString());
     let title = "";
     let columns: string[] = [];
@@ -44187,6 +44208,7 @@ export default function App() {
               "No.",
               lang === "km" ? "កាលបរិច្ឆេទ" : "Date",
               lang === "km" ? "សាខា" : "Campus",
+              lang === "km" ? "ប្រភព" : "Source",
               lang === "km" ? "ការងារ / ធាតុ" : "Task / Item",
               lang === "km" ? "ក្រុម" : "Group",
               lang === "km" ? "សម្គាល់" : "Schedule Note",
@@ -44198,6 +44220,9 @@ export default function App() {
               String(index + 1),
               formatDate(row.date),
               reportCampusName(row.campus),
+              row.sourceType === "service"
+                ? (lang === "km" ? "សេវាកម្ម" : "Service")
+                : (lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset"),
               row.items.join(", ") || "-",
               reportScheduleGroupLabel(row.scheduleGroup),
               row.scheduleNote || "-",
@@ -44213,6 +44238,11 @@ export default function App() {
                       <td>${index + 1}</td>
                       <td>${escapeHtml(formatDate(row.date))}</td>
                       <td>${escapeHtml(reportCampusName(row.campus))}</td>
+                      <td>${escapeHtml(
+                        row.sourceType === "service"
+                          ? (lang === "km" ? "សេវាកម្ម" : "Service")
+                          : (lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset")
+                      )}</td>
                       <td>${escapeHtml(row.items.join(", ") || "-")}</td>
                       <td>${escapeHtml(reportScheduleGroupLabel(row.scheduleGroup))}</td>
                       <td>${escapeHtml(row.scheduleNote || "-")}</td>
@@ -44228,7 +44258,7 @@ export default function App() {
                     </tr>`
                   )
                   .join("")
-              : `<tr><td colspan="9">${escapeHtml(lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month.")}</td></tr>`;
+              : `<tr><td colspan="10">${escapeHtml(lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month.")}</td></tr>`;
             return `<div class="schedule-calendar-print">
               <div class="schedule-calendar-grid-wrap">
                 <div class="schedule-calendar-grid">${weekdayHeaders}${dayCells}</div>
@@ -67002,9 +67032,10 @@ function formatTicketRequestSource(value?: string) {
                 {reportType === "inventory_balance" && !isPhoneView ? (
                   <button
                     className="btn-primary report-print-btn report-title-print-btn"
+                    type="button"
                     onClick={() => {
                       setReportMobileFiltersOpen(false);
-                      printCurrentReport();
+                      printCurrentReport(true);
                     }}
                   >
                     <Printer size={16} aria-hidden={true} />
@@ -67244,7 +67275,7 @@ function formatTicketRequestSource(value?: string) {
                         className="btn-primary report-builder-inline-print-btn report-control-icon-btn report-control-icon-btn-print"
                         onClick={() => {
                           setReportMobileFiltersOpen(false);
-                          printCurrentReport();
+                          printCurrentReport(true);
                         }}
                         aria-label={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
                         title={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
@@ -68901,18 +68932,19 @@ function formatTicketRequestSource(value?: string) {
                                 boxShadow: "inset 0 0 0 1px rgba(72, 63, 45, 0.08)",
                                 color: "#223128",
                                 overflow: "hidden",
+                                opacity: entry.completed ? 0.68 : 1,
                               }}
                             >
-                              <div style={{ fontSize: isPhoneView ? 7 : 10, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{reportCampusName(entry.campus)}</div>
-                              <div style={{ fontSize: isPhoneView ? 7 : 10, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
+                              <div style={{ fontSize: isPhoneView ? 7 : 10, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>{reportCampusName(entry.campus)}</div>
+                              <div style={{ fontSize: isPhoneView ? 7 : 10, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>{entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
                               <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.82, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
 	                                {entry.statusLabel}
 	                              </div>
-	                              <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.78, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+	                              <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.78, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>
 	                                {entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}
 	                              </div>
 	                              {!isPhoneView && entry.completedAssetIds.length ? (
-	                                <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.74 }}>{entry.completedAssetIds.join(", ")}</div>
+	                                <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.74, textDecoration: entry.completed ? "line-through" : "none" }}>{entry.completedAssetIds.join(", ")}</div>
 	                              ) : null}
 	                            </div>
 	                          ))}
@@ -68925,7 +68957,15 @@ function formatTicketRequestSource(value?: string) {
                 <div className="report-schedule-list">
 	                  {reportScheduleDisplayRows.length ? (
 	                    reportScheduleDisplayRows.map((row, index) => (
-                      <article key={`report-schedule-row-${row.key}`} className="report-schedule-card">
+                      <article
+                        key={`report-schedule-row-${row.key}`}
+                        className="report-schedule-card"
+                        style={{
+                          opacity: row.completed ? 0.72 : 1,
+                          borderColor: row.completed ? "rgba(126, 126, 126, 0.26)" : undefined,
+                          background: row.completed ? "linear-gradient(180deg, rgba(245,245,245,0.92) 0%, rgba(236,236,236,0.96) 100%)" : undefined,
+                        }}
+                      >
                         <div className="report-schedule-card-top">
                           <span className="report-schedule-card-index">{index + 1}</span>
                           <div className="report-schedule-card-date">{formatDate(row.date)}</div>
@@ -68933,13 +68973,17 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                         <div className="report-schedule-card-body">
                           <div className="report-schedule-card-main">
-                            <strong>{row.items.join(", ") || "-"}</strong>
-                            <span>{reportCampusName(row.campus)}</span>
+                            <strong style={{ textDecoration: row.completed ? "line-through" : "none" }}>{row.items.join(", ") || "-"}</strong>
+                            <span style={{ textDecoration: row.completed ? "line-through" : "none" }}>{reportCampusName(row.campus)}</span>
                           </div>
 	                          <div className="report-schedule-card-meta">
 	                            <div className="report-schedule-card-field">
+	                              <span>{lang === "km" ? "ប្រភព" : "Source"}</span>
+	                              <strong>{row.sourceType === "service" ? (lang === "km" ? "សេវាកម្ម" : "Service") : (lang === "km" ? "ទ្រព្យសម្បត្តិ" : "Asset")}</strong>
+	                            </div>
+	                            <div className="report-schedule-card-field">
 	                              <span>{lang === "km" ? "សម្គាល់" : "Schedule Note"}</span>
-	                              <strong>{row.scheduleNote || "-"}</strong>
+	                              <strong style={{ textDecoration: row.completed ? "line-through" : "none" }}>{row.scheduleNote || "-"}</strong>
 	                            </div>
 		                            <div className="report-schedule-card-field">
 		                              <span>{lang === "km" ? "ស្ថានភាព" : "Status"}</span>
@@ -68952,11 +68996,11 @@ function formatTicketRequestSource(value?: string) {
 		                            </div>
 	                            <div className="report-schedule-card-field">
 	                              <span>{lang === "km" ? "ពេលវេលា" : "Time"}</span>
-	                              <strong>{row.timeLabel || "-"}</strong>
+	                              <strong style={{ textDecoration: row.completed ? "line-through" : "none" }}>{row.timeLabel || "-"}</strong>
 	                            </div>
 	                            <div className="report-schedule-card-field">
 	                              <span>{lang === "km" ? "ទីតាំង" : "Location"}</span>
-	                              <strong>{renderScheduleLocationList(row.locations)}</strong>
+	                              <strong style={{ textDecoration: row.completed ? "line-through" : "none" }}>{renderScheduleLocationList(row.locations)}</strong>
 	                            </div>
 	                          </div>
                         </div>
