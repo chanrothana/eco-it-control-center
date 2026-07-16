@@ -2000,6 +2000,57 @@ function normalizeUtilityMeters(input) {
     .filter((row) => row.meterCode && row.meterName);
 }
 
+function deriveSchoolKeyHolder(qtyAvailable, qtyTotal) {
+  if (qtyTotal <= 0 || qtyAvailable >= qtyTotal) return "KEYBOX";
+  if (qtyAvailable <= 0) return "SECURITY";
+  return "PARTIAL";
+}
+
+function normalizeSchoolKeys(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => {
+      const qtyTotal = Math.max(0, Number(row.qtyTotal) || 0);
+      const qtyAvailable = Math.min(qtyTotal, Math.max(0, Number(row.qtyAvailable) || 0));
+      const holder = deriveSchoolKeyHolder(qtyAvailable, qtyTotal);
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        keyCode: toUpper(row.keyCode),
+        campus: normalizeCampusInput(row.campus) || CAMPUS_LIST[0],
+        keyName: toText(row.keyName),
+        qtyTotal,
+        qtyAvailable,
+        holder,
+        holderName: toText(row.holderName) || (holder === "KEYBOX" ? "Keybox in Office" : "Assigned to Security"),
+        responsibleBy: toText(row.responsibleBy),
+        note: toText(row.note),
+        created: toText(row.created) || new Date().toISOString(),
+        updated: toText(row.updated),
+      };
+    })
+    .filter((row) => row.keyCode && row.keyName && row.qtyTotal > 0);
+}
+
+function normalizeSchoolKeyLogs(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      keyId: Number(row.keyId) || 0,
+      keyCode: toUpper(row.keyCode),
+      campus: normalizeCampusInput(row.campus) || CAMPUS_LIST[0],
+      keyName: toText(row.keyName),
+      action: toUpper(row.action) === "RETURN_KEYBOX" ? "RETURN_KEYBOX" : "ASSIGN_SECURITY",
+      qty: Math.max(0, Number(row.qty) || 0),
+      by: toText(row.by),
+      note: toText(row.note),
+      created: toText(row.created) || new Date().toISOString(),
+    }))
+    .filter((row) => row.keyId && row.keyCode && row.keyName && row.qty > 0);
+}
+
 function normalizeUtilityReadings(input) {
   if (!Array.isArray(input)) return [];
   return input
@@ -3022,7 +3073,9 @@ async function sendTelegramMessage(text, options = {}) {
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
   telegramLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
+  const targets = configuredTargets.length
+    ? Array.from(new Set(configuredTargets))
+    : Array.from(new Set(discoveredTargets));
   if (!targets.length) return false;
   const results = [];
   for (const chatId of targets) {
@@ -3030,7 +3083,7 @@ async function sendTelegramMessage(text, options = {}) {
     results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl));
   }
   let successCount = results.filter((row) => row.ok).length;
-  if (!successCount && TELEGRAM_DISCOVER_CHAT_IDS) {
+  if (!successCount && TELEGRAM_DISCOVER_CHAT_IDS && !configuredTargets.length) {
     const retryTargets = Array.from(
       new Set(
         [
@@ -3096,7 +3149,9 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
   telegramLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
+  const targets = configuredTargets.length
+    ? Array.from(new Set(configuredTargets))
+    : Array.from(new Set(discoveredTargets));
   if (!targets.length) return false;
   const results = [];
   for (const chatId of targets) {
@@ -3160,7 +3215,9 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
       : [];
   telegramMaintenanceLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
+  const targets = configuredTargets.length
+    ? Array.from(new Set(configuredTargets))
+    : Array.from(new Set(discoveredTargets));
   if (!targets.length) return false;
   const results = [];
   const primaryToken = TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
@@ -3231,7 +3288,9 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
       : [];
   telegramMaintenanceLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  const targets = Array.from(new Set([...configuredTargets, ...discoveredTargets]));
+  const targets = configuredTargets.length
+    ? Array.from(new Set(configuredTargets))
+    : Array.from(new Set(discoveredTargets));
   if (!targets.length) return false;
   const results = [];
   const primaryToken = TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
@@ -7914,6 +7973,8 @@ const server = http.createServer(async (req, res) => {
           poolComplaints: normalizePoolComplaints(settings.poolComplaints),
           utilityMeters: normalizeUtilityMeters(settings.utilityMeters),
           utilityReadings: normalizeUtilityReadings(settings.utilityReadings),
+          schoolKeys: normalizeSchoolKeys(settings.schoolKeys),
+          schoolKeyLogs: normalizeSchoolKeyLogs(settings.schoolKeyLogs),
           furnitureModels: normalizeFurnitureModels(settings.furnitureModels),
           vaultAccounts: normalizeVaultAccounts(settings.vaultAccounts),
           vaultCredentials: normalizeVaultCredentials(settings.vaultCredentials),
@@ -8082,6 +8143,14 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "utilityReadings")
           ? normalizeUtilityReadings(incoming.utilityReadings)
           : normalizeUtilityReadings(current.utilityReadings);
+      const nextSchoolKeys =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "schoolKeys")
+          ? normalizeSchoolKeys(incoming.schoolKeys)
+          : normalizeSchoolKeys(current.schoolKeys);
+      const nextSchoolKeyLogs =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "schoolKeyLogs")
+          ? normalizeSchoolKeyLogs(incoming.schoolKeyLogs)
+          : normalizeSchoolKeyLogs(current.schoolKeyLogs);
       const nextFurnitureModels =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "furnitureModels")
           ? normalizeFurnitureModels(incoming.furnitureModels)
@@ -8131,6 +8200,8 @@ const server = http.createServer(async (req, res) => {
         poolComplaints: nextPoolComplaints,
         utilityMeters: nextUtilityMeters,
         utilityReadings: nextUtilityReadings,
+        schoolKeys: nextSchoolKeys,
+        schoolKeyLogs: nextSchoolKeyLogs,
         furnitureModels: nextFurnitureModels,
         vaultAccounts: nextVaultAccounts,
         vaultCredentials: nextVaultCredentials,

@@ -402,6 +402,7 @@ type ReportType =
   | "schedule_calendar"
   | "overdue"
   | "transfer"
+  | "school_key_control"
   | "staff_borrowing"
   | "maintenance_completion"
   | "verification_summary"
@@ -865,6 +866,34 @@ type RentalPrinterCounterReset = {
   note?: string;
   created: string;
 };
+type SchoolKeyHolder = "KEYBOX" | "SECURITY" | "PARTIAL";
+type SchoolKeyAction = "ASSIGN_SECURITY" | "RETURN_KEYBOX";
+type SchoolKey = {
+  id: number;
+  keyCode: string;
+  campus: string;
+  keyName: string;
+  qtyTotal: number;
+  qtyAvailable: number;
+  holder: SchoolKeyHolder;
+  holderName?: string;
+  responsibleBy: string;
+  note?: string;
+  created: string;
+  updated?: string;
+};
+type SchoolKeyLog = {
+  id: number;
+  keyId: number;
+  keyCode: string;
+  campus: string;
+  keyName: string;
+  action: SchoolKeyAction;
+  qty: number;
+  by: string;
+  note?: string;
+  created: string;
+};
 
 type DashboardStats = {
   totalAssets: number;
@@ -1076,6 +1105,8 @@ type ServerSettings = {
   rentalPrinters?: RentalPrinter[];
   rentalPrinterCounters?: RentalPrinterCounter[];
   rentalPrinterCounterResets?: RentalPrinterCounterReset[];
+  schoolKeys?: SchoolKey[];
+  schoolKeyLogs?: SchoolKeyLog[];
   itemTemplates?: ItemTemplate[];
   furnitureModels?: FurnitureModelMaster[];
   vaultAccounts?: VaultAccount[];
@@ -1663,13 +1694,15 @@ const AUTH_ACCOUNTS_FALLBACK_KEY = "it_auth_accounts_fallback_v1";
 const AUDIT_FALLBACK_KEY = "it_audit_fallback_v1";
 const INVENTORY_ITEM_FALLBACK_KEY = "it_inventory_items_v1";
 const INVENTORY_TXN_FALLBACK_KEY = "it_inventory_txns_v1";
+const SCHOOL_KEY_FALLBACK_KEY = "it_school_keys_v1";
+const SCHOOL_KEY_LOG_FALLBACK_KEY = "it_school_key_logs_v1";
 const DUPLICATE_PHOTO_UPLOAD_ERROR = "duplicate-photo-upload";
 const PHOTO_USAGE_FIELD_KEYS = new Set(["photo", "photos", "beforePhotos", "afterPhotos"]);
 const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
   asset: ["asset_full_record", "asset_master", "set_code", "asset_by_location", "furniture_control", "staff_borrowing", "qr_labels"],
   maintenance: ["schedule_calendar", "maintenance_completion", "overdue"],
   inventory: ["inventory_balance"],
-  transfer: ["transfer"],
+  transfer: ["transfer", "school_key_control"],
   verification: ["verification_summary"],
   vault: ["it_vault"],
 };
@@ -1683,6 +1716,7 @@ const REPORT_TYPE_SECTION_MAP: Record<ReportType, ReportSection> = {
   schedule_calendar: "maintenance",
   overdue: "maintenance",
   transfer: "transfer",
+  school_key_control: "transfer",
   staff_borrowing: "asset",
   maintenance_completion: "maintenance",
   verification_summary: "verification",
@@ -2136,6 +2170,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "reports.schedule_calendar", labelEn: "Maintenance Schedule Calendar", labelKm: "ប្រតិទិនកាលវិភាគថែទាំ" },
       { key: "reports.overdue", labelEn: "Overdue Maintenance", labelKm: "ថែទាំលើសកាលកំណត់" },
       { key: "reports.transfer", labelEn: "Asset Transfer Log", labelKm: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
+      { key: "reports.school_key_control", labelEn: "School Key Control Report", labelKm: "របាយការណ៍សោសាលា" },
       { key: "reports.staff_borrowing", labelEn: "Staff Asset Assignment List", labelKm: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
       { key: "reports.maintenance_completion", labelEn: "Maintenance Completion", labelKm: "លទ្ធផលបញ្ចប់ការថែទាំ" },
       { key: "reports.verification_summary", labelEn: "Asset Check Summary", labelKm: "សង្ខេបលទ្ធផលពិនិត្យទ្រព្យ" },
@@ -2167,6 +2202,7 @@ const MENU_ACCESS_TREE: Array<{
       { key: "setup.backup", labelEn: "Backup & Audit", labelKm: "បម្រុងទុក និង Audit" },
       { key: "setup.items", labelEn: "Item Name Setup", labelKm: "កំណត់ឈ្មោះទំនិញ" },
       { key: "setup.providerTypes", labelEn: "Provider Type Setup", labelKm: "កំណត់ប្រភេទក្រុមហ៊ុន" },
+      { key: "setup.schoolKeys", labelEn: "School Key Control", labelKm: "គ្រប់គ្រងសោសាលា" },
       { key: "setup.furnitureModels", labelEn: "Furniture Models", labelKm: "ម៉ូឌែលគ្រឿងសង្ហារឹម" },
       { key: "setup.locations", labelEn: "Location Setup by Campus", labelKm: "កំណត់ទីតាំងតាមសាខា" },
       { key: "setup.calendar", labelEn: "Calendar Event Setup", labelKm: "កំណត់ព្រឹត្តិការណ៍ប្រតិទិន" },
@@ -4789,6 +4825,61 @@ function normalizeUtilityMeters(input: unknown): UtilityMeter[] {
     .filter((row) => row.meterCode && row.meterName);
 }
 
+function deriveSchoolKeyHolder(qtyAvailable: number, qtyTotal: number): SchoolKeyHolder {
+  if (qtyTotal <= 0 || qtyAvailable >= qtyTotal) return "KEYBOX";
+  if (qtyAvailable <= 0) return "SECURITY";
+  return "PARTIAL";
+}
+
+function schoolKeyHolderLabel(holder: SchoolKeyHolder, holderName?: string) {
+  if (holder === "KEYBOX") return holderName || "Keybox in Office";
+  if (holder === "SECURITY") return holderName || "Assigned to Security";
+  return holderName ? `Partly with ${holderName}` : "Partly with Security";
+}
+
+function normalizeSchoolKeys(input: unknown): SchoolKey[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): SchoolKey => {
+      const qtyTotal = Math.max(0, Number(row.qtyTotal) || 0);
+      const qtyAvailable = Math.min(qtyTotal, Math.max(0, Number(row.qtyAvailable) || 0));
+      const holder = deriveSchoolKeyHolder(qtyAvailable, qtyTotal);
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+        keyCode: String(row.keyCode || "").trim().toUpperCase(),
+        campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
+        keyName: String(row.keyName || "").trim(),
+        qtyTotal,
+        qtyAvailable,
+        holder,
+        holderName: String(row.holderName || "").trim() || (holder === "KEYBOX" ? "Keybox in Office" : "Assigned to Security"),
+        responsibleBy: String(row.responsibleBy || "").trim(),
+        note: String(row.note || "").trim(),
+        created: String(row.created || "").trim() || new Date().toISOString(),
+        updated: String(row.updated || "").trim(),
+      };
+    })
+    .filter((row) => row.keyCode && row.keyName && row.qtyTotal > 0);
+}
+
+function normalizeSchoolKeyLogs(input: unknown): SchoolKeyLog[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row): SchoolKeyLog => ({
+      id: Number(row.id) || Date.now() + Math.floor(Math.random() * 1000),
+      keyId: Number(row.keyId) || 0,
+      keyCode: String(row.keyCode || "").trim().toUpperCase(),
+      campus: normalizeInventoryApprovalCampusValue(row.campus) || CAMPUS_LIST[0],
+      keyName: String(row.keyName || "").trim(),
+      action: String(row.action || "").trim().toUpperCase() === "RETURN_KEYBOX" ? "RETURN_KEYBOX" : "ASSIGN_SECURITY",
+      qty: Math.max(0, Number(row.qty) || 0),
+      by: String(row.by || "").trim(),
+      note: String(row.note || "").trim(),
+      created: String(row.created || "").trim() || new Date().toISOString(),
+    }))
+    .filter((row) => row.keyId && row.keyCode && row.keyName && row.qty > 0);
+}
+
 function normalizeUtilityReadings(input: unknown): UtilityReading[] {
   return normalizeArray<Record<string, unknown>>(input)
     .filter((row) => row && typeof row === "object")
@@ -5028,6 +5119,34 @@ function readUtilityMeterFallback(): UtilityMeter[] {
 
 function writeUtilityMeterFallback(rows: UtilityMeter[]) {
   trySetLocalStorage(UTILITY_METER_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readSchoolKeyFallback(): SchoolKey[] {
+  try {
+    const raw = localStorage.getItem(SCHOOL_KEY_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeSchoolKeys(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeSchoolKeyFallback(rows: SchoolKey[]) {
+  trySetLocalStorage(SCHOOL_KEY_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readSchoolKeyLogFallback(): SchoolKeyLog[] {
+  try {
+    const raw = localStorage.getItem(SCHOOL_KEY_LOG_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeSchoolKeyLogs(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeSchoolKeyLogFallback(rows: SchoolKeyLog[]) {
+  trySetLocalStorage(SCHOOL_KEY_LOG_FALLBACK_KEY, JSON.stringify(rows));
 }
 
 function readUtilityReadingFallback(): UtilityReading[] {
@@ -9993,7 +10112,7 @@ export default function App() {
     }>;
   }>(null);
   const [scheduleView, setScheduleView] = useState<"bulk" | "single" | "calendar">("calendar");
-  const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "providerTypes" | "furnitureModels" | "locations" | "calendar">("campus");
+  const [setupView, setSetupView] = useState<"campus" | "users" | "permissions" | "backup" | "items" | "providerTypes" | "schoolKeys" | "furnitureModels" | "locations" | "calendar">("campus");
   const [inventoryView, setInventoryView] = useState<"dashboard" | "items" | "list" | "stock" | "balance" | "daily" | "review">("dashboard");
   const [inventoryDashboardGroup, setInventoryDashboardGroup] = useState<InventoryBusinessGroup>("SUPPLY");
   const [utilitiesView, setUtilitiesView] = useState<
@@ -10897,6 +11016,20 @@ export default function App() {
                   },
                 ]
               : []),
+            ...(canAccessMenu("setup.schoolKeys", "setup")
+              ? [
+                  {
+                    key: "setup.schoolKeys",
+                    label: lang === "km" ? "សោសាលា" : "School Keys",
+                    active: setupView === "schoolKeys",
+                    onSelect: () =>
+                      startTabTransition(() => {
+                        setSetupView("schoolKeys");
+                        setTab("setup");
+                      }),
+                  },
+                ]
+              : []),
             ...(canAccessMenu("setup.furnitureModels", "setup")
               ? [
                   {
@@ -11171,6 +11304,10 @@ export default function App() {
   });
   const [reportScheduleCampusFilter, setReportScheduleCampusFilter] = useState("ALL");
   const [reportScheduleGroupFilter, setReportScheduleGroupFilter] = useState("ALL");
+  const [reportSchoolKeyCampusFilter, setReportSchoolKeyCampusFilter] = useState("ALL");
+  const [reportSchoolKeyStatusFilter, setReportSchoolKeyStatusFilter] = useState<"ALL" | SchoolKeyHolder>("ALL");
+  const [reportSchoolKeyDateFrom, setReportSchoolKeyDateFrom] = useState(() => `${toYmd(new Date()).slice(0, 7)}-01`);
+  const [reportSchoolKeyDateTo, setReportSchoolKeyDateTo] = useState(() => toYmd(new Date()));
   const [reportMaintenanceCampusFilter, setReportMaintenanceCampusFilter] = useState("ALL");
   const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
   const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
@@ -11331,6 +11468,8 @@ export default function App() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [inventoryTxns, setInventoryTxns] = useState<InventoryTxn[]>([]);
   const [toolReviewReports, setToolReviewReports] = useState<ToolReviewReport[]>([]);
+  const [schoolKeys, setSchoolKeys] = useState<SchoolKey[]>(() => readSchoolKeyFallback());
+  const [schoolKeyLogs, setSchoolKeyLogs] = useState<SchoolKeyLog[]>(() => readSchoolKeyLogFallback());
   const [utilityMeters, setUtilityMeters] = useState<UtilityMeter[]>(() => readUtilityMeterFallback());
   const [utilityReadings, setUtilityReadings] = useState<UtilityReading[]>(() => readUtilityReadingFallback());
   const [rentalPrinters, setRentalPrinters] = useState<RentalPrinter[]>(() => readRentalPrinterFallback());
@@ -13533,6 +13672,22 @@ export default function App() {
   const [editingItemTemplateId, setEditingItemTemplateId] = useState<number | null>(null);
   const [furnitureModelForm, setFurnitureModelForm] = useState({ type: "CHR", model: "", photo: "" });
   const [editingFurnitureModelId, setEditingFurnitureModelId] = useState<number | null>(null);
+  const [schoolKeyForm, setSchoolKeyForm] = useState({
+    keyCode: "",
+    campus: CAMPUS_LIST[0],
+    keyName: "",
+    qtyTotal: "1",
+    responsibleBy: "",
+    note: "",
+  });
+  const [editingSchoolKeyId, setEditingSchoolKeyId] = useState<number | null>(null);
+  const [schoolKeyActionForm, setSchoolKeyActionForm] = useState({
+    keyId: "",
+    action: "ASSIGN_SECURITY" as SchoolKeyAction,
+    qty: "1",
+    by: "",
+    note: "",
+  });
   const [selectedCreateTemplateId, setSelectedCreateTemplateId] = useState<string>("");
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [userSetupModalOpen, setUserSetupModalOpen] = useState(false);
@@ -14361,6 +14516,12 @@ export default function App() {
   useEffect(() => {
     writeInventoryTxnFallback(inventoryTxns);
   }, [inventoryTxns]);
+  useEffect(() => {
+    writeSchoolKeyFallback(schoolKeys);
+  }, [schoolKeys]);
+  useEffect(() => {
+    writeSchoolKeyLogFallback(schoolKeyLogs);
+  }, [schoolKeyLogs]);
   useEffect(() => {
     writeUtilityMeterFallback(utilityMeters);
   }, [utilityMeters]);
@@ -20152,7 +20313,8 @@ export default function App() {
     if (tab === "setup" && setupView === "permissions" && !canAccessMenu("setup.permissions", "setup")) setSetupView("backup");
     if (tab === "setup" && setupView === "backup" && !canAccessMenu("setup.backup", "setup")) setSetupView("items");
     if (tab === "setup" && setupView === "items" && !canAccessMenu("setup.items", "setup")) setSetupView("providerTypes");
-    if (tab === "setup" && setupView === "providerTypes" && !canAccessMenu("setup.providerTypes", "setup")) setSetupView("furnitureModels");
+    if (tab === "setup" && setupView === "providerTypes" && !canAccessMenu("setup.providerTypes", "setup")) setSetupView("schoolKeys");
+    if (tab === "setup" && setupView === "schoolKeys" && !canAccessMenu("setup.schoolKeys", "setup")) setSetupView("furnitureModels");
     if (tab === "setup" && setupView === "furnitureModels" && !canAccessMenu("setup.furnitureModels", "setup")) setSetupView("locations");
     if (tab === "setup" && setupView === "locations" && !canAccessMenu("setup.locations", "setup")) setSetupView("calendar");
     if (tab === "setup" && setupView === "calendar" && !canAccessMenu("setup.calendar", "setup")) setSetupView("campus");
@@ -20499,6 +20661,8 @@ export default function App() {
         const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
         const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
         const serverToolReviewReports = normalizeToolReviewReportsClient(settingsRes.settings?.toolReviewReports);
+        const serverSchoolKeys = normalizeSchoolKeys(settingsRes.settings?.schoolKeys);
+        const serverSchoolKeyLogs = normalizeSchoolKeyLogs(settingsRes.settings?.schoolKeyLogs);
         const serverUtilityMeters = normalizeUtilityMeters(settingsRes.settings?.utilityMeters);
         const serverUtilityReadings = normalizeUtilityReadings(settingsRes.settings?.utilityReadings);
         const serverRentalPrinters = normalizeRentalPrinters(settingsRes.settings?.rentalPrinters);
@@ -20514,6 +20678,8 @@ export default function App() {
         const derivedFurnitureModels = deriveFurnitureModelsFromAssets(assetSourceForSetup);
         const fallbackInventoryItems = readInventoryItemFallback();
         const fallbackInventoryTxns = readInventoryTxnFallback();
+        const fallbackSchoolKeys = readSchoolKeyFallback();
+        const fallbackSchoolKeyLogs = readSchoolKeyLogFallback();
         const fallbackUtilityMeters = readUtilityMeterFallback();
         const fallbackUtilityReadings = readUtilityReadingFallback();
         const fallbackRentalPrinters = readRentalPrinterFallback();
@@ -20529,6 +20695,8 @@ export default function App() {
         const fallbackCctvChangeLogs = readCctvChangeLogFallback();
         const nextInventoryItems = serverInventoryItems.length ? serverInventoryItems : fallbackInventoryItems;
         const nextInventoryTxns = serverInventoryTxns.length ? serverInventoryTxns : fallbackInventoryTxns;
+        const nextSchoolKeys = serverSchoolKeys.length ? serverSchoolKeys : fallbackSchoolKeys;
+        const nextSchoolKeyLogs = serverSchoolKeyLogs.length ? serverSchoolKeyLogs : fallbackSchoolKeyLogs;
         const nextUtilityMeters = serverUtilityMeters.length ? serverUtilityMeters : fallbackUtilityMeters;
         const nextUtilityReadings = serverUtilityReadings.length ? serverUtilityReadings : fallbackUtilityReadings;
         const nextRentalPrinters = serverRentalPrinters.length ? serverRentalPrinters : fallbackRentalPrinters;
@@ -20556,6 +20724,8 @@ export default function App() {
         setInventoryItems(nextInventoryItems);
         setInventoryTxns(nextInventoryTxns);
         setToolReviewReports(serverToolReviewReports);
+        setSchoolKeys(nextSchoolKeys);
+        setSchoolKeyLogs(nextSchoolKeyLogs);
         setUtilityMeters(nextUtilityMeters);
         setUtilityReadings(nextUtilityReadings);
         setPoolCleaningSchedules(nextPoolCleaningSchedules);
@@ -20693,6 +20863,8 @@ export default function App() {
         setCustomTypeOptions(readItemTypeFallback());
         setItemNames((prev) => ({ ...prev, ...readStringMap(ITEM_NAME_FALLBACK_KEY) }));
         setItemAssetCategories((prev) => ({ ...prev, ...readStringMap(ITEM_ASSET_CATEGORY_FALLBACK_KEY) }));
+        setSchoolKeys(readSchoolKeyFallback());
+        setSchoolKeyLogs(readSchoolKeyLogFallback());
         setCalendarEvents(readCalendarEventFallback(defaultCalendarEvents));
         setMaintenanceReminderOffsets([...DEFAULT_MAINTENANCE_REMINDER_OFFSETS]);
         setInventoryItems(readInventoryItemFallback());
@@ -22637,6 +22809,23 @@ export default function App() {
             rentalPrinters: nextPrinters,
             rentalPrinterCounters: nextCounters,
             rentalPrinterCounterResets: nextResets,
+          },
+        }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  async function saveSchoolKeySettingsToServer(nextKeys: SchoolKey[], nextLogs: SchoolKeyLog[]) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          settings: {
+            schoolKeys: nextKeys,
+            schoolKeyLogs: nextLogs,
           },
         }),
       });
@@ -24779,6 +24968,231 @@ export default function App() {
       setError(err instanceof Error ? err.message : "Failed to delete calendar event");
     } finally {
       setBusy(false);
+    }
+  }
+
+  const schoolKeySecurityOptions = useMemo(() => {
+    const securityRows = users.filter((user) => {
+      const haystack = `${user.fullName} ${user.position}`.toLowerCase();
+      return haystack.includes("security");
+    });
+    const source = securityRows.length ? securityRows : users;
+    return Array.from(
+      new Set(
+        source
+          .map((user) => String(user.fullName || "").trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [users]);
+
+  const schoolKeySummaryByCampus = useMemo(
+    () =>
+      campusOptions
+        .map((campus) => {
+          const rows = schoolKeys.filter((row) => row.campus === campus);
+          return {
+            campus,
+            total: rows.reduce((sum, row) => sum + row.qtyTotal, 0),
+            inKeybox: rows.reduce((sum, row) => sum + row.qtyAvailable, 0),
+            withSecurity: rows.reduce((sum, row) => sum + Math.max(0, row.qtyTotal - row.qtyAvailable), 0),
+          };
+        })
+        .filter((row) => row.total > 0),
+    [campusOptions, schoolKeys]
+  );
+
+  function resetSchoolKeyForm() {
+    setSchoolKeyForm({
+      keyCode: "",
+      campus: CAMPUS_LIST[0],
+      keyName: "",
+      qtyTotal: "1",
+      responsibleBy: "",
+      note: "",
+    });
+    setEditingSchoolKeyId(null);
+  }
+
+  function resetSchoolKeyActionForm() {
+    setSchoolKeyActionForm({
+      keyId: "",
+      action: "ASSIGN_SECURITY",
+      qty: "1",
+      by: "",
+      note: "",
+    });
+  }
+
+  function startEditSchoolKey(row: SchoolKey) {
+    setSchoolKeyForm({
+      keyCode: row.keyCode,
+      campus: row.campus,
+      keyName: row.keyName,
+      qtyTotal: String(row.qtyTotal || 1),
+      responsibleBy: row.responsibleBy || "",
+      note: row.note || "",
+    });
+    setEditingSchoolKeyId(row.id);
+  }
+
+  async function saveSchoolKeyRecord() {
+    if (!requireAdminAction()) return;
+    const keyCode = String(schoolKeyForm.keyCode || "").trim().toUpperCase();
+    const keyName = String(schoolKeyForm.keyName || "").trim();
+    const campus = normalizeInventoryApprovalCampusValue(schoolKeyForm.campus) || CAMPUS_LIST[0];
+    const qtyTotal = Math.max(1, Number(schoolKeyForm.qtyTotal) || 0);
+    const responsibleBy = String(schoolKeyForm.responsibleBy || "").trim();
+    const note = String(schoolKeyForm.note || "").trim();
+    if (!keyCode || !keyName) {
+      setError("Key code and key name are required.");
+      return;
+    }
+    const duplicate = schoolKeys.find(
+      (row) => row.keyCode === keyCode && Number(row.id) !== Number(editingSchoolKeyId || 0)
+    );
+    if (duplicate) {
+      setError("This key code already exists.");
+      return;
+    }
+    const existing = editingSchoolKeyId !== null ? schoolKeys.find((row) => row.id === editingSchoolKeyId) || null : null;
+    const qtyOut = existing ? Math.max(0, existing.qtyTotal - existing.qtyAvailable) : 0;
+    const qtyAvailable = Math.max(0, qtyTotal - qtyOut);
+    const holder = deriveSchoolKeyHolder(qtyAvailable, qtyTotal);
+    const row: SchoolKey = {
+      id: editingSchoolKeyId || Date.now(),
+      keyCode,
+      campus,
+      keyName,
+      qtyTotal,
+      qtyAvailable,
+      holder,
+      holderName: existing?.holderName || "Keybox in Office",
+      responsibleBy: responsibleBy || existing?.responsibleBy || "",
+      note,
+      created: existing?.created || new Date().toISOString(),
+      updated: new Date().toISOString(),
+    };
+    const nextRows = normalizeSchoolKeys(
+      editingSchoolKeyId !== null
+        ? schoolKeys.map((item) => (item.id === editingSchoolKeyId ? row : item))
+        : [row, ...schoolKeys]
+    ).sort((a, b) => a.keyCode.localeCompare(b.keyCode));
+    setSchoolKeys(nextRows);
+    try {
+      await saveSchoolKeySettingsToServer(nextRows, schoolKeyLogs);
+      appendUiAudit(
+        editingSchoolKeyId !== null ? "UPDATE" : "CREATE",
+        "school_key",
+        keyCode,
+        editingSchoolKeyId !== null ? `Updated school key ${keyCode}` : `Created school key ${keyCode}`
+      );
+      setSetupMessage(editingSchoolKeyId !== null ? "School key updated." : "School key created.");
+      setError("");
+      resetSchoolKeyForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save school key.");
+    }
+  }
+
+  async function deleteSchoolKeyRecord(id: number) {
+    if (!requireAdminAction()) return;
+    const target = schoolKeys.find((row) => row.id === id);
+    if (!target) return;
+    if (!window.confirm(`Delete school key ${target.keyCode}?`)) return;
+    const nextKeys = schoolKeys.filter((row) => row.id !== id);
+    const nextLogs = schoolKeyLogs.filter((row) => row.keyId !== id);
+    setSchoolKeys(nextKeys);
+    setSchoolKeyLogs(nextLogs);
+    if (editingSchoolKeyId === id) resetSchoolKeyForm();
+    if (schoolKeyActionForm.keyId === String(id)) resetSchoolKeyActionForm();
+    try {
+      await saveSchoolKeySettingsToServer(nextKeys, nextLogs);
+      appendUiAudit("DELETE", "school_key", target.keyCode, `Deleted school key ${target.keyCode}`);
+      setSetupMessage("School key deleted.");
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete school key.");
+    }
+  }
+
+  async function submitSchoolKeyAction() {
+    if (!requireAdminAction()) return;
+    const target = schoolKeys.find((row) => Number(row.id) === Number(schoolKeyActionForm.keyId));
+    if (!target) {
+      setError("Please select a key record.");
+      return;
+    }
+    const qty = Math.max(1, Number(schoolKeyActionForm.qty) || 0);
+    const by = String(schoolKeyActionForm.by || "").trim();
+    const note = String(schoolKeyActionForm.note || "").trim();
+    if (!by) {
+      setError("Responsible by is required.");
+      return;
+    }
+    let qtyAvailable = target.qtyAvailable;
+    if (schoolKeyActionForm.action === "ASSIGN_SECURITY") {
+      if (qty > target.qtyAvailable) {
+        setError(`Only ${target.qtyAvailable} key(s) available in keybox.`);
+        return;
+      }
+      qtyAvailable -= qty;
+    } else {
+      const checkedOut = Math.max(0, target.qtyTotal - target.qtyAvailable);
+      if (qty > checkedOut) {
+        setError(`Only ${checkedOut} key(s) currently with security.`);
+        return;
+      }
+      qtyAvailable += qty;
+    }
+    qtyAvailable = Math.min(target.qtyTotal, Math.max(0, qtyAvailable));
+    const holder = deriveSchoolKeyHolder(qtyAvailable, target.qtyTotal);
+    const updatedRow: SchoolKey = {
+      ...target,
+      qtyAvailable,
+      holder,
+      holderName: holder === "KEYBOX" ? "Keybox in Office" : by,
+      responsibleBy: by,
+      updated: new Date().toISOString(),
+      note: note || target.note || "",
+    };
+    const logRow: SchoolKeyLog = {
+      id: Date.now(),
+      keyId: target.id,
+      keyCode: target.keyCode,
+      campus: target.campus,
+      keyName: target.keyName,
+      action: schoolKeyActionForm.action,
+      qty,
+      by,
+      note,
+      created: new Date().toISOString(),
+    };
+    const nextKeys = schoolKeys
+      .map((row) => (row.id === target.id ? updatedRow : row))
+      .sort((a, b) => a.keyCode.localeCompare(b.keyCode));
+    const nextLogs = [logRow, ...schoolKeyLogs].sort(
+      (a, b) => Date.parse(String(b.created || "")) - Date.parse(String(a.created || ""))
+    );
+    setSchoolKeys(nextKeys);
+    setSchoolKeyLogs(nextLogs);
+    try {
+      await saveSchoolKeySettingsToServer(nextKeys, nextLogs);
+      appendUiAudit(
+        "UPDATE",
+        "school_key_action",
+        target.keyCode,
+        `${schoolKeyActionForm.action === "ASSIGN_SECURITY" ? "Assigned" : "Returned"} ${qty} key(s) for ${target.keyCode}`
+      );
+      setSetupMessage(
+        schoolKeyActionForm.action === "ASSIGN_SECURITY"
+          ? `Assigned ${qty} key(s) to ${by}.`
+          : `Returned ${qty} key(s) to keybox.`
+      );
+      setError("");
+      resetSchoolKeyActionForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update school key.");
     }
   }
 
@@ -38143,6 +38557,42 @@ export default function App() {
       ),
     [allTransferRows, reportAssetIdFilter]
   );
+  const schoolKeyReportCurrentRows = useMemo(
+    () =>
+      schoolKeys
+        .filter((row) => (reportSchoolKeyCampusFilter === "ALL" ? true : row.campus === reportSchoolKeyCampusFilter))
+        .filter((row) => (reportSchoolKeyStatusFilter === "ALL" ? true : row.holder === reportSchoolKeyStatusFilter))
+        .slice()
+        .sort(
+          (a, b) =>
+            compareCampusByCode(a.campus, b.campus) ||
+            String(a.keyCode || "").localeCompare(String(b.keyCode || ""))
+        ),
+    [schoolKeys, reportSchoolKeyCampusFilter, reportSchoolKeyStatusFilter]
+  );
+  const schoolKeyReportHistoryRows = useMemo(
+    () =>
+      schoolKeyLogs
+        .filter((row) => (reportSchoolKeyCampusFilter === "ALL" ? true : row.campus === reportSchoolKeyCampusFilter))
+        .filter((row) => {
+          const created = String(row.created || "").slice(0, 10);
+          if (reportSchoolKeyDateFrom && created < reportSchoolKeyDateFrom) return false;
+          if (reportSchoolKeyDateTo && created > reportSchoolKeyDateTo) return false;
+          return true;
+        })
+        .slice()
+        .sort((a, b) => Date.parse(String(b.created || "")) - Date.parse(String(a.created || ""))),
+    [schoolKeyLogs, reportSchoolKeyCampusFilter, reportSchoolKeyDateFrom, reportSchoolKeyDateTo]
+  );
+  const schoolKeyReportSummary = useMemo(
+    () => ({
+      totalKeys: schoolKeyReportCurrentRows.reduce((sum, row) => sum + row.qtyTotal, 0),
+      inKeybox: schoolKeyReportCurrentRows.reduce((sum, row) => sum + row.qtyAvailable, 0),
+      withSecurity: schoolKeyReportCurrentRows.reduce((sum, row) => sum + Math.max(0, row.qtyTotal - row.qtyAvailable), 0),
+      movements: schoolKeyReportHistoryRows.length,
+    }),
+    [schoolKeyReportCurrentRows, schoolKeyReportHistoryRows.length]
+  );
   const focusedReportAsset = useMemo(
     () => resolvedAssets.find((asset) => String(asset.assetId || "").trim() === reportAssetIdFilter) || null,
     [resolvedAssets, reportAssetIdFilter]
@@ -40272,6 +40722,7 @@ export default function App() {
               { value: "schedule_calendar" as ReportType, label: "ប្រតិទិនកាលវិភាគថែទាំ" },
               { value: "overdue" as ReportType, label: "ថែទាំលើសកាលកំណត់" },
               { value: "transfer" as ReportType, label: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិ" },
+              { value: "school_key_control" as ReportType, label: "របាយការណ៍សោសាលា" },
               { value: "staff_borrowing" as ReportType, label: "បញ្ជីចាត់តាំងទ្រព្យសម្បត្តិបុគ្គលិក" },
               { value: "maintenance_completion" as ReportType, label: "លទ្ធផលបញ្ចប់ការថែទាំ" },
               { value: "verification_summary" as ReportType, label: "សង្ខេបលទ្ធផលត្រួតពិនិត្យ" },
@@ -40288,6 +40739,7 @@ export default function App() {
               { value: "schedule_calendar" as ReportType, label: "Maintenance Schedule Calendar" },
               { value: "overdue" as ReportType, label: "Overdue Maintenance" },
               { value: "transfer" as ReportType, label: "Asset Transfer Log" },
+              { value: "school_key_control" as ReportType, label: "School Key Control Report" },
               { value: "staff_borrowing" as ReportType, label: "Staff Asset Assignment List" },
               { value: "maintenance_completion" as ReportType, label: "Maintenance Completion" },
               { value: "verification_summary" as ReportType, label: "Verification Summary" },
@@ -40574,6 +41026,9 @@ export default function App() {
     if (reportType === "schedule_calendar") {
       return lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar";
     }
+    if (reportType === "school_key_control") {
+      return lang === "km" ? "របាយការណ៍សោសាលា" : "School Key Control Report";
+    }
     if (reportType === "qr_labels") {
       if (qrLabelEntityType === "rental_printer") {
         return lang === "km" ? "ម៉ាស៊ីនបោះពុម្ពជួល + QR" : "Rental Printer + QR Labels";
@@ -40595,6 +41050,7 @@ export default function App() {
             schedule_calendar: "បង្ហាញ និងបោះពុម្ពប្រតិទិនកាលវិភាគថែទាំប្រចាំខែ តាមសាខា និងក្រុមថែទាំ។",
             overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
             transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
+            school_key_control: "បង្ហាញសោសាលាតាមសាខា ស្ថានភាពបច្ចុប្បន្ន និងប្រវត្តិចេញ/ចូលសោ។",
             staff_borrowing: "ទ្រព្យដែលសាលាបានចាត់តាំងឱ្យបុគ្គលិកប្រើប្រាស់ និងអ្នកទទួលខុសត្រូវបច្ចុប្បន្ន។",
             maintenance_completion: "តាមដានលទ្ធផលថែទាំក្នុងចន្លោះកាលបរិច្ឆេទ។",
             verification_summary: "សង្ខេបលទ្ធផលត្រួតពិនិត្យតាមខែ ឬត្រីមាស។",
@@ -40611,6 +41067,7 @@ export default function App() {
             schedule_calendar: "Show and print the monthly maintenance calendar grouped by campus and maintenance group.",
             overdue: "Show assets that are overdue for maintenance.",
             transfer: "Transfer history between campuses and locations.",
+            school_key_control: "Show school keys by campus with current holder status and movement history.",
             staff_borrowing: "Assets currently assigned to staff with accountability records.",
             maintenance_completion: "Maintenance completion records in selected date range.",
             verification_summary: "Verification summary by month or term.",
@@ -40627,6 +41084,11 @@ export default function App() {
       return lang === "km"
         ? "បោះពុម្ពប្រតិទិនកាលវិភាគថែទាំប្រចាំខែ ជាទម្រង់ផ្លូវការ សម្រាប់ដាក់របាយការណ៍។"
         : "Print the monthly maintenance calendar in an official format for reporting and submission.";
+    }
+    if (reportType === "school_key_control") {
+      return lang === "km"
+        ? "របាយការណ៍នេះបង្ហាញស្ថានភាពសោបច្ចុប្បន្ន និងប្រវត្តិចេញ/ចូលតាមកាលបរិច្ឆេទ។"
+        : "This report shows current key status and movement history by date.";
     }
     if (reportType === "asset_full_record") {
       return reportAssetIdFilter
@@ -40686,6 +41148,21 @@ export default function App() {
             : (lang === "km" ? "សង្ខេប" : "Summary")
         }`
       );
+    } else if (reportType === "school_key_control") {
+      chips.push(
+        `${lang === "km" ? "សាខា" : "Campus"}: ${
+          reportSchoolKeyCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportSchoolKeyCampusFilter)
+        }`
+      );
+      chips.push(
+        `${lang === "km" ? "ស្ថានភាព" : "Status"}: ${
+          reportSchoolKeyStatusFilter === "ALL"
+            ? (lang === "km" ? "ទាំងអស់" : "All")
+            : schoolKeyHolderLabel(reportSchoolKeyStatusFilter)
+        }`
+      );
+      chips.push(`${lang === "km" ? "ពីថ្ងៃ" : "From"}: ${reportSchoolKeyDateFrom || "-"}`);
+      chips.push(`${lang === "km" ? "ដល់ថ្ងៃ" : "To"}: ${reportSchoolKeyDateTo || "-"}`);
     }
     if (reportAssetFilterLabel) chips.push(reportAssetFilterLabel);
     return chips;
@@ -40699,6 +41176,10 @@ export default function App() {
     itemFilterSummary,
     reportAssetFilterLabel,
     reportScheduleCampusFilter,
+    reportSchoolKeyCampusFilter,
+    reportSchoolKeyDateFrom,
+    reportSchoolKeyDateTo,
+    reportSchoolKeyStatusFilter,
     reportScheduleGroupFilter,
     reportScheduleView,
     reportScheduleGroupLabel,
@@ -40722,6 +41203,7 @@ export default function App() {
       reportType === "furniture_control" ||
       reportType === "inventory_balance" ||
       reportType === "schedule_calendar" ||
+      reportType === "school_key_control" ||
       reportType === "maintenance_completion" ||
       reportType === "verification_summary" ||
       reportType === "qr_labels" ||
@@ -40830,6 +41312,14 @@ export default function App() {
       setReportScheduleGroupFilter("ALL");
       return;
     }
+    if (reportType === "school_key_control") {
+      const today = toYmd(new Date());
+      setReportSchoolKeyCampusFilter("ALL");
+      setReportSchoolKeyStatusFilter("ALL");
+      setReportSchoolKeyDateFrom(`${today.slice(0, 7)}-01`);
+      setReportSchoolKeyDateTo(today);
+      return;
+    }
     if (reportType === "inventory_balance") {
       setReportAssetIdFilter("");
       setReportInventoryMode("all");
@@ -40918,6 +41408,10 @@ export default function App() {
     setFurnitureControlCampusFilter(["ALL"]);
     setFurnitureControlLocationFilter(["ALL"]);
     setFurnitureControlItemFilter(["ALL"]);
+    setReportSchoolKeyCampusFilter("ALL");
+    setReportSchoolKeyStatusFilter("ALL");
+    setReportSchoolKeyDateFrom(`${ymd.slice(0, 7)}-01`);
+    setReportSchoolKeyDateTo(ymd);
     setReportPeriodMode("month");
     setReportMonth(ymd.slice(0, 7));
     setReportDateFrom(`${ymd.slice(0, 7)}-01`);
@@ -42341,6 +42835,20 @@ export default function App() {
         r.by || "-",
         r.reason || "-",
       ]);
+    } else if (reportType === "school_key_control") {
+      title = "School Key Control Report";
+      columns = ["Campus", "Key Code", "Key Name", "Total", "In Keybox", "With Security", "Current Holder", "Responsible By", "Note"];
+      rows = schoolKeyReportCurrentRows.map((row) => [
+        reportCampusName(row.campus),
+        row.keyCode,
+        row.keyName,
+        String(row.qtyTotal),
+        String(row.qtyAvailable),
+        String(Math.max(0, row.qtyTotal - row.qtyAvailable)),
+        schoolKeyHolderLabel(row.holder, row.holderName),
+        row.responsibleBy || "-",
+        row.note || "-",
+      ]);
     } else if (reportType === "staff_borrowing") {
       title = "Staff Asset Assignment List Report";
       columns = visibleStaffBorrowingColumnDefs.map((column) => column.label);
@@ -42518,6 +43026,9 @@ export default function App() {
       }
       if (reportType === "staff_borrowing") {
         return [3, 12, 9, 11, 12, 11, 10, 10, 9, 13];
+      }
+      if (reportType === "school_key_control") {
+        return [3, 12, 11, 16, 7, 8, 8, 16, 10, 9];
       }
       if (reportType === "maintenance_completion") {
         return [] as number[];
@@ -42956,9 +43467,17 @@ export default function App() {
             furnitureControlItemFilter.includes("ALL")
               ? "All Items"
               : furnitureControlItemFilter.length
-                ? furnitureControlItemFilter.map((type) => assetItemName("FURNITURE", type, "")).join(", ")
-                : "-"
+              ? furnitureControlItemFilter.map((type) => assetItemName("FURNITURE", type, "")).join(", ")
+              : "-"
           )}</p>`
+        : reportType === "school_key_control"
+        ? `<p class="meta">Generated: ${escapeHtml(generatedAt)} | Campus: ${escapeHtml(
+            reportSchoolKeyCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportSchoolKeyCampusFilter)
+          )} | Status: ${escapeHtml(
+            reportSchoolKeyStatusFilter === "ALL"
+              ? (lang === "km" ? "ទាំងអស់" : "All")
+              : schoolKeyHolderLabel(reportSchoolKeyStatusFilter)
+          )} | Date Range: ${escapeHtml(reportSchoolKeyDateFrom || "-")} -> ${escapeHtml(reportSchoolKeyDateTo || "-")}</p>`
         : reportType === "qr_labels"
         ? `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
             lang === "km" ? "ប្រភេទ" : "Type"
@@ -43036,6 +43555,15 @@ export default function App() {
           ? (assetMasterCampusFilter.includes("ALL")
               ? t.allCampuses
               : assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", "))
+        : reportType === "school_key_control"
+          ? [
+              reportSchoolKeyCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportSchoolKeyCampusFilter),
+              `${lang === "km" ? "ស្ថានភាព" : "Status"}: ${
+                reportSchoolKeyStatusFilter === "ALL"
+                  ? (lang === "km" ? "ទាំងអស់" : "All")
+                  : schoolKeyHolderLabel(reportSchoolKeyStatusFilter)
+              }`,
+            ].join("\n")
         : "";
 
     const reportContentHtml =
@@ -43208,6 +43736,107 @@ export default function App() {
                   ${verificationColgroup}
                   ${buildPreviewHeadHtml(verificationHeaders)}
                   <tbody>${verificationRowsHtml}</tbody>
+                </table>
+              </div>
+            </div>`;
+          })()
+        : reportType === "school_key_control"
+        ? (() => {
+            const currentHeaders = ["No.", "Campus", "Key Code", "Key Name", "Total", "In Keybox", "With Security", "Current Holder", "Responsible By", "Note"];
+            const currentDataRows = schoolKeyReportCurrentRows.map((row, index) => [
+              String(index + 1),
+              reportCampusName(row.campus),
+              row.keyCode,
+              row.keyName,
+              String(row.qtyTotal),
+              String(row.qtyAvailable),
+              String(Math.max(0, row.qtyTotal - row.qtyAvailable)),
+              schoolKeyHolderLabel(row.holder, row.holderName),
+              row.responsibleBy || "-",
+              row.note || "-",
+            ]);
+            const currentColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(currentHeaders, currentDataRows));
+            const currentRowsHtml = schoolKeyReportCurrentRows.length
+              ? schoolKeyReportCurrentRows
+                  .map(
+                    (row, index) => `<tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(reportCampusName(row.campus))}</td>
+                      <td>${escapeHtml(row.keyCode)}</td>
+                      <td>${escapeHtml(row.keyName)}</td>
+                      <td>${row.qtyTotal}</td>
+                      <td>${row.qtyAvailable}</td>
+                      <td>${Math.max(0, row.qtyTotal - row.qtyAvailable)}</td>
+                      <td>${escapeHtml(schoolKeyHolderLabel(row.holder, row.holderName))}</td>
+                      <td>${escapeHtml(row.responsibleBy || "-")}</td>
+                      <td>${escapeHtml(row.note || "-")}</td>
+                    </tr>`
+                  )
+                  .join("")
+              : `<tr><td colspan="10">No school keys found.</td></tr>`;
+            const historyHeaders = ["No.", "Date / Time", "Campus", "Key Code", "Key Name", "Action", "Qty", "By", "Note"];
+            const historyDataRows = schoolKeyReportHistoryRows.map((row, index) => [
+              String(index + 1),
+              formatDateTime(row.created),
+              reportCampusName(row.campus),
+              row.keyCode,
+              row.keyName,
+              row.action === "ASSIGN_SECURITY" ? "Assign to Security" : "Return to Keybox",
+              String(row.qty),
+              row.by || "-",
+              row.note || "-",
+            ]);
+            const historyColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(historyHeaders, historyDataRows));
+            const historyRowsHtml = schoolKeyReportHistoryRows.length
+              ? schoolKeyReportHistoryRows
+                  .map(
+                    (row, index) => `<tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(formatDateTime(row.created))}</td>
+                      <td>${escapeHtml(reportCampusName(row.campus))}</td>
+                      <td>${escapeHtml(row.keyCode)}</td>
+                      <td>${escapeHtml(row.keyName)}</td>
+                      <td>${escapeHtml(row.action === "ASSIGN_SECURITY" ? "Assign to Security" : "Return to Keybox")}</td>
+                      <td>${row.qty}</td>
+                      <td>${escapeHtml(row.by || "-")}</td>
+                      <td>${escapeHtml(row.note || "-")}</td>
+                    </tr>`
+                  )
+                  .join("")
+              : `<tr><td colspan="9">No key movement history found.</td></tr>`;
+            return `<div class="asset-full-print">
+              <div class="report-summary-grid">
+                <div class="report-summary-card">
+                  <div class="report-summary-card-label">Registered Keys</div>
+                  <div class="report-summary-card-value">${schoolKeyReportSummary.totalKeys}</div>
+                </div>
+                <div class="report-summary-card">
+                  <div class="report-summary-card-label">In Keybox</div>
+                  <div class="report-summary-card-value">${schoolKeyReportSummary.inKeybox}</div>
+                </div>
+                <div class="report-summary-card">
+                  <div class="report-summary-card-label">With Security</div>
+                  <div class="report-summary-card-value">${schoolKeyReportSummary.withSecurity}</div>
+                </div>
+                <div class="report-summary-card">
+                  <div class="report-summary-card-label">Movement Records</div>
+                  <div class="report-summary-card-value">${schoolKeyReportSummary.movements}</div>
+                </div>
+              </div>
+              <div class="asset-full-print-block">
+                <h2>Current Key Status</h2>
+                <table class="preview-report-table">
+                  ${currentColgroup}
+                  ${buildPreviewHeadHtml(currentHeaders)}
+                  <tbody>${currentRowsHtml}</tbody>
+                </table>
+              </div>
+              <div class="asset-full-print-block">
+                <h2>Movement History</h2>
+                <table class="preview-report-table">
+                  ${historyColgroup}
+                  ${buildPreviewHeadHtml(historyHeaders)}
+                  <tbody>${historyRowsHtml}</tbody>
                 </table>
               </div>
             </div>`;
@@ -66928,6 +67557,47 @@ function formatTicketRequestSource(value?: string) {
                   </select>
                 </>
               ) : null}
+              {reportType === "school_key_control" ? (
+                <>
+                  <SearchableMultiSelectPicker
+                    className="report-campus-picker"
+                    summary={reportSchoolKeyCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportSchoolKeyCampusFilter)}
+                    options={campusOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    }))}
+                    selectedValues={reportSchoolKeyCampusFilter === "ALL" ? ["ALL"] : [reportSchoolKeyCampusFilter]}
+                    allOptionLabel={t.allCampuses}
+                    allOptionChecked={reportSchoolKeyCampusFilter === "ALL"}
+                    onToggleAllOption={() => setReportSchoolKeyCampusFilter("ALL")}
+                    onToggleValue={(value, checked) => setReportSchoolKeyCampusFilter(checked ? value : "ALL")}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                  <select
+                    className="input"
+                    value={reportSchoolKeyStatusFilter}
+                    onChange={(e) => setReportSchoolKeyStatusFilter(e.target.value as "ALL" | SchoolKeyHolder)}
+                  >
+                    <option value="ALL">{lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status"}</option>
+                    <option value="KEYBOX">{lang === "km" ? "ក្នុងប្រអប់សោ" : "Keybox in Office"}</option>
+                    <option value="SECURITY">{lang === "km" ? "ប្រគល់ឱ្យសន្តិសុខ" : "Assigned to Security"}</option>
+                    <option value="PARTIAL">{lang === "km" ? "មួយផ្នែកនៅសន្តិសុខ" : "Partly with Security"}</option>
+                  </select>
+                  <input
+                    className="input"
+                    type="date"
+                    value={reportSchoolKeyDateFrom}
+                    onChange={(e) => setReportSchoolKeyDateFrom(e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="date"
+                    value={reportSchoolKeyDateTo}
+                    onChange={(e) => setReportSchoolKeyDateTo(e.target.value)}
+                  />
+                </>
+              ) : null}
               {reportType === "inventory_balance" ? (
                 <>
                   <LocationPicker
@@ -67818,6 +68488,14 @@ function formatTicketRequestSource(value?: string) {
                 {qrLabelEntityType === "rental_printer"
                   ? (lang === "km" ? "ស្កេន QR ដើម្បីបើកទំព័រស្នើជួសជុលសម្រាប់ម៉ាស៊ីនបោះពុម្ពជួលនេះ។" : "scan QR to open the maintenance request page for this rental printer.")
                   : (lang === "km" ? "ស្កេន QR ដើម្បីបើកទំព័រព័ត៌មានទ្រព្យសម្បត្តិនេះដោយផ្ទាល់។" : "scan QR to open this asset detail page directly.")}
+              </div>
+            )}
+            {reportType === "school_key_control" && (
+              <div className="panel-note">
+                <strong>{lang === "km" ? "របាយការណ៍សោសាលា" : "School key report"}:</strong>{" "}
+                {lang === "km"
+                  ? "មើលចំនួនសោក្នុងប្រអប់សោ និងសោដែលបានប្រគល់ឱ្យសន្តិសុខ ព្រមទាំងប្រវត្តិចេញ/ចូលតាមកាលបរិច្ឆេទ។"
+                  : "Track how many keys are in the office keybox, how many are with security, and the full assign/return history by date."}
               </div>
             )}
             {reportType === "asset_master" && (
@@ -69270,6 +69948,168 @@ function formatTicketRequestSource(value?: string) {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {reportType === "school_key_control" && (
+              <div style={{ display: "grid", gap: 16 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isPhoneView ? "1fr 1fr" : "repeat(4, minmax(0, 1fr))",
+                    gap: 12,
+                  }}
+                >
+                  <div className="field">
+                    <div className="tiny">{lang === "km" ? "សោសរុប" : "Registered Keys"}</div>
+                    <strong style={{ fontSize: isPhoneView ? 22 : 28 }}>{schoolKeyReportSummary.totalKeys}</strong>
+                  </div>
+                  <div className="field">
+                    <div className="tiny">{lang === "km" ? "ក្នុងប្រអប់សោ" : "In Keybox"}</div>
+                    <strong style={{ fontSize: isPhoneView ? 22 : 28 }}>{schoolKeyReportSummary.inKeybox}</strong>
+                  </div>
+                  <div className="field">
+                    <div className="tiny">{lang === "km" ? "នៅសន្តិសុខ" : "With Security"}</div>
+                    <strong style={{ fontSize: isPhoneView ? 22 : 28 }}>{schoolKeyReportSummary.withSecurity}</strong>
+                  </div>
+                  <div className="field">
+                    <div className="tiny">{lang === "km" ? "កំណត់ត្រាចលនា" : "Movement Records"}</div>
+                    <strong style={{ fontSize: isPhoneView ? 22 : 28 }}>{schoolKeyReportSummary.movements}</strong>
+                  </div>
+                </div>
+
+                {isPhoneView ? (
+                  <>
+                    <div className="report-mobile-only report-card-list">
+                      {schoolKeyReportCurrentRows.length ? (
+                        schoolKeyReportCurrentRows.map((row) => (
+                          <article key={`school-key-current-mobile-${row.id}`} className="report-card">
+                            <div className="report-card-head">
+                              <div className="report-card-title">
+                                <strong className="report-card-id">{row.keyCode}</strong>
+                                <div className="tiny report-card-sub">{row.keyName}</div>
+                              </div>
+                            </div>
+                            <div className="report-card-meta">
+                              <div><strong>{lang === "km" ? "សាខា" : "Campus"}:</strong> {reportCampusName(row.campus)}</div>
+                              <div><strong>{lang === "km" ? "សរុប" : "Total"}:</strong> {row.qtyTotal}</div>
+                              <div><strong>{lang === "km" ? "ក្នុងប្រអប់សោ" : "In Keybox"}:</strong> {row.qtyAvailable}</div>
+                              <div><strong>{lang === "km" ? "នៅសន្តិសុខ" : "With Security"}:</strong> {Math.max(0, row.qtyTotal - row.qtyAvailable)}</div>
+                              <div><strong>{lang === "km" ? "អ្នកកាន់បច្ចុប្បន្ន" : "Current Holder"}:</strong> {schoolKeyHolderLabel(row.holder, row.holderName)}</div>
+                              <div><strong>{lang === "km" ? "ទទួលខុសត្រូវដោយ" : "Responsible By"}:</strong> {row.responsibleBy || "-"}</div>
+                              <div className="report-card-row-wide"><strong>{lang === "km" ? "កំណត់ចំណាំ" : "Note"}:</strong> {row.note || "-"}</div>
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <div className="panel-note">{lang === "km" ? "មិនមានទិន្នន័យសោសាលា។" : "No school key records found."}</div>
+                      )}
+                    </div>
+
+                    <div className="report-mobile-only report-card-list">
+                      {schoolKeyReportHistoryRows.length ? (
+                        schoolKeyReportHistoryRows.map((row) => (
+                          <article key={`school-key-history-mobile-${row.id}`} className="report-card">
+                            <div className="report-card-head">
+                              <div className="report-card-title">
+                                <strong className="report-card-id">{row.keyCode}</strong>
+                                <div className="tiny report-card-sub">{row.keyName}</div>
+                              </div>
+                            </div>
+                            <div className="report-card-meta">
+                              <div><strong>{lang === "km" ? "ថ្ងៃ / ម៉ោង" : "Date / Time"}:</strong> {formatDateTime(row.created)}</div>
+                              <div><strong>{lang === "km" ? "សាខា" : "Campus"}:</strong> {reportCampusName(row.campus)}</div>
+                              <div><strong>{lang === "km" ? "សកម្មភាព" : "Action"}:</strong> {row.action === "ASSIGN_SECURITY" ? "Assign to Security" : "Return to Keybox"}</div>
+                              <div><strong>{lang === "km" ? "ចំនួន" : "Qty"}:</strong> {row.qty}</div>
+                              <div><strong>{lang === "km" ? "ដោយ" : "By"}:</strong> {row.by || "-"}</div>
+                              <div className="report-card-row-wide"><strong>{lang === "km" ? "កំណត់ចំណាំ" : "Note"}:</strong> {row.note || "-"}</div>
+                            </div>
+                          </article>
+                        ))
+                      ) : (
+                        <div className="panel-note">{lang === "km" ? "មិនមានប្រវត្តិចេញ/ចូលសោ។" : "No key movement history found."}</div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="table-wrap report-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{lang === "km" ? "សាខា" : "Campus"}</th>
+                            <th>{lang === "km" ? "កូដសោ" : "Key Code"}</th>
+                            <th>{lang === "km" ? "ឈ្មោះសោ" : "Key Name"}</th>
+                            <th>{lang === "km" ? "សរុប" : "Total"}</th>
+                            <th>{lang === "km" ? "ក្នុងប្រអប់សោ" : "In Keybox"}</th>
+                            <th>{lang === "km" ? "នៅសន្តិសុខ" : "With Security"}</th>
+                            <th>{lang === "km" ? "អ្នកកាន់បច្ចុប្បន្ន" : "Current Holder"}</th>
+                            <th>{lang === "km" ? "ទទួលខុសត្រូវដោយ" : "Responsible By"}</th>
+                            <th>{lang === "km" ? "កំណត់ចំណាំ" : "Note"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {schoolKeyReportCurrentRows.length ? (
+                            schoolKeyReportCurrentRows.map((row) => (
+                              <tr key={`school-key-report-current-${row.id}`}>
+                                <td>{reportCampusName(row.campus)}</td>
+                                <td><strong>{row.keyCode}</strong></td>
+                                <td>{row.keyName}</td>
+                                <td>{row.qtyTotal}</td>
+                                <td>{row.qtyAvailable}</td>
+                                <td>{Math.max(0, row.qtyTotal - row.qtyAvailable)}</td>
+                                <td>{schoolKeyHolderLabel(row.holder, row.holderName)}</td>
+                                <td>{row.responsibleBy || "-"}</td>
+                                <td>{row.note || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={9}>{lang === "km" ? "មិនមានទិន្នន័យសោសាលា។" : "No school key records found."}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="table-wrap report-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>{lang === "km" ? "ថ្ងៃ / ម៉ោង" : "Date / Time"}</th>
+                            <th>{lang === "km" ? "សាខា" : "Campus"}</th>
+                            <th>{lang === "km" ? "កូដសោ" : "Key Code"}</th>
+                            <th>{lang === "km" ? "ឈ្មោះសោ" : "Key Name"}</th>
+                            <th>{lang === "km" ? "សកម្មភាព" : "Action"}</th>
+                            <th>{lang === "km" ? "ចំនួន" : "Qty"}</th>
+                            <th>{lang === "km" ? "ដោយ" : "By"}</th>
+                            <th>{lang === "km" ? "កំណត់ចំណាំ" : "Note"}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {schoolKeyReportHistoryRows.length ? (
+                            schoolKeyReportHistoryRows.map((row) => (
+                              <tr key={`school-key-report-history-${row.id}`}>
+                                <td>{formatDateTime(row.created)}</td>
+                                <td>{reportCampusName(row.campus)}</td>
+                                <td><strong>{row.keyCode}</strong></td>
+                                <td>{row.keyName}</td>
+                                <td>{row.action === "ASSIGN_SECURITY" ? "Assign to Security" : "Return to Keybox"}</td>
+                                <td>{row.qty}</td>
+                                <td>{row.by || "-"}</td>
+                                <td>{row.note || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={8}>{lang === "km" ? "មិនមានប្រវត្តិចេញ/ចូលសោ។" : "No key movement history found."}</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -71903,6 +72743,314 @@ function formatTicketRequestSource(value?: string) {
                 </table>
               </div>
             )}
+          </section>
+          )}
+
+          {tab === "setup" && setupView === "schoolKeys" && canAccessMenu("setup.schoolKeys", "setup") && (
+          <section className="panel">
+            <h2>School Key Control</h2>
+            <p className="tiny">Register school keys by campus, keep the default location as the office keybox, and record every assign or return to security.</p>
+            <div className="stats-grid" style={{ marginTop: 12 }}>
+              <article className="stat-card">
+                <div className="stat-label">All Registered Keys</div>
+                <div className="stat-value">{schoolKeys.reduce((sum, row) => sum + row.qtyTotal, 0)}</div>
+              </article>
+              <article className="stat-card">
+                <div className="stat-label">In Keybox</div>
+                <div className="stat-value">{schoolKeys.reduce((sum, row) => sum + row.qtyAvailable, 0)}</div>
+              </article>
+              <article className="stat-card">
+                <div className="stat-label">With Security</div>
+                <div className="stat-value">{schoolKeys.reduce((sum, row) => sum + Math.max(0, row.qtyTotal - row.qtyAvailable), 0)}</div>
+              </article>
+            </div>
+
+            <div className="panel" style={{ marginTop: 14 }}>
+              <h3>{editingSchoolKeyId !== null ? "Update Key Register" : "Register New Key"}</h3>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Key Code</span>
+                  <input
+                    className="input"
+                    value={schoolKeyForm.keyCode}
+                    disabled={!isAdmin}
+                    placeholder="C1-KEY-001"
+                    onChange={(e) => setSchoolKeyForm((prev) => ({ ...prev, keyCode: e.target.value.toUpperCase() }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t.campus}</span>
+                  <select
+                    className="input"
+                    value={schoolKeyForm.campus}
+                    disabled={!isAdmin}
+                    onChange={(e) => setSchoolKeyForm((prev) => ({ ...prev, campus: e.target.value }))}
+                  >
+                    {campusOptions.map((campus) => (
+                      <option key={`school-key-campus-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Key Name</span>
+                  <input
+                    className="input"
+                    value={schoolKeyForm.keyName}
+                    disabled={!isAdmin}
+                    placeholder="Main Gate Key"
+                    onChange={(e) => setSchoolKeyForm((prev) => ({ ...prev, keyName: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Total Qty</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    value={schoolKeyForm.qtyTotal}
+                    disabled={!isAdmin}
+                    onChange={(e) => setSchoolKeyForm((prev) => ({ ...prev, qtyTotal: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Responsible By</span>
+                  <input
+                    className="input"
+                    list="school-key-responsible-options"
+                    value={schoolKeyForm.responsibleBy}
+                    disabled={!isAdmin}
+                    placeholder="Office Admin / Security Lead"
+                    onChange={(e) => setSchoolKeyForm((prev) => ({ ...prev, responsibleBy: e.target.value }))}
+                  />
+                  <datalist id="school-key-responsible-options">
+                    {users.map((user) => (
+                      <option key={`school-key-user-${user.id}`} value={user.fullName} />
+                    ))}
+                  </datalist>
+                </label>
+                <label className="field field-wide">
+                  <span>Note</span>
+                  <input
+                    className="input"
+                    value={schoolKeyForm.note}
+                    disabled={!isAdmin}
+                    placeholder="Default holder: Keybox in Office"
+                    onChange={(e) => setSchoolKeyForm((prev) => ({ ...prev, note: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <div className="asset-actions">
+                <div className="tiny">New keys start in <strong>Keybox in Office</strong>. Then use the action box below when security takes or returns them.</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {editingSchoolKeyId !== null ? (
+                    <button className="tab" disabled={!isAdmin} onClick={resetSchoolKeyForm}>Cancel</button>
+                  ) : null}
+                  <button className="btn-primary" disabled={!isAdmin} onClick={() => void saveSchoolKeyRecord()}>
+                    {editingSchoolKeyId !== null ? "Update Key" : "Save Key"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="panel" style={{ marginTop: 14 }}>
+              <h3>Assign to Security / Return to Keybox</h3>
+              <div className="form-grid">
+                <label className="field">
+                  <span>Select Key</span>
+                  <select
+                    className="input"
+                    value={schoolKeyActionForm.keyId}
+                    disabled={!isAdmin}
+                    onChange={(e) => setSchoolKeyActionForm((prev) => ({ ...prev, keyId: e.target.value }))}
+                  >
+                    <option value="">Select key</option>
+                    {schoolKeys
+                      .slice()
+                      .sort((a, b) => a.keyCode.localeCompare(b.keyCode))
+                      .map((row) => (
+                        <option key={`school-key-action-${row.id}`} value={row.id}>
+                          {row.keyCode} - {row.keyName} ({campusLabel(row.campus)})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Action</span>
+                  <select
+                    className="input"
+                    value={schoolKeyActionForm.action}
+                    disabled={!isAdmin}
+                    onChange={(e) =>
+                      setSchoolKeyActionForm((prev) => ({
+                        ...prev,
+                        action: e.target.value === "RETURN_KEYBOX" ? "RETURN_KEYBOX" : "ASSIGN_SECURITY",
+                      }))
+                    }
+                  >
+                    <option value="ASSIGN_SECURITY">Assign to Security</option>
+                    <option value="RETURN_KEYBOX">Return to Keybox</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Qty</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    value={schoolKeyActionForm.qty}
+                    disabled={!isAdmin}
+                    onChange={(e) => setSchoolKeyActionForm((prev) => ({ ...prev, qty: e.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>{schoolKeyActionForm.action === "ASSIGN_SECURITY" ? "Security Staff" : "Handled By"}</span>
+                  <input
+                    className="input"
+                    list="school-key-security-options"
+                    value={schoolKeyActionForm.by}
+                    disabled={!isAdmin}
+                    placeholder={schoolKeyActionForm.action === "ASSIGN_SECURITY" ? "Security name" : "Returned by / received by"}
+                    onChange={(e) => setSchoolKeyActionForm((prev) => ({ ...prev, by: e.target.value }))}
+                  />
+                  <datalist id="school-key-security-options">
+                    {schoolKeySecurityOptions.map((name) => (
+                      <option key={`school-key-security-${name.toLowerCase().replace(/\s+/g, "-")}`} value={name} />
+                    ))}
+                  </datalist>
+                </label>
+                <label className="field field-wide">
+                  <span>Note</span>
+                  <input
+                    className="input"
+                    value={schoolKeyActionForm.note}
+                    disabled={!isAdmin}
+                    placeholder="Lock / unlock duty, night shift, emergency access..."
+                    onChange={(e) => setSchoolKeyActionForm((prev) => ({ ...prev, note: e.target.value }))}
+                  />
+                </label>
+              </div>
+              <div className="asset-actions">
+                <div className="tiny">Each action updates the current holder and keeps a simple movement history.</div>
+                <button className="btn-primary" disabled={!isAdmin} onClick={() => void submitSchoolKeyAction()}>
+                  Update Key Status
+                </button>
+              </div>
+            </div>
+
+            <div className="table-wrap" style={{ marginTop: 14 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t.campus}</th>
+                    <th>Key Code</th>
+                    <th>Key Name</th>
+                    <th>Total</th>
+                    <th>In Keybox</th>
+                    <th>With Security</th>
+                    <th>Current Holder</th>
+                    <th>Responsible By</th>
+                    <th>Note</th>
+                    <th>{t.edit}</th>
+                    <th>{t.delete}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schoolKeys.length ? (
+                    schoolKeys
+                      .slice()
+                      .sort((a, b) => a.keyCode.localeCompare(b.keyCode))
+                      .map((row) => (
+                        <tr key={`school-key-row-${row.id}`}>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td><strong>{row.keyCode}</strong></td>
+                          <td>{row.keyName}</td>
+                          <td>{row.qtyTotal}</td>
+                          <td>{row.qtyAvailable}</td>
+                          <td>{Math.max(0, row.qtyTotal - row.qtyAvailable)}</td>
+                          <td>{schoolKeyHolderLabel(row.holder, row.holderName)}</td>
+                          <td>{row.responsibleBy || "-"}</td>
+                          <td>{row.note || "-"}</td>
+                          <td>
+                            <button className="tab" disabled={!isAdmin} onClick={() => startEditSchoolKey(row)}>{t.edit}</button>
+                          </td>
+                          <td>
+                            <button className="btn-danger" disabled={!isAdmin} onClick={() => void deleteSchoolKeyRecord(row.id)}>X</button>
+                          </td>
+                        </tr>
+                      ))
+                  ) : (
+                    <tr>
+                      <td colSpan={11}>No school keys yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {schoolKeySummaryByCampus.length ? (
+              <div className="table-wrap" style={{ marginTop: 14 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t.campus}</th>
+                      <th>Total Keys</th>
+                      <th>In Keybox</th>
+                      <th>With Security</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schoolKeySummaryByCampus.map((row) => (
+                      <tr key={`school-key-summary-${row.campus}`}>
+                        <td><strong>{campusLabel(row.campus)}</strong></td>
+                        <td>{row.total}</td>
+                        <td>{row.inKeybox}</td>
+                        <td>{row.withSecurity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            <div className="table-wrap" style={{ marginTop: 14 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date / Time</th>
+                    <th>{t.campus}</th>
+                    <th>Key Code</th>
+                    <th>Key Name</th>
+                    <th>Action</th>
+                    <th>Qty</th>
+                    <th>By</th>
+                    <th>Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schoolKeyLogs.length ? (
+                    schoolKeyLogs
+                      .slice()
+                      .sort((a, b) => Date.parse(String(b.created || "")) - Date.parse(String(a.created || "")))
+                      .map((row) => (
+                        <tr key={`school-key-log-${row.id}`}>
+                          <td>{formatDateTime(row.created)}</td>
+                          <td>{campusLabel(row.campus)}</td>
+                          <td><strong>{row.keyCode}</strong></td>
+                          <td>{row.keyName}</td>
+                          <td>{row.action === "ASSIGN_SECURITY" ? "Assign to Security" : "Return to Keybox"}</td>
+                          <td>{row.qty}</td>
+                          <td>{row.by || "-"}</td>
+                          <td>{row.note || "-"}</td>
+                        </tr>
+                      ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8}>No school key movement history yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
           )}
 
