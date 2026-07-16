@@ -40535,18 +40535,18 @@ export default function App() {
           ? { value: "ALL" as EdAssetTemplate, label: "ED Template: ទាំងអស់" }
           : { value: "ALL" as EdAssetTemplate, label: "ED Template: All Assets" };
       const options: Array<{ value: EdAssetTemplate; label: string }> = [
-        { value: "computer", label: "Computer List" },
-        { value: "ipad", label: "iPad List" },
-        { value: "speaker", label: "Speaker List" },
-        { value: "tv", label: "TV List" },
-        { value: "aircon", label: "Air-Con List" },
-        { value: "monitor", label: "Monitor List" },
-        { value: "walkie", label: "Walkie Talkie List" },
-        { value: "peripheral", label: "Computer Peripheral List" },
-        { value: "safety", label: "Safety Equipment List" },
-        { value: "fan", label: "Fan List" },
-        { value: "music", label: "Music Equipment List" },
-        { value: "furniture", label: "Furniture List" },
+        { value: "computer" as EdAssetTemplate, label: "Computer List" },
+        { value: "ipad" as EdAssetTemplate, label: "iPad List" },
+        { value: "speaker" as EdAssetTemplate, label: "Speaker List" },
+        { value: "tv" as EdAssetTemplate, label: "TV List" },
+        { value: "aircon" as EdAssetTemplate, label: "Air-Con List" },
+        { value: "monitor" as EdAssetTemplate, label: "Monitor List" },
+        { value: "walkie" as EdAssetTemplate, label: "Walkie Talkie List" },
+        { value: "peripheral" as EdAssetTemplate, label: "Computer Peripheral List" },
+        { value: "safety" as EdAssetTemplate, label: "Safety Equipment List" },
+        { value: "fan" as EdAssetTemplate, label: "Fan List" },
+        { value: "music" as EdAssetTemplate, label: "Music Equipment List" },
+        { value: "furniture" as EdAssetTemplate, label: "Furniture List" },
       ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
       return [allOption, ...options];
     },
@@ -41277,7 +41277,7 @@ export default function App() {
       setReportAssetIdFilter("");
       setReportMaintenanceCampusFilter("ALL");
       setReportMaintenanceCategoryFilter("ALL");
-      setReportMaintenanceItemFilter("ALL");
+      setReportMaintenanceItemFilter(["ALL"]);
       setMaintenanceReportVisibleColumns([
         "date",
         "assetId",
