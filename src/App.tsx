@@ -2990,6 +2990,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
   FACILITY: [
     { itemEn: "Air Conditioner", itemKm: "ម៉ាស៊ីនត្រជាក់", code: "AC" },
     { itemEn: "Generator", itemKm: "ម៉ាស៊ីនភ្លើង", code: "GNR" },
+    { itemEn: "Automatic Transfer Switch", itemKm: "ATS", code: "ATS" },
     { itemEn: "Fan", itemKm: "កង្ហារ", code: "FAN" },
     { itemEn: "Wall Fan", itemKm: "កង្ហារព្យួរជញ្ជាំង", code: "WFN" },
     { itemEn: "Ceiling Fan", itemKm: "កង្ហារពិដាន", code: "CFN" },
@@ -3022,7 +3023,7 @@ const TYPE_OPTIONS: Record<string, Array<{ itemEn: string; itemKm: string; code:
 
 const NEW_ENTRY_HIDDEN_TYPE_CODES: Record<string, string[]> = {
   IT: ["BAT", "CHB", "MCD", "BAG", "PBG", "RMT", "ADP", "HDC", "WMR"],
-  FACILITY: ["RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "WFN", "CFN", "EFN", "SFN"],
+  FACILITY: ["ATS", "RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "WFN", "CFN", "EFN", "SFN"],
 };
 
 const WALKIE_TALKIE_TYPE_CODE = "WTK";
@@ -3031,6 +3032,8 @@ const USB_WIFI_TYPE_CODE = "UWF";
 const WEBCAM_TYPE_CODE = "WBC";
 const TV_TYPE_CODE = "TV";
 const REMOTE_TYPE_CODE = "RMT";
+const GENERATOR_TYPE_CODE = "GNR";
+const ATS_TYPE_CODE = "ATS";
 const QR_OPTIONAL_COMPUTER_COMPONENT_TYPES = ["KBD", "MSE", "MPD"] as const;
 const AIRCON_FRONT_UNIT_TYPE_CODE = "FPN";
 const AIRCON_OUTDOOR_UNIT_TYPE_CODE = "RPN";
@@ -3081,6 +3084,7 @@ const NO_PARENT_LINK_TYPES = new Set([
   DESKTOP_PARENT_TYPE,
   LAPTOP_TYPE,
   "TAB",
+  GENERATOR_TYPE_CODE,
   DIGITAL_CAMERA_TYPE,
   PROJECTOR_TYPE,
   USB_WIFI_TYPE_CODE,
@@ -7519,6 +7523,13 @@ function isAirconAsset(category: string, type: string) {
   return String(category || "").toUpperCase() === "FACILITY" && String(type || "").toUpperCase() === "AC";
 }
 
+function isGeneratorAsset(category: string, type: string) {
+  return (
+    String(category || "").toUpperCase() === "FACILITY" &&
+    String(type || "").trim().toUpperCase() === GENERATOR_TYPE_CODE
+  );
+}
+
 function monthStartYmd(base = new Date()) {
   return toYmd(new Date(base.getFullYear(), base.getMonth(), 1));
 }
@@ -8044,6 +8055,94 @@ function syncEditAirconFormSpecs<T extends {
   };
 }
 
+function parseGeneratorSpecs(specsRaw: string) {
+  const specs = String(specsRaw || "").trim();
+  if (!specs) {
+    return {
+      power: "",
+      frequency: "",
+      hasAts: false,
+      atsSerial: "",
+      specs: "",
+    };
+  }
+  let power = "";
+  let frequency = "";
+  let hasAts = false;
+  let atsSerial = "";
+  const visibleLines: string[] = [];
+  const sourceLines = specs
+    .replace(/\r\n?/g, "\n")
+    .replace(/[|;]+/g, "\n")
+    .split("\n");
+  for (const sourceLine of sourceLines) {
+    const line = String(sourceLine || "").trim();
+    if (!line) {
+      if (visibleLines.length && visibleLines[visibleLines.length - 1] !== "") visibleLines.push("");
+      continue;
+    }
+    let match = line.match(/^Power:\s*(.+)$/i);
+    if (match) {
+      if (!power) power = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Frequency:\s*(.+)$/i);
+    if (match) {
+      if (!frequency) frequency = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Included:\s*(.+)$/i);
+    if (match) {
+      if (String(match[1] || "").toLowerCase().includes("ats")) hasAts = true;
+      continue;
+    }
+    if (/^Included Components:\s*$/i.test(line)) {
+      continue;
+    }
+    if (/^ATS$/i.test(line)) {
+      hasAts = true;
+      continue;
+    }
+    match = line.match(/^ATS S\/N:\s*(.+)$/i);
+    if (match) {
+      hasAts = true;
+      if (!atsSerial) atsSerial = String(match[1] || "").trim();
+      continue;
+    }
+    visibleLines.push(line);
+  }
+  return {
+    power,
+    frequency,
+    hasAts,
+    atsSerial,
+    specs: visibleLines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+  };
+}
+
+function buildGeneratorSpecs(
+  baseSpecs: string,
+  power: string,
+  frequency: string,
+  options?: {
+    hasAts: boolean;
+    atsSerial?: string;
+  }
+) {
+  const normalized = parseGeneratorSpecs(baseSpecs);
+  const out: string[] = [];
+  const nextPower = String(power || "").trim();
+  const nextFrequency = String(frequency || "").trim();
+  const hasAts = options ? Boolean(options.hasAts) : normalized.hasAts;
+  const atsSerial = options ? String(options.atsSerial || "").trim() : normalized.atsSerial;
+  if (nextPower) out.push(`Power: ${nextPower}`);
+  if (nextFrequency) out.push(`Frequency: ${nextFrequency}`);
+  if (hasAts) out.push("Included: ATS");
+  if (hasAts && atsSerial) out.push(`ATS S/N: ${atsSerial}`);
+  if (normalized.specs) out.push(normalized.specs);
+  return out.join("\n").trim();
+}
+
 function getVisibleSpecsTextareaValue(category: string, type: string, specs: string) {
   if (isAirconAsset(category, type)) {
     const parsed = parseAirconSpecs(specs);
@@ -8055,6 +8154,19 @@ function getVisibleSpecsTextareaValue(category: string, type: string, specs: str
     if (included.length) {
       lines.push("Included Components:");
       lines.push(...included);
+    }
+    if (parsed.specs) {
+      if (lines.length) lines.push("");
+      lines.push(parsed.specs);
+    }
+    return lines.join("\n").trim();
+  }
+  if (isGeneratorAsset(category, type)) {
+    const parsed = parseGeneratorSpecs(specs);
+    const lines: string[] = [];
+    if (parsed.hasAts) {
+      lines.push("Included Components:");
+      lines.push("ATS");
     }
     if (parsed.specs) {
       if (lines.length) lines.push("");
@@ -11565,6 +11677,10 @@ export default function App() {
     brand: "",
     model: "",
     serialNumber: "",
+    generatorPower: "",
+    generatorFrequency: "",
+    generatorHasAts: false,
+    generatorAtsSerial: "",
     acType: "",
     acHp: "",
     fanType: "",
@@ -11840,6 +11956,10 @@ export default function App() {
     brand: "",
     model: "",
     serialNumber: "",
+    generatorPower: "",
+    generatorFrequency: "",
+    generatorHasAts: false,
+    generatorAtsSerial: "",
     acType: "",
     acHp: "",
     fanType: "",
@@ -19688,6 +19808,19 @@ export default function App() {
     });
   }, [assetForm.category, assetForm.type]);
   useEffect(() => {
+    setAssetForm((prev) => {
+      if (isGeneratorAsset(prev.category, prev.type)) return prev;
+      if (!prev.generatorPower && !prev.generatorFrequency && !prev.generatorHasAts && !prev.generatorAtsSerial) return prev;
+      return {
+        ...prev,
+        generatorPower: "",
+        generatorFrequency: "",
+        generatorHasAts: false,
+        generatorAtsSerial: "",
+      };
+    });
+  }, [assetForm.category, assetForm.type]);
+  useEffect(() => {
     if (!isFanAsset(assetForm.category, assetForm.type)) return;
     const suggestedType = fanTypeFromAssetTypeCode(assetForm.type);
     if (suggestedType && suggestedType !== String(assetForm.fanType || "").trim()) {
@@ -21146,6 +21279,7 @@ export default function App() {
     }
     const createAssignedTo = userRequired ? assetForm.assignedTo.trim() : "";
     const createIsAircon = isAirconAsset(assetForm.category, assetForm.type);
+    const createIsGenerator = isGeneratorAsset(assetForm.category, assetForm.type);
     const createIsFan = isFanAsset(assetForm.category, assetForm.type);
     const createIsTablet = String(assetForm.category || "").trim().toUpperCase() === "IT" && String(assetForm.type || "").trim().toUpperCase() === "TAB";
     const createTabletCharger = createIsTablet && Boolean(assetForm.tabletHasCharger);
@@ -21185,6 +21319,16 @@ export default function App() {
           },
         ].filter((component) => component.enabled)
       : [];
+    const createGeneratorComponents = createIsGenerator && assetForm.generatorHasAts
+      ? [
+          {
+            type: ATS_TYPE_CODE,
+            enabled: true,
+            role: "ATS",
+            serialNumber: String(assetForm.generatorAtsSerial || "").trim(),
+          },
+        ]
+      : [];
     const createSpecs = createIsAircon
         ? buildAirconSpecs(assetForm.specs, assetForm.acType, assetForm.acHp, {
           hasRemote: assetForm.acHasRemote,
@@ -21198,6 +21342,11 @@ export default function App() {
           frontUnitPhoto: assetForm.acFrontUnitPhoto,
           outdoorPhoto: assetForm.acOutdoorPhoto,
         })
+      : (createIsGenerator
+          ? buildGeneratorSpecs(assetForm.specs, assetForm.generatorPower, assetForm.generatorFrequency, {
+              hasAts: assetForm.generatorHasAts,
+              atsSerial: assetForm.generatorAtsSerial,
+            })
       : (isTvAsset
           ? buildTvSpecs(assetForm.specs, createTvRemoteCount, createTvRemotePhotos)
       : (createIsFan
@@ -21222,7 +21371,7 @@ export default function App() {
                   quantity: assetForm.furnitureQuantity,
                   condition: assetForm.furnitureCondition,
                 })
-              : assetForm.specs)))));
+              : assetForm.specs))))));
     const mainSerial = assetForm.serialNumber.trim();
     const duplicateMain = findDuplicateAssetSerial(assets, mainSerial);
     if (duplicateMain) {
@@ -21614,6 +21763,38 @@ export default function App() {
               scheduleNote: "",
               photo: childPhotos[0] || "",
               photos: childPhotos,
+              status: assetForm.status,
+            }),
+          });
+        }
+      }
+      if (createGeneratorComponents.length && created.asset?.assetId) {
+        for (const component of createGeneratorComponents) {
+          await requestJson<{ asset: Asset }>("/api/assets", {
+            method: "POST",
+            body: JSON.stringify({
+              campus: assetForm.campus,
+              category: assetForm.category,
+              type: component.type,
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: created.asset.assetId,
+              componentRole: component.role,
+              componentRequired: true,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: assetForm.brand,
+              model: "",
+              serialNumber: component.serialNumber,
+              specs: "",
+              purchaseDate: assetForm.purchaseDate,
+              warrantyUntil: assetForm.warrantyUntil,
+              vendor: assetForm.vendor,
+              notes: `${component.role} for ${created.asset.assetId}`,
+              nextMaintenanceDate: "",
+              scheduleNote: "",
+              photo: "",
+              photos: [],
               status: assetForm.status,
             }),
           });
@@ -22257,6 +22438,61 @@ export default function App() {
             nextLocal = [child, ...nextLocal];
           }
         }
+        if (createGeneratorComponents.length) {
+          for (const component of createGeneratorComponents) {
+            const childSeq = calcNextSeq(nextLocal, assetForm.campus, assetForm.category, component.type);
+            const child: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: assetForm.campus,
+              category: assetForm.category,
+              type: component.type,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(assetForm.campus, assetForm.category, component.type, childSeq),
+              name: assetItemName(assetForm.category, component.type),
+              location: assetForm.location,
+              setCode: "",
+              parentAssetId: newAsset.assetId,
+              componentRole: component.role,
+              componentRequired: true,
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              brand: assetForm.brand,
+              model: "",
+              serialNumber: component.serialNumber,
+              specs: "",
+              purchaseDate: assetForm.purchaseDate,
+              warrantyUntil: assetForm.warrantyUntil,
+              vendor: assetForm.vendor,
+              notes: `${component.role} for ${newAsset.assetId}`,
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: assetForm.status,
+                  reason: "Asset created as generator component",
+                },
+              ],
+              photo: "",
+              photos: [],
+              status: assetForm.status,
+              created: new Date().toISOString(),
+            };
+            nextLocal = [child, ...nextLocal];
+          }
+        }
         if (createTabletCharger) {
           const childSeq = calcNextSeq(nextLocal, assetForm.campus, "IT", TABLET_CHARGER_TYPE_CODE);
           const child: Asset = {
@@ -22382,6 +22618,10 @@ export default function App() {
           brand: "",
           model: "",
           serialNumber: "",
+          generatorPower: "",
+          generatorFrequency: "",
+          generatorHasAts: false,
+          generatorAtsSerial: "",
           acType: "",
           acHp: "",
           acHasRemote: false,
@@ -29967,13 +30207,37 @@ export default function App() {
     const parsedFan = isFanAsset(asset.category, asset.type)
       ? parseFanSpecs(asset.specs || "")
       : { fanType: "", specs: parsedAircon.specs || String(asset.specs || "") };
+    const generatorAtsChild =
+      isGeneratorAsset(asset.category, asset.type)
+        ? assets
+            .filter(
+              (entry) =>
+                entry.assetId !== asset.assetId &&
+                String(entry.type || "").trim().toUpperCase() === ATS_TYPE_CODE &&
+                String(entry.parentAssetId || "").trim() === String(asset.assetId || "").trim()
+            )
+            .sort(
+              (a, b) =>
+                (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+                String(a.assetId || "").localeCompare(String(b.assetId || ""))
+            )[0] || null
+        : null;
+    const parsedGenerator = isGeneratorAsset(asset.category, asset.type)
+      ? parseGeneratorSpecs(asset.specs || "")
+      : {
+          power: "",
+          frequency: "",
+          hasAts: false,
+          atsSerial: "",
+          specs: parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
+        };
     const parsedTv =
       asset.category === "IT" && String(asset.type || "").trim().toUpperCase() === TV_TYPE_CODE
         ? parseTvSpecs(asset.specs || "")
         : {
             remoteCount: 1,
             remotePhotos: [] as string[],
-            specs: parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
+            specs: parsedGenerator.specs || parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
           };
     const parsedWalkie = String(asset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE
       ? parseWalkieTalkieSpecs(asset.specs || "")
@@ -30011,6 +30275,10 @@ export default function App() {
       brand: asset.brand || "",
       model: asset.model || "",
       serialNumber: asset.serialNumber || "",
+      generatorPower: parsedGenerator.power,
+      generatorFrequency: parsedGenerator.frequency,
+      generatorHasAts: parsedGenerator.hasAts || Boolean(generatorAtsChild),
+      generatorAtsSerial: String(generatorAtsChild?.serialNumber || parsedGenerator.atsSerial || "").trim(),
       acType: parsedAircon.acType,
       acHp: parsedAircon.acHp,
       fanType: parsedFan.fanType,
@@ -30649,6 +30917,9 @@ export default function App() {
       !!editingAsset &&
       editingAsset.category === "IT" &&
       String(editingAsset.type || "").trim().toUpperCase() === WALKIE_TALKIE_TYPE_CODE;
+    const editingIsGenerator =
+      !!editingAsset &&
+      isGeneratorAsset(editingAsset.category, editingAsset.type);
     const editingIsTabletAsset =
       !!editingAsset &&
       editingAsset.category === "IT" &&
@@ -30741,6 +31012,11 @@ export default function App() {
             frontUnitPhoto: assetEditForm.acFrontUnitPhoto,
             outdoorPhoto: assetEditForm.acOutdoorPhoto,
           })
+        : (editingIsGenerator
+            ? buildGeneratorSpecs(assetEditForm.specs.trim(), assetEditForm.generatorPower, assetEditForm.generatorFrequency, {
+                hasAts: assetEditForm.generatorHasAts,
+                atsSerial: assetEditForm.generatorAtsSerial,
+              })
         : (isFanAsset(editingAsset?.category || "", editingAsset?.type || "")
             ? buildFanSpecs(assetEditForm.specs.trim(), assetEditForm.fanType)
             : (String(editingAsset?.category || "").trim().toUpperCase() === "IT" && String(editingAsset?.type || "").trim().toUpperCase() === "TAB"
@@ -30769,7 +31045,7 @@ export default function App() {
                     quantity: assetEditForm.furnitureQuantity,
                     condition: assetEditForm.furnitureCondition,
                   })
-                : assetEditForm.specs.trim()))))),
+                : assetEditForm.specs.trim())))))),
       purchaseDate: assetEditForm.purchaseDate.trim(),
       warrantyUntil: assetEditForm.warrantyUntil.trim(),
       vendor: assetEditForm.vendor.trim(),
@@ -31341,6 +31617,128 @@ export default function App() {
             };
             nextLocal = [newChild, ...nextLocal];
           }
+        }
+      }
+      if (editingIsGenerator && editingAsset?.assetId) {
+        const existingGeneratorChildren = nextLocal
+          .filter(
+            (asset) =>
+              asset.assetId !== editingAsset.assetId &&
+              String(asset.parentAssetId || "").trim() === String(editingAsset.assetId || "").trim() &&
+              String(asset.type || "").trim().toUpperCase() === ATS_TYPE_CODE
+          )
+          .sort(
+            (a, b) =>
+              (Number(a.seq) || 0) - (Number(b.seq) || 0) ||
+              String(a.assetId || "").localeCompare(String(b.assetId || ""))
+          );
+        const activeAts = existingGeneratorChildren[0] || null;
+        const extraAts = existingGeneratorChildren.slice(1);
+        if (assetEditForm.generatorHasAts) {
+          const atsPayload = {
+            location: payload.location,
+            parentAssetId: editingAsset.assetId,
+            componentRole: "ATS",
+            componentRequired: true,
+            brand: payload.brand,
+            model: "",
+            serialNumber: String(assetEditForm.generatorAtsSerial || "").trim(),
+            specs: "",
+            purchaseDate: payload.purchaseDate,
+            warrantyUntil: payload.warrantyUntil,
+            vendor: payload.vendor,
+            notes: `ATS for ${editingAsset.assetId}`,
+            photo: "",
+            photos: [] as string[],
+            status: payload.status,
+          };
+          if (activeAts) {
+            const updatedAts: Asset = {
+              ...activeAts,
+              campus: payload.campus,
+              category: editingAsset.category,
+              type: ATS_TYPE_CODE,
+              name: assetItemName(editingAsset.category, ATS_TYPE_CODE),
+              setCode: "",
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              ...atsPayload,
+            };
+            nextLocal = nextLocal.map((asset) => (asset.id === activeAts.id ? updatedAts : asset));
+            try {
+              await requestJson<{ asset: Asset }>(`/api/assets/${activeAts.id}`, {
+                method: "PATCH",
+                body: JSON.stringify(atsPayload),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+          } else {
+            try {
+              await requestJson<{ asset: Asset }>("/api/assets", {
+                method: "POST",
+                body: JSON.stringify({
+                  campus: payload.campus,
+                  category: editingAsset.category,
+                  type: ATS_TYPE_CODE,
+                  setCode: "",
+                  assignedTo: "",
+                  custodyStatus: "IN_STOCK",
+                  ...atsPayload,
+                }),
+              });
+            } catch (err) {
+              if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+            }
+            const childSeq = calcNextSeq(nextLocal, payload.campus, editingAsset.category, ATS_TYPE_CODE);
+            const newAts: Asset = {
+              id: Date.now() + Math.floor(Math.random() * 10000),
+              campus: payload.campus,
+              category: editingAsset.category,
+              type: ATS_TYPE_CODE,
+              pcType: "",
+              seq: childSeq,
+              assetId: buildAssetId(payload.campus, editingAsset.category, ATS_TYPE_CODE, childSeq),
+              name: assetItemName(editingAsset.category, ATS_TYPE_CODE),
+              setCode: "",
+              assignedTo: "",
+              custodyStatus: "IN_STOCK",
+              nextMaintenanceDate: "",
+              nextVerificationDate: "",
+              verificationFrequency: "NONE",
+              scheduleNote: "",
+              repeatMode: "NONE",
+              repeatWeekOfMonth: 0,
+              repeatWeekday: 0,
+              maintenanceHistory: [],
+              verificationHistory: [],
+              transferHistory: [],
+              custodyHistory: [],
+              statusHistory: [
+                {
+                  id: Date.now(),
+                  date: new Date().toISOString(),
+                  fromStatus: "New",
+                  toStatus: payload.status,
+                  reason: "Asset created as generator ATS",
+                },
+              ],
+              created: new Date().toISOString(),
+              ...atsPayload,
+            };
+            nextLocal = [newAts, ...nextLocal];
+          }
+        } else {
+          nextLocal = nextLocal.filter((asset) => !existingGeneratorChildren.some((child) => child.id === asset.id));
+        }
+        const atsDeleteTargets = assetEditForm.generatorHasAts ? extraAts : existingGeneratorChildren;
+        for (const ats of atsDeleteTargets) {
+          try {
+            await requestJson<{ ok: boolean }>(`/api/assets/${ats.id}`, { method: "DELETE" });
+          } catch (err) {
+            if (!isApiUnavailableError(err) && !isMissingRouteError(err)) throw err;
+          }
+          nextLocal = nextLocal.filter((asset) => asset.id !== ats.id);
         }
       }
 
@@ -51290,7 +51688,65 @@ function formatTicketRequestSource(value?: string) {
                       </div>
                     </div>
                   ) : null}
-                  {!isFurnitureAsset(assetForm.category) && !isAirconAsset(assetForm.category, assetForm.type) && !isFanAsset(assetForm.category, assetForm.type) ? (
+                  {isGeneratorAsset(assetForm.category, assetForm.type) ? (
+                    <>
+                      <div className="field field-wide">
+                        <span>Power / Frequency / Vendor</span>
+                        <div className="aircon-inline-triple">
+                          <input
+                            className="input"
+                            value={assetForm.generatorPower}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorPower: e.target.value }))}
+                            placeholder="45 kVA"
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.generatorFrequency}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorFrequency: e.target.value }))}
+                            placeholder="50 Hz"
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.vendor}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))}
+                            placeholder="Vendor"
+                          />
+                        </div>
+                      </div>
+                      <div className="field field-wide">
+                        <span>Included Components</span>
+                        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 240px)", gap: 12 }}>
+                          <label className="tab setpack-include-item" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <input
+                              type="checkbox"
+                              checked={assetForm.generatorHasAts}
+                              onChange={(e) =>
+                                setAssetForm((f) => ({
+                                  ...f,
+                                  generatorHasAts: e.target.checked,
+                                  generatorAtsSerial: e.target.checked ? f.generatorAtsSerial : "",
+                                }))
+                              }
+                            />
+                            ATS
+                          </label>
+                          {assetForm.generatorHasAts ? (
+                            <input
+                              className="input"
+                              value={assetForm.generatorAtsSerial}
+                              onChange={(e) => setAssetForm((f) => ({ ...f, generatorAtsSerial: e.target.value }))}
+                              placeholder="ATS S/N"
+                            />
+                          ) : (
+                            <div className="tiny" style={{ display: "flex", alignItems: "center" }}>
+                              Generator can save without parent-link. ATS is created as its child component.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                  {!isFurnitureAsset(assetForm.category) && !isAirconAsset(assetForm.category, assetForm.type) && !isFanAsset(assetForm.category, assetForm.type) && !isGeneratorAsset(assetForm.category, assetForm.type) ? (
                     <label className="field">
                       <span>{t.vendor}</span>
                       <input className="input" value={assetForm.vendor} onChange={(e) => setAssetForm((f) => ({ ...f, vendor: e.target.value }))} />
@@ -53272,6 +53728,64 @@ function formatTicketRequestSource(value?: string) {
                           />
                         </div>
                       </div>
+                    ) : null}
+                    {isGeneratorAsset(editingAsset?.category || "", editingAsset?.type || "") ? (
+                      <>
+                        <div className="field field-wide">
+                          <span>Power / Frequency / Vendor</span>
+                          <div className="aircon-inline-triple">
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorPower}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorPower: e.target.value }))}
+                              placeholder="45 kVA"
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorFrequency}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorFrequency: e.target.value }))}
+                              placeholder="50 Hz"
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.vendor}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, vendor: e.target.value }))}
+                              placeholder="Vendor"
+                            />
+                          </div>
+                        </div>
+                        <div className="field field-wide">
+                          <span>Included Components</span>
+                          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 240px)", gap: 12 }}>
+                            <label className="tab setpack-include-item" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <input
+                                type="checkbox"
+                                checked={assetEditForm.generatorHasAts}
+                                onChange={(e) =>
+                                  setAssetEditForm((f) => ({
+                                    ...f,
+                                    generatorHasAts: e.target.checked,
+                                    generatorAtsSerial: e.target.checked ? f.generatorAtsSerial : "",
+                                  }))
+                                }
+                              />
+                              ATS
+                            </label>
+                            {assetEditForm.generatorHasAts ? (
+                              <input
+                                className="input"
+                                value={assetEditForm.generatorAtsSerial}
+                                onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorAtsSerial: e.target.value }))}
+                                placeholder="ATS S/N"
+                              />
+                            ) : (
+                              <div className="tiny" style={{ display: "flex", alignItems: "center" }}>
+                                ATS stays linked as a child component under this generator.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
                     ) : null}
                     {!isFurnitureAsset(editingAsset?.category || "") ? (
                       <label className="field">
