@@ -11681,6 +11681,7 @@ export default function App() {
     generatorFrequency: "",
     generatorHasAts: false,
     generatorAtsSerial: "",
+    generatorAtsPhoto: "",
     acType: "",
     acHp: "",
     fanType: "",
@@ -11960,6 +11961,7 @@ export default function App() {
     generatorFrequency: "",
     generatorHasAts: false,
     generatorAtsSerial: "",
+    generatorAtsPhoto: "",
     acType: "",
     acHp: "",
     fanType: "",
@@ -19810,13 +19812,14 @@ export default function App() {
   useEffect(() => {
     setAssetForm((prev) => {
       if (isGeneratorAsset(prev.category, prev.type)) return prev;
-      if (!prev.generatorPower && !prev.generatorFrequency && !prev.generatorHasAts && !prev.generatorAtsSerial) return prev;
+      if (!prev.generatorPower && !prev.generatorFrequency && !prev.generatorHasAts && !prev.generatorAtsSerial && !prev.generatorAtsPhoto) return prev;
       return {
         ...prev,
         generatorPower: "",
         generatorFrequency: "",
         generatorHasAts: false,
         generatorAtsSerial: "",
+        generatorAtsPhoto: "",
       };
     });
   }, [assetForm.category, assetForm.type]);
@@ -21326,6 +21329,7 @@ export default function App() {
             enabled: true,
             role: "ATS",
             serialNumber: String(assetForm.generatorAtsSerial || "").trim(),
+            photo: String(assetForm.generatorAtsPhoto || "").trim(),
           },
         ]
       : [];
@@ -21770,6 +21774,7 @@ export default function App() {
       }
       if (createGeneratorComponents.length && created.asset?.assetId) {
         for (const component of createGeneratorComponents) {
+          const childPhotos = component.photo ? [component.photo] : [];
           await requestJson<{ asset: Asset }>("/api/assets", {
             method: "POST",
             body: JSON.stringify({
@@ -21793,8 +21798,8 @@ export default function App() {
               notes: `${component.role} for ${created.asset.assetId}`,
               nextMaintenanceDate: "",
               scheduleNote: "",
-              photo: "",
-              photos: [],
+              photo: childPhotos[0] || "",
+              photos: childPhotos,
               status: assetForm.status,
             }),
           });
@@ -22441,6 +22446,7 @@ export default function App() {
         if (createGeneratorComponents.length) {
           for (const component of createGeneratorComponents) {
             const childSeq = calcNextSeq(nextLocal, assetForm.campus, assetForm.category, component.type);
+            const childPhotos = component.photo ? [component.photo] : [];
             const child: Asset = {
               id: Date.now() + Math.floor(Math.random() * 10000),
               campus: assetForm.campus,
@@ -22485,8 +22491,8 @@ export default function App() {
                   reason: "Asset created as generator component",
                 },
               ],
-              photo: "",
-              photos: [],
+              photo: childPhotos[0] || "",
+              photos: childPhotos,
               status: assetForm.status,
               created: new Date().toISOString(),
             };
@@ -22622,6 +22628,7 @@ export default function App() {
           generatorFrequency: "",
           generatorHasAts: false,
           generatorAtsSerial: "",
+          generatorAtsPhoto: "",
           acType: "",
           acHp: "",
           acHasRemote: false,
@@ -30279,6 +30286,7 @@ export default function App() {
       generatorFrequency: parsedGenerator.frequency,
       generatorHasAts: parsedGenerator.hasAts || Boolean(generatorAtsChild),
       generatorAtsSerial: String(generatorAtsChild?.serialNumber || parsedGenerator.atsSerial || "").trim(),
+      generatorAtsPhoto: normalizeAssetPhotos(generatorAtsChild || {})[0] || "",
       acType: parsedAircon.acType,
       acHp: parsedAircon.acHp,
       fanType: parsedFan.fanType,
@@ -31635,6 +31643,7 @@ export default function App() {
         const activeAts = existingGeneratorChildren[0] || null;
         const extraAts = existingGeneratorChildren.slice(1);
         if (assetEditForm.generatorHasAts) {
+          const atsPhoto = String(assetEditForm.generatorAtsPhoto || "").trim();
           const atsPayload = {
             location: payload.location,
             parentAssetId: editingAsset.assetId,
@@ -31648,8 +31657,8 @@ export default function App() {
             warrantyUntil: payload.warrantyUntil,
             vendor: payload.vendor,
             notes: `ATS for ${editingAsset.assetId}`,
-            photo: "",
-            photos: [] as string[],
+            photo: atsPhoto,
+            photos: atsPhoto ? [atsPhoto] : [],
             status: payload.status,
           };
           if (activeAts) {
@@ -34152,6 +34161,24 @@ export default function App() {
     }
   }
 
+  async function onGeneratorAtsPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetForm((f) => ({ ...f, generatorAtsPhoto: optimized, generatorHasAts: true }));
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
   async function onSetPackPhotoFile(type: SetPackChildType, e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
@@ -34403,6 +34430,24 @@ export default function App() {
       setAssetEditForm((f) =>
         syncEditAirconFormSpecs(editingAsset?.category || "", editingAsset?.type || "", { ...f, [key]: optimized })
       );
+    } catch (err) {
+      handlePhotoUploadError(err);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  async function onEditGeneratorAtsPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      e.target.value = "";
+      return;
+    }
+    try {
+      const optimized = await optimizeUploadPhoto(file);
+      setAssetEditForm((f) => ({ ...f, generatorAtsPhoto: optimized, generatorHasAts: true }));
     } catch (err) {
       handlePhotoUploadError(err);
     } finally {
@@ -51715,21 +51760,50 @@ function formatTicketRequestSource(value?: string) {
                       </div>
                       <div className="field field-wide">
                         <span>Included Components</span>
+                        <input
+                          id="generator-ats-create-upload"
+                          className="file-input"
+                          type="file"
+                          accept="image/*"
+                          style={{ display: "none" }}
+                          onChange={onGeneratorAtsPhotoFile}
+                        />
                         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 240px)", gap: 12 }}>
-                          <label className="tab setpack-include-item" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <input
-                              type="checkbox"
-                              checked={assetForm.generatorHasAts}
-                              onChange={(e) =>
-                                setAssetForm((f) => ({
-                                  ...f,
-                                  generatorHasAts: e.target.checked,
-                                  generatorAtsSerial: e.target.checked ? f.generatorAtsSerial : "",
-                                }))
-                              }
-                            />
-                            ATS
-                          </label>
+                          <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                            <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+                              <label className="tab setpack-include-item" style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={assetForm.generatorHasAts}
+                                  onChange={(e) =>
+                                    setAssetForm((f) => ({
+                                      ...f,
+                                      generatorHasAts: e.target.checked,
+                                      generatorAtsSerial: e.target.checked ? f.generatorAtsSerial : "",
+                                      generatorAtsPhoto: e.target.checked ? f.generatorAtsPhoto : "",
+                                    }))
+                                  }
+                                  style={{ marginRight: 8 }}
+                                />
+                                ATS
+                              </label>
+                              {assetForm.generatorHasAts ? (
+                                String(assetForm.generatorAtsPhoto || "").trim() ? (
+                                  <>
+                                    <img loading="lazy" decoding="async" src={String(assetForm.generatorAtsPhoto || "")} alt="generator-ats" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
+                                    <button type="button" className="tab btn-small" onClick={() => setAssetForm((f) => ({ ...f, generatorAtsPhoto: "" }))}>Remove</button>
+                                  </>
+                                ) : (
+                                  <button type="button" className="tab btn-small" onClick={() => document.getElementById("generator-ats-create-upload")?.click()}>
+                                    Choose Photo
+                                  </button>
+                                )
+                              ) : null}
+                            </div>
+                            <div className="tiny">
+                              ATS is saved as a child component under this generator.
+                            </div>
+                          </div>
                           {assetForm.generatorHasAts ? (
                             <input
                               className="input"
@@ -53756,21 +53830,50 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                         <div className="field field-wide">
                           <span>Included Components</span>
+                          <input
+                            id="generator-ats-edit-upload"
+                            className="file-input"
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={onEditGeneratorAtsPhotoFile}
+                          />
                           <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 240px)", gap: 12 }}>
-                            <label className="tab setpack-include-item" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <input
-                                type="checkbox"
-                                checked={assetEditForm.generatorHasAts}
-                                onChange={(e) =>
-                                  setAssetEditForm((f) => ({
-                                    ...f,
-                                    generatorHasAts: e.target.checked,
-                                    generatorAtsSerial: e.target.checked ? f.generatorAtsSerial : "",
-                                  }))
-                                }
-                              />
-                              ATS
-                            </label>
+                            <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
+                              <div className="row-actions" style={{ gap: 8, alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+                                <label className="tab setpack-include-item" style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={assetEditForm.generatorHasAts}
+                                    onChange={(e) =>
+                                      setAssetEditForm((f) => ({
+                                        ...f,
+                                        generatorHasAts: e.target.checked,
+                                        generatorAtsSerial: e.target.checked ? f.generatorAtsSerial : "",
+                                        generatorAtsPhoto: e.target.checked ? f.generatorAtsPhoto : "",
+                                      }))
+                                    }
+                                    style={{ marginRight: 8 }}
+                                  />
+                                  ATS
+                                </label>
+                                {assetEditForm.generatorHasAts ? (
+                                  String(assetEditForm.generatorAtsPhoto || "").trim() ? (
+                                    <>
+                                      <img loading="lazy" decoding="async" src={String(assetEditForm.generatorAtsPhoto || "")} alt="edit-generator-ats" className="asset-photo-chip-img" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover", flex: "0 0 auto" }} />
+                                      <button type="button" className="tab btn-small" onClick={() => setAssetEditForm((f) => ({ ...f, generatorAtsPhoto: "" }))}>Remove</button>
+                                    </>
+                                  ) : (
+                                    <button type="button" className="tab btn-small" onClick={() => document.getElementById("generator-ats-edit-upload")?.click()}>
+                                      Choose Photo
+                                    </button>
+                                  )
+                                ) : null}
+                              </div>
+                              <div className="tiny">
+                                ATS stays linked as a child component under this generator.
+                              </div>
+                            </div>
                             {assetEditForm.generatorHasAts ? (
                               <input
                                 className="input"
@@ -53779,9 +53882,7 @@ function formatTicketRequestSource(value?: string) {
                                 placeholder="ATS S/N"
                               />
                             ) : (
-                              <div className="tiny" style={{ display: "flex", alignItems: "center" }}>
-                                ATS stays linked as a child component under this generator.
-                              </div>
+                              <div className="tiny" style={{ display: "flex", alignItems: "center" }}>-</div>
                             )}
                           </div>
                         </div>
