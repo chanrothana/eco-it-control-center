@@ -4036,6 +4036,7 @@ function displayLocationName(name: string, lang: "en" | "km") {
     "admin office": "ការិយាល័យរដ្ឋបាល",
     "front office": "ការិយាល័យមុខ",
     "teacher office": "ការិយាល័យគ្រូ",
+    "edc room": "បន្ទប់ EDC",
     "student lunch area": "កន្លែងអាហារថ្ងៃត្រង់សិស្ស",
     "cleaner stock room": "បន្ទប់ស្តុកអ្នកសម្អាត",
     "stock room": "បន្ទប់ស្តុក",
@@ -4050,6 +4051,7 @@ function displayLocationName(name: string, lang: "en" | "km") {
     [/Playground/gi, "ទីលានលេង"],
     [/Gate/gi, "ច្រកទ្វារ"],
     [/Office/gi, "ការិយាល័យ"],
+    [/Room/gi, "បន្ទប់"],
     [/Ground Floor/gi, "ជាន់ផ្ទាល់ដី"],
     [/1st Floor/gi, "ជាន់ទី 1"],
     [/2nd Floor/gi, "ជាន់ទី 2"],
@@ -6142,7 +6144,7 @@ function inventoryLocationLabel(location: string, lang: Lang) {
   if (!raw) return "-";
   if (lang !== "km") return raw;
   const key = raw.toLowerCase();
-  return LOCATION_KM_MAP[key] || raw;
+  return LOCATION_KM_MAP[key] || displayLocationName(raw, lang);
 }
 function normalizeInventoryCompareText(value: string) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -16991,8 +16993,15 @@ export default function App() {
     if (reportInventoryGroupFilter === "ALL") {
       return lang === "km" ? "ឧបករណ៍គ្រប់ប្រភេទ" : "All Tool Categories";
     }
+    if (lang === "km") {
+      if (reportInventoryGroupFilter === "CLEAN_TOOL") return "ឧបករណ៍សម្អាត";
+      if (reportInventoryGroupFilter === "MAINT_TOOL") return "ឧបករណ៍ថែទាំ";
+      if (reportInventoryGroupFilter === "GARDEN_TOOL") return "ឧបករណ៍ថែសួន";
+      if (reportInventoryGroupFilter === "SUPPLY") return "សម្ភារៈសម្អាត";
+      if (reportInventoryGroupFilter === "TONER") return "ទឹកថ្នាំម៉ាស៊ីនបោះពុម្ព";
+    }
     return inventoryBusinessGroupLabel(reportInventoryGroupFilter);
-  }, [lang, reportInventoryGroupFilter]);
+  }, [inventoryBusinessGroupLabel, lang, reportInventoryGroupFilter]);
   const reportInventoryCampusFilterLabel = useMemo(
     () => (reportInventoryCampusFilter === "ALL" ? t.allCampuses : inventoryCampusLabel(reportInventoryCampusFilter)),
     [inventoryCampusLabel, reportInventoryCampusFilter, t.allCampuses]
@@ -43191,11 +43200,11 @@ export default function App() {
           : "-",
       ]);
     } else if (reportType === "asset_by_location") {
-      title = "Asset by Campus and Location Report";
+      title = lang === "km" ? "របាយការណ៍ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" : "Asset by Campus and Location Report";
       columns = ["Campus", "Location", "Total Units", "IT Units", "Safety Units", "Item Breakdown"];
       rows = filteredLocationAssetSummaryRows.map((r) => [
         reportCampusName(r.campus),
-        r.location,
+        reportLocationName(r.location),
         String(r.total),
         String(r.it),
         String(r.safety),
@@ -43214,7 +43223,7 @@ export default function App() {
       ];
       rows = furnitureControlLocationRows.map((row) => [
         reportCampusName(row.campus),
-        row.location,
+        reportLocationName(row.location),
         String(row.currentStudents || 0),
         furnitureQuantitySummaryText(row.chairs, row.chairModels),
         furnitureQuantitySummaryText(row.tables, row.tableModels),
@@ -43223,14 +43232,23 @@ export default function App() {
       ]);
     } else if (reportType === "inventory_balance") {
       title = reportInventoryIsToolGroup
-        ? `${
-            (
-              reportInventoryGroupFilter !== "ALL" &&
-              reportInventoryGroupFilterLabel
-            )
-              ? reportInventoryGroupFilterLabel
-              : "Inventory Tool Balance"
-          } Report_${reportInventoryCampusFilterLabel || "All Campuses"}`
+        ? (
+            lang === "km"
+              ? `របាយការណ៍${(
+                  reportInventoryGroupFilter !== "ALL" &&
+                  reportInventoryGroupFilterLabel
+                )
+                  ? reportInventoryGroupFilterLabel
+                  : "សមតុល្យឧបករណ៍ស្តុក"}_${reportInventoryCampusFilterLabel || t.allCampuses}`
+              : `${
+                  (
+                    reportInventoryGroupFilter !== "ALL" &&
+                    reportInventoryGroupFilterLabel
+                  )
+                    ? reportInventoryGroupFilterLabel
+                    : "Inventory Tool Balance"
+                } Report_${reportInventoryCampusFilterLabel || "All Campuses"}`
+          )
         : (lang === "km" ? "របាយការណ៍សមតុល្យស្តុក" : "Inventory Stock Balance Report");
       columns = visibleInventoryReportColumnDefs.map((column) => column.label);
       rows = reportInventoryRows.map((row) => [
@@ -69659,7 +69677,7 @@ function formatTicketRequestSource(value?: string) {
                         <article key={`report-loc-mobile-${row.campus}-${row.location}`} className="report-card report-location-card">
                           <div className="report-location-card-head">
                             <div className="report-location-card-title">
-                              <strong>{row.location}</strong>
+                              <strong>{reportLocationName(row.location)}</strong>
                               <span>{reportCampusName(row.campus)}</span>
                             </div>
                             <div className="report-location-card-total">
@@ -69705,7 +69723,7 @@ function formatTicketRequestSource(value?: string) {
                           filteredLocationAssetSummaryRows.map((row) => (
                             <tr key={`report-loc-${row.campus}-${row.location}`}>
                               <td>{reportCampusName(row.campus)}</td>
-                              <td>{row.location}</td>
+                              <td>{reportLocationName(row.location)}</td>
                               <td><strong>{row.total}</strong></td>
                               <td>{row.it}</td>
                               <td>{row.safety}</td>
@@ -69999,7 +70017,7 @@ function formatTicketRequestSource(value?: string) {
                                   <span className="report-card-id">{row.itemCode}</span>
                                   <strong className="report-inventory-mobile-name">{inventoryDisplayName(row.itemName, lang)}</strong>
                                   <p className="report-card-sub">
-                                    {inventoryCampusLabel(row.campus)} • {row.location || "-"}
+                                    {inventoryCampusLabel(row.campus)} • {reportLocationName(row.location || "-")}
                                   </p>
                                 </div>
                                 <div className="report-card-photo">
@@ -74006,7 +74024,7 @@ function formatTicketRequestSource(value?: string) {
                                 : <div className="photo-placeholder">No photo</div>}
                           </div>
                           <div className="location-mobile-title">
-                            <strong>{loc.name}</strong>
+                            <strong>{reportLocationName(loc.name)}</strong>
                             <span>{campusLabel(loc.campus)}</span>
                           </div>
                         </div>
@@ -74046,7 +74064,7 @@ function formatTicketRequestSource(value?: string) {
                       setupLocations.map((loc) => (
                         <tr key={loc.id}>
                           <td>{campusLabel(loc.campus)}</td>
-                          <td>{loc.name}</td>
+                          <td>{reportLocationName(loc.name)}</td>
                           <td>{isClassroomLocationLike(loc) ? "Classroom" : "General"}</td>
                           <td>
                             {String(loc.photo || "").trim()
@@ -76253,7 +76271,7 @@ function formatTicketRequestSource(value?: string) {
                     <option value="ALL">{lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}</option>
                     {scheduleQuickFilterLocationOptions.map((location) => (
                       <option key={`quick-schedule-location-${location}`} value={location}>
-                        {location}
+                        {reportLocationName(location)}
                       </option>
                     ))}
                   </select>
@@ -76542,7 +76560,7 @@ function formatTicketRequestSource(value?: string) {
                               <div>{assetItemName(asset.category, asset.type, asset.pcType || "")}</div>
                               <div>{t.campus}: {campusLabel(asset.campus)}</div>
                               <div>{t.category}: {asset.category}</div>
-                              <div>{t.location}: {asset.location || "-"}</div>
+                              <div>{t.location}: {reportLocationName(asset.location || "-")}</div>
                               <div>{t.user}: {asset.assignedTo || "-"}</div>
                             </div>
                           </div>
@@ -76575,7 +76593,7 @@ function formatTicketRequestSource(value?: string) {
                             <td>{campusLabel(asset.campus)}</td>
                             <td>{asset.category}</td>
                             <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
-                            <td>{asset.location || "-"}</td>
+                            <td>{reportLocationName(asset.location || "-")}</td>
                             <td>{asset.assignedTo || "-"}</td>
                             <td>{assetStatusLabel(asset.status || "-")}</td>
                           </tr>
@@ -76659,7 +76677,7 @@ function formatTicketRequestSource(value?: string) {
                     )}
                   </div>
                   <div>
-                    <h2>{classroomDetailRoom.location}</h2>
+                    <h2>{reportLocationName(classroomDetailRoom.location)}</h2>
                     <div className="tiny">
                       {campusLabel(classroomDetailRoom.campus)} | {lang === "km" ? "សិស្ស" : "Students"}: {classroomDetailRoom.currentStudents} | {classroomDetailRoom.status}
                     </div>

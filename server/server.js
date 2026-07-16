@@ -381,7 +381,7 @@ const TYPE_CODES = {
     "FGP",
   ],
   SAFETY: ["FE", "SD", "EL", "FB", "FCP"],
-  FACILITY: ["AC", "FAN", "WFN", "CFN", "EFN", "SFN", "RFG", "MWV", "OVG", "WCL", "WDP", "WTK", "RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "KPN"],
+  FACILITY: ["AC", "GNR", "ATS", "FAN", "WFN", "CFN", "EFN", "SFN", "RFG", "MWV", "OVG", "WCL", "WDP", "WTK", "RMT", "FPN", "RPN", "KPS", "KPA", "TBL", "CHR", "PNO", "KPN"],
   FURNITURE: ["TBL", "CHR", "DSK", "CAB", "NBD"],
 };
 const TYPE_LABELS = {
@@ -417,6 +417,8 @@ const TYPE_LABELS = {
   FB: "Fire Bell",
   FCP: "Fire Control Panel",
   AC: "Air Conditioner",
+  GNR: "Generator",
+  ATS: "Automatic Transfer Switch",
   FAN: "Fan",
   WFN: "Wall Fan",
   CFN: "Ceiling Fan",
