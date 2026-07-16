@@ -11311,7 +11311,7 @@ export default function App() {
   const [reportSchoolKeyDateTo, setReportSchoolKeyDateTo] = useState(() => toYmd(new Date()));
   const [reportMaintenanceCampusFilter, setReportMaintenanceCampusFilter] = useState("ALL");
   const [reportMaintenanceCategoryFilter, setReportMaintenanceCategoryFilter] = useState("ALL");
-  const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState("ALL");
+  const [reportMaintenanceItemFilter, setReportMaintenanceItemFilter] = useState<string[]>(["ALL"]);
   const [reportIncludePreparedBySignature, setReportIncludePreparedBySignature] = useState(false);
   const [reportShowSignatureMeta, setReportShowSignatureMeta] = useState(true);
   const [reportPreparedByName, setReportPreparedByName] = useState("");
@@ -11330,7 +11330,7 @@ export default function App() {
   const [reportEdApprovalPosition, setReportEdApprovalPosition] = useState("");
   const [reportEdApprovalDate, setReportEdApprovalDate] = useState("");
   const [maintenanceReportShowPendingDetails, setMaintenanceReportShowPendingDetails] = useState(true);
-  const [maintenanceQuickTemplate, setMaintenanceQuickTemplate] = useState<MaintenanceQuickTemplateKey>("manual");
+  const [maintenanceQuickTemplate, setMaintenanceQuickTemplate] = useState<MaintenanceQuickTemplateKey>("safety_maintenance");
   const [maintenanceReportNote, setMaintenanceReportNote] = useState("");
   const [reportAssetIdFilter, setReportAssetIdFilter] = useState("");
   const [maintenanceReportVisibleColumns, setMaintenanceReportVisibleColumns] = useState<MaintenanceReportColumnKey[]>([
@@ -38776,38 +38776,12 @@ export default function App() {
     () =>
       lang === "km"
         ? [
-            { value: "manual", label: "ជ្រើសដោយដៃ" },
-            { value: "aircon_cleaning", label: "ED Quick: សម្អាតម៉ាស៊ីនត្រជាក់ប្រចាំខែ" },
-            { value: "computer_service", label: "ED Quick: កំណត់ត្រាកុំព្យូទ័រ" },
-            { value: "laptop_service", label: "ED Quick: កំណត់ត្រាឡេបថប" },
-            { value: "ipad_service", label: "ED Quick: កំណត់ត្រា iPad / Tablet" },
-            { value: "tv_service", label: "ED Quick: កំណត់ត្រា TV" },
-            { value: "walkie_service", label: "ED Quick: កំណត់ត្រាវិទ្យុទាក់ទង" },
-            { value: "it_maintenance", label: "ED Quick: ថែទាំ IT ទាំងអស់" },
-            { value: "facility_maintenance", label: "ED Quick: ថែទាំ Facility ទាំងអស់" },
             { value: "safety_maintenance", label: "ED Quick: ថែទាំសុវត្ថិភាពទាំងអស់" },
-            { value: "fire_extinguisher_service", label: "ED Quick: កំណត់ត្រាបំពង់ពន្លត់អគ្គិភ័យ" },
-            { value: "smoke_detector_service", label: "ED Quick: កំណត់ត្រាឧបករណ៍ចាប់ផ្សែង" },
-            { value: "emergency_light_service", label: "ED Quick: កំណត់ត្រាភ្លើងអាសន្ន" },
-            { value: "fire_bell_service", label: "ED Quick: កំណត់ត្រាកណ្តឹងអគ្គិភ័យ" },
-            { value: "fire_control_panel_service", label: "ED Quick: កំណត់ត្រាផ្ទាំងបញ្ជាអគ្គិភ័យ" },
+            { value: "manual", label: "ផ្សេងទៀត / ជ្រើសដោយដៃ (Computer, Air-Con...)" },
           ]
         : [
-            { value: "manual", label: "Manual / Custom" },
-            { value: "aircon_cleaning", label: "ED Quick: Air-Con Cleaning" },
-            { value: "computer_service", label: "ED Quick: Computer Records" },
-            { value: "laptop_service", label: "ED Quick: Laptop Records" },
-            { value: "ipad_service", label: "ED Quick: iPad / Tablet Records" },
-            { value: "tv_service", label: "ED Quick: TV Records" },
-            { value: "walkie_service", label: "ED Quick: Walkie Records" },
-            { value: "it_maintenance", label: "ED Quick: All IT Maintenance" },
-            { value: "facility_maintenance", label: "ED Quick: All Facility Maintenance" },
             { value: "safety_maintenance", label: "ED Quick: All Safety Maintenance" },
-            { value: "fire_extinguisher_service", label: "ED Quick: Fire Extinguisher Records" },
-            { value: "smoke_detector_service", label: "ED Quick: Smoke Detector Records" },
-            { value: "emergency_light_service", label: "ED Quick: Emergency Light Records" },
-            { value: "fire_bell_service", label: "ED Quick: Fire Bell Records" },
-            { value: "fire_control_panel_service", label: "ED Quick: Fire Control Panel Records" },
+            { value: "manual", label: "Other / Manual (Computer, Air-Con...)" },
           ],
     [lang]
   );
@@ -38928,12 +38902,12 @@ export default function App() {
       setMaintenanceReportExpandedRows({});
       if (template === "manual") {
         setReportMaintenanceCategoryFilter("ALL");
-        setReportMaintenanceItemFilter("ALL");
+        setReportMaintenanceItemFilter(["ALL"]);
         return;
       }
       if (template === "aircon_cleaning") {
         setReportMaintenanceCategoryFilter("FACILITY");
-        setReportMaintenanceItemFilter("ALL");
+        setReportMaintenanceItemFilter(["ALL"]);
         return;
       }
       if (
@@ -38944,46 +38918,46 @@ export default function App() {
         template === "it_maintenance"
       ) {
         setReportMaintenanceCategoryFilter("IT");
-        setReportMaintenanceItemFilter("ALL");
+        setReportMaintenanceItemFilter(["ALL"]);
         return;
       }
       if (template === "walkie_service" || template === "facility_maintenance") {
         setReportMaintenanceCategoryFilter("FACILITY");
-        setReportMaintenanceItemFilter("ALL");
+        setReportMaintenanceItemFilter(["ALL"]);
         return;
       }
       if (template === "safety_maintenance") {
         setReportMaintenanceCategoryFilter("SAFETY");
-        setReportMaintenanceItemFilter("ALL");
+        setReportMaintenanceItemFilter(["ALL"]);
         return;
       }
       if (template === "fire_extinguisher_service") {
         setReportMaintenanceCategoryFilter("SAFETY");
-        setReportMaintenanceItemFilter("Fire Extinguisher");
+        setReportMaintenanceItemFilter(["Fire Extinguisher"]);
         return;
       }
       if (template === "smoke_detector_service") {
         setReportMaintenanceCategoryFilter("SAFETY");
-        setReportMaintenanceItemFilter("Smoke Detector");
+        setReportMaintenanceItemFilter(["Smoke Detector"]);
         return;
       }
       if (template === "emergency_light_service") {
         setReportMaintenanceCategoryFilter("SAFETY");
-        setReportMaintenanceItemFilter("Emergency Light");
+        setReportMaintenanceItemFilter(["Emergency Light"]);
         return;
       }
       if (template === "fire_bell_service") {
         setReportMaintenanceCategoryFilter("SAFETY");
-        setReportMaintenanceItemFilter("Fire Bell");
+        setReportMaintenanceItemFilter(["Fire Bell"]);
         return;
       }
       if (template === "fire_control_panel_service") {
         setReportMaintenanceCategoryFilter("SAFETY");
-        setReportMaintenanceItemFilter("Fire Control Panel");
+        setReportMaintenanceItemFilter(["Fire Control Panel"]);
         return;
       }
       setReportMaintenanceCategoryFilter("ALL");
-      setReportMaintenanceItemFilter("ALL");
+      setReportMaintenanceItemFilter(["ALL"]);
     },
     []
   );
@@ -38996,7 +38970,7 @@ export default function App() {
       if (reportDateTo && row.date > reportDateTo) return false;
       if (reportMaintenanceCampusFilter !== "ALL" && row.campus !== reportMaintenanceCampusFilter) return false;
       if (reportMaintenanceCategoryFilter !== "ALL" && row.category !== reportMaintenanceCategoryFilter) return false;
-      if (reportMaintenanceItemFilter !== "ALL" && row.itemName !== reportMaintenanceItemFilter) return false;
+      if (!reportMaintenanceItemFilter.includes("ALL") && !reportMaintenanceItemFilter.includes(row.itemName)) return false;
       if (!maintenanceQuickTemplateMatches(row)) return false;
       return true;
     });
@@ -39017,7 +38991,7 @@ export default function App() {
         if (reportMaintenanceCampusFilter !== "ALL" && asset.campus !== reportMaintenanceCampusFilter) return false;
         if (reportMaintenanceCategoryFilter !== "ALL" && asset.category !== reportMaintenanceCategoryFilter) return false;
         const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
-        if (reportMaintenanceItemFilter !== "ALL" && itemName !== reportMaintenanceItemFilter) return false;
+        if (!reportMaintenanceItemFilter.includes("ALL") && !reportMaintenanceItemFilter.includes(itemName)) return false;
         if (!maintenanceQuickTemplateAssetMatches(asset)) return false;
         return true;
       })
@@ -39091,11 +39065,16 @@ export default function App() {
       )
     ).sort();
   }, [allMaintenanceRows, reportMaintenanceCampusFilter, reportMaintenanceCategoryFilter]);
+  const reportMaintenanceItemFilterValues = useMemo(
+    () => reportMaintenanceItemOptions,
+    [reportMaintenanceItemOptions]
+  );
   useEffect(() => {
-    if (reportMaintenanceItemFilter === "ALL") return;
-    if (!reportMaintenanceItemOptions.includes(reportMaintenanceItemFilter)) {
-      setReportMaintenanceItemFilter("ALL");
-    }
+    if (reportMaintenanceItemFilter.includes("ALL")) return;
+    const validValues = new Set(reportMaintenanceItemOptions);
+    const next = reportMaintenanceItemFilter.filter((value) => validValues.has(value));
+    if (next.length === reportMaintenanceItemFilter.length) return;
+    setReportMaintenanceItemFilter(next.length ? next : ["ALL"]);
   }, [reportMaintenanceItemFilter, reportMaintenanceItemOptions]);
   useEffect(() => {
     setMaintenanceReportExpandedRows((prev) => {
@@ -39138,7 +39117,7 @@ export default function App() {
     const campusText =
       reportMaintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(reportMaintenanceCampusFilter);
     const categoryText = reportMaintenanceCategoryFilter === "ALL" ? t.allCategories : reportMaintenanceCategoryFilter;
-    const itemText = reportMaintenanceItemFilter === "ALL" ? "All Items" : reportMaintenanceItemFilter;
+    const itemText = summarizeMultiFilter(reportMaintenanceItemFilter, "All Items");
     return `${maintenanceQuickTemplateLabel} | ${campusText} | ${categoryText} | ${itemText}`;
   }, [
     maintenanceQuickTemplateLabel,
@@ -39163,7 +39142,7 @@ export default function App() {
         reportMaintenanceCategoryFilter === "ALL" ? t.allCategories : reportMaintenanceCategoryFilter
       }`,
       `${lang === "km" ? "ឈ្មោះ" : "Item"}: ${
-        reportMaintenanceItemFilter === "ALL" ? (lang === "km" ? "ទាំងអស់" : "All Items") : reportMaintenanceItemFilter
+        summarizeMultiFilter(reportMaintenanceItemFilter, lang === "km" ? "ទាំងអស់" : "All Items")
       }`,
       `${lang === "km" ? "រយៈពេល" : "Range"}: ${maintenanceCompletionRangeLabel}`,
     ],
@@ -40550,38 +40529,27 @@ export default function App() {
       ? `បានជ្រើស ${assetMasterStatusFilter.length} ស្ថានភាព`
       : `${assetMasterStatusFilter.length} status selected`;
   const edTemplateOptions = useMemo<Array<{ value: EdAssetTemplate; label: string }>>(
-    () =>
-      lang === "km"
-        ? [
-            { value: "ALL", label: "ED Template: ទាំងអស់" },
-            { value: "computer", label: "Computer List" },
-            { value: "ipad", label: "iPad List" },
-            { value: "speaker", label: "Speaker List" },
-            { value: "tv", label: "TV List" },
-            { value: "aircon", label: "Air-Con List" },
-            { value: "monitor", label: "Monitor List" },
-            { value: "walkie", label: "Walkie Talkie List" },
-            { value: "peripheral", label: "Computer Peripheral List" },
-            { value: "safety", label: "Safety Equipment List" },
-            { value: "fan", label: "Fan List" },
-            { value: "music", label: "Music Equipment List" },
-            { value: "furniture", label: "Furniture List" },
-          ]
-        : [
-            { value: "ALL", label: "ED Template: All Assets" },
-            { value: "computer", label: "Computer List" },
-            { value: "ipad", label: "iPad List" },
-            { value: "speaker", label: "Speaker List" },
-            { value: "tv", label: "TV List" },
-            { value: "aircon", label: "Air-Con List" },
-            { value: "monitor", label: "Monitor List" },
-            { value: "walkie", label: "Walkie Talkie List" },
-            { value: "peripheral", label: "Computer Peripheral List" },
-            { value: "safety", label: "Safety Equipment List" },
-            { value: "fan", label: "Fan List" },
-            { value: "music", label: "Music Equipment List" },
-            { value: "furniture", label: "Furniture List" },
-          ],
+    () => {
+      const allOption =
+        lang === "km"
+          ? { value: "ALL" as EdAssetTemplate, label: "ED Template: ទាំងអស់" }
+          : { value: "ALL" as EdAssetTemplate, label: "ED Template: All Assets" };
+      const options: Array<{ value: EdAssetTemplate; label: string }> = [
+        { value: "computer", label: "Computer List" },
+        { value: "ipad", label: "iPad List" },
+        { value: "speaker", label: "Speaker List" },
+        { value: "tv", label: "TV List" },
+        { value: "aircon", label: "Air-Con List" },
+        { value: "monitor", label: "Monitor List" },
+        { value: "walkie", label: "Walkie Talkie List" },
+        { value: "peripheral", label: "Computer Peripheral List" },
+        { value: "safety", label: "Safety Equipment List" },
+        { value: "fan", label: "Fan List" },
+        { value: "music", label: "Music Equipment List" },
+        { value: "furniture", label: "Furniture List" },
+      ].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+      return [allOption, ...options];
+    },
     [lang]
   );
   const selectedEdTemplateLabel = edTemplateOptions.find((option) => option.value === edAssetTemplate)?.label || "ED Template";
@@ -67429,6 +67397,15 @@ function formatTicketRequestSource(value?: string) {
                     searchPlaceholder={lang === "km" ? "ស្វែងរក Template..." : "Search template..."}
                     emptyText={lang === "km" ? "មិនមាន Template" : "No template found."}
                   />
+                  <div className="tiny" style={{ gridColumn: "1 / -1", marginTop: -6 }}>
+                    {maintenanceQuickTemplate === "manual"
+                      ? (lang === "km"
+                        ? "សម្រាប់ Computer, Laptop, Air-Con និងមុខទំនិញផ្សេងៗ សូមជ្រើស Category និង Item ខាងក្រោម។ អាចជ្រើសបានច្រើន Item។"
+                        : "For Computer, Laptop, Air-Con, and other items, use Category and Item below. You can select multiple items.")
+                      : (lang === "km"
+                        ? "Template នេះផ្តោតលើ Safety Maintenance។ ប្រសិនបើចង់មុខទំនិញផ្សេង សូមប្តូរទៅ ផ្សេងទៀត / ជ្រើសដោយដៃ។"
+                        : "This template focuses on Safety Maintenance. For other items, switch to Other / Manual.")}
+                  </div>
                   <input
                     className="input"
                     type="month"
@@ -67479,7 +67456,7 @@ function formatTicketRequestSource(value?: string) {
                     onChange={(e) => {
                       const next = e.target.value;
                       setReportMaintenanceCategoryFilter(next);
-                      setReportMaintenanceItemFilter("ALL");
+                      setReportMaintenanceItemFilter(["ALL"]);
                     }}
                   >
                     <option value="ALL">{t.allCategories}</option>
@@ -67489,18 +67466,28 @@ function formatTicketRequestSource(value?: string) {
                       </option>
                     ))}
                   </select>
-                  <select
-                    className="input"
-                    value={reportMaintenanceItemFilter}
-                    onChange={(e) => setReportMaintenanceItemFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Items</option>
-                    {reportMaintenanceItemOptions.map((item) => (
-                      <option key={`report-maint-item-${item}`} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableMultiSelectPicker
+                    summary={summarizeMultiFilter(reportMaintenanceItemFilter, lang === "km" ? "គ្រប់ Item" : "All Items")}
+                    options={reportMaintenanceItemOptions.map((item) => ({
+                      value: item,
+                      label: item,
+                    }))}
+                    selectedValues={reportMaintenanceItemFilter}
+                    allOptionLabel={lang === "km" ? "គ្រប់ Item" : "All Items"}
+                    allOptionChecked={reportMaintenanceItemFilter.includes("ALL")}
+                    onToggleAllOption={(checked) =>
+                      setReportMaintenanceItemFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, "ALL", reportMaintenanceItemFilterValues)
+                      )
+                    }
+                    onToggleValue={(value, checked) =>
+                      setReportMaintenanceItemFilter((prev) =>
+                        applyMultiFilterSelection(prev, checked, value, reportMaintenanceItemFilterValues)
+                      )
+                    }
+                    searchPlaceholder={lang === "km" ? "ស្វែងរក Item..." : "Search items..."}
+                    emptyText={lang === "km" ? "មិនមាន Item" : "No items found."}
+                  />
                   <SearchableMultiSelectPicker
                     summary={columnFilterSummary}
                     options={maintenanceReportColumnDefs.map((column) => ({
