@@ -11484,10 +11484,6 @@ export default function App() {
     "owner",
     "status",
     "updated",
-    "link",
-    "recoveryExtra",
-    "password",
-    "note",
   ]);
   const [maintenanceReportExpandedRows, setMaintenanceReportExpandedRows] = useState<Record<string, boolean>>({});
   const [maintenanceReportFiltersCollapsed, setMaintenanceReportFiltersCollapsed] = useState(false);
@@ -41358,6 +41354,17 @@ export default function App() {
     () => vaultReportColumnDefs.filter((column) => vaultReportVisibleColumns.includes(column.key)),
     [vaultReportColumnDefs, vaultReportVisibleColumns]
   );
+  const effectiveVaultReportColumnDefs = useMemo(() => {
+    if (!vaultReportShowSensitive || visibleVaultReportColumnDefs.some((column) => column.key === "password")) {
+      return visibleVaultReportColumnDefs;
+    }
+    const passwordColumn = vaultReportColumnDefs.find((column) => column.key === "password");
+    if (!passwordColumn) return visibleVaultReportColumnDefs;
+    const next = [...visibleVaultReportColumnDefs];
+    const usernameIndex = next.findIndex((column) => column.key === "username");
+    next.splice(usernameIndex >= 0 ? usernameIndex + 1 : next.length, 0, passwordColumn);
+    return next;
+  }, [vaultReportColumnDefs, vaultReportShowSensitive, visibleVaultReportColumnDefs]);
   const updateVaultReportColumnSelection = useCallback((column: VaultReportColumnKey) => {
     setVaultReportVisibleColumns((prev) => {
       const exists = prev.includes(column);
@@ -43392,9 +43399,9 @@ export default function App() {
       ]);
     } else if (reportType === "it_vault") {
       title = "School IT Vault Access and Control Report";
-      columns = visibleVaultReportColumnDefs.map((column) => column.label);
+      columns = effectiveVaultReportColumnDefs.map((column) => column.label);
       rows = vaultReportRowsFiltered.map((row) =>
-        visibleVaultReportColumnDefs.map((column) => vaultReportCellText(row, column.key))
+        effectiveVaultReportColumnDefs.map((column) => vaultReportCellText(row, column.key))
       );
     } else {
       title =
@@ -43491,39 +43498,67 @@ export default function App() {
 
     const buildPreviewColumnWidths = (headers: string[], dataRows: string[][]) => {
       if (!headers.length) return [] as number[];
+      const measureTextForPreview = (value: string) =>
+        String(value || "")
+          .replace(/<br\s*\/?>/gi, " ")
+          .replace(/<[^>]*>/g, " ")
+          .replace(/&nbsp;/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim();
       const weights = headers.map((header, index) => {
         const label = String(header || "").trim().toLowerCase();
-        if (index === 0 && (label === "no." || label === "no" || label === "ល.រ")) return 5;
-        if (label.includes("date")) return 10;
-        if (label.includes("time") || label.includes("ពេលវេលា")) return 8;
-        if (label.includes("asset id")) return 14;
-        if (label.includes("កូដ")) return 11;
-        if (label.includes("រូប")) return 8;
-        if (label.includes("ឈ្មោះ")) return 18;
-        if (label.includes("ទីតាំង")) return 18;
-        if (label.includes("ចំនួន")) return 8;
-        if (label.includes("ឯកតា")) return 7;
-        if (label.includes("ស្ថានភាព")) return 14;
-        if (label.includes("location")) return 18;
-        if (label.includes("maintenance type")) return 14;
-        if (label.includes("work status")) return 12;
-        if (label === "type") return 10;
-        if (label === "status") return 10;
-        if (label === "by") return 9;
-        if (label.includes("campus")) return 13;
-        if (label.includes("staff")) return 12;
-        if (label.includes("assigned")) return 13;
-        if (label.includes("result")) return 11;
-        if (label.includes("ack")) return 8;
-        if (label.includes("condition")) return 16;
-        if (label.includes("reason")) return 20;
-        if (label.includes("remark")) return 22;
-        if (label.includes("note")) return 22;
-        const contentLength = dataRows.reduce((max, row) => {
-          const value = String(row[index] || "").replace(/\s+/g, " ").trim();
-          return Math.max(max, value.length);
+        if (index === 0 && (label === "no." || label === "no" || label === "ល.រ")) return 2.2;
+        if (label.includes("photo") || label.includes("រូប")) return 8;
+        const values = dataRows.map((row) => measureTextForPreview(String(row[index] || ""))).filter(Boolean);
+        const headerLength = measureTextForPreview(header).length;
+        const longestValue = values.reduce((max, value) => Math.max(max, value.length), 0);
+        const longestToken = values.reduce((max, value) => {
+          const tokens = value.split(/[\s/|,_-]+/).filter(Boolean);
+          const tokenLength = tokens.reduce((tokenMax, token) => Math.max(tokenMax, token.length), 0);
+          return Math.max(max, tokenLength);
         }, 0);
-        return Math.min(Math.max(Math.max(header.length, contentLength * 0.55), 8), 18);
+        const averageLength = values.length
+          ? values.reduce((sum, value) => sum + value.length, 0) / values.length
+          : 0;
+
+        let weight = Math.max(
+          headerLength * 1.15,
+          longestValue * 0.88,
+          longestToken * 1.7,
+          averageLength * 1.2,
+          6
+        );
+
+        if (label.includes("date")) weight = Math.max(weight, 10);
+        if (label.includes("time") || label.includes("ពេលវេលា")) weight = Math.max(weight, 8);
+        if (label.includes("asset id") || label.includes("កូដ")) weight = Math.max(weight, 12);
+        if (label.includes("username")) weight = Math.max(weight, 16);
+        if (label.includes("mobile")) weight = Math.max(weight, 14);
+        if (label.includes("account")) weight = Math.max(weight, 18);
+        if (label.includes("password")) weight = Math.max(weight, 20);
+        if (label.includes("owner")) weight = Math.max(weight, 12);
+        if (label.includes("control status") || label.includes("ស្ថានភាព")) weight = Math.max(weight, 14);
+        if (label.includes("updated / review")) weight = Math.max(weight, 12);
+        if (label.includes("ឈ្មោះ")) weight = Math.max(weight, 16);
+        if (label.includes("ទីតាំង") || label.includes("location")) weight = Math.max(weight, 16);
+        if (label.includes("ចំនួន")) weight = Math.max(weight, 8);
+        if (label.includes("ឯកតា")) weight = Math.max(weight, 7);
+        if (label.includes("maintenance type")) weight = Math.max(weight, 14);
+        if (label.includes("work status")) weight = Math.max(weight, 12);
+        if (label === "type") weight = Math.max(weight, 10);
+        if (label === "status") weight = Math.max(weight, 10);
+        if (label === "by") weight = Math.max(weight, 9);
+        if (label.includes("campus")) weight = Math.max(weight, 12);
+        if (label.includes("staff")) weight = Math.max(weight, 12);
+        if (label.includes("assigned")) weight = Math.max(weight, 13);
+        if (label.includes("result")) weight = Math.max(weight, 11);
+        if (label.includes("ack")) weight = Math.max(weight, 8);
+        if (label.includes("condition")) weight = Math.max(weight, 16);
+        if (label.includes("reason")) weight = Math.max(weight, 18);
+        if (label.includes("remark")) weight = Math.max(weight, 20);
+        if (label.includes("note")) weight = Math.max(weight, 20);
+
+        return Math.min(weight, 32);
       });
       const total = weights.reduce((sum, value) => sum + value, 0) || 1;
       return weights.map((value) => (value / total) * 100);
@@ -45115,7 +45150,7 @@ export default function App() {
             font-weight: 700;
           }
           .preview-table-wrap { width: 100%; overflow-x: auto; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; background: #fff; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: auto; background: #fff; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 11px; text-align: left; vertical-align: top; }
           th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
           .preview-report-table th,
@@ -67645,45 +67680,6 @@ function formatTicketRequestSource(value?: string) {
                 ) : null}
               </div>
             </div>
-            {reportType === "it_vault" && (
-              <div className="report-it-vault-masthead">
-                <div className="report-it-vault-brand">
-                  <img src={ECO_LOGO_URL} alt="Eco International School" className="report-it-vault-logo" />
-                  <div className="report-it-vault-brand-copy">
-                    <span>Eco International School</span>
-                    <strong>IT and Facility Control Center</strong>
-                    <h3>School IT Vault Access and Control Report</h3>
-                    <p>Official review report for school web services, communication accounts, CCTV access, WiFi systems, and Telegram logged-in staff devices.</p>
-                  </div>
-                </div>
-                <div className="report-it-vault-meta">
-                  <div className="report-it-vault-meta-card">
-                    <span>Prepared On</span>
-                    <strong>{formatReportSlashLongDate(new Date())}</strong>
-                  </div>
-                  <div className="report-it-vault-meta-card">
-                    <span>Document Type</span>
-                    <strong>Internal Control Report</strong>
-                  </div>
-                  <div className="report-it-vault-meta-card">
-                    <span>Sensitivity</span>
-                    <strong>{vaultReportShowSensitive ? "Sensitive View Enabled" : "Standard Protected View"}</strong>
-                  </div>
-                </div>
-              </div>
-            )}
-            {reportType === "it_vault" && (
-              <div className="report-it-vault-guide">
-                <div className="report-it-vault-guide-card">
-                  <strong>How To Read This Report</strong>
-                  <span>Each row combines account identity, ownership, review status, and access details in one place for faster checking and reporting.</span>
-                </div>
-                <div className="report-it-vault-guide-card">
-                  <strong>Best Use</strong>
-                  <span>Use filters below for section, owner, or control status. Use print when ED needs a formal school report version.</span>
-                </div>
-              </div>
-            )}
             {reportType === "furniture_control" && (
               <div className="stats-grid" style={{ marginBottom: 10 }}>
                 <article className="stat-card">
@@ -67693,26 +67689,6 @@ function formatTicketRequestSource(value?: string) {
                 <article className="stat-card">
                   <div className="stat-label">Classrooms Tracked</div>
                   <div className="stat-value">{furnitureControlGapSummary.rooms}</div>
-                </article>
-              </div>
-            )}
-            {reportType === "it_vault" && (
-              <div className="stats-grid report-it-vault-stats" style={{ marginBottom: 10 }}>
-                <article className="stat-card">
-                  <div className="stat-label">Visible Records</div>
-                  <div className="stat-value">{vaultReportRowsFiltered.length}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">Needs Review</div>
-                  <div className="stat-value">{vaultNeedsReviewItems.length}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">Missing Info</div>
-                  <div className="stat-value">{vaultMissingInfoItems.length}</div>
-                </article>
-                <article className="stat-card">
-                  <div className="stat-label">Telegram Records</div>
-                  <div className="stat-value">{vaultTelegramRecordCount}</div>
                 </article>
               </div>
             )}
@@ -67827,7 +67803,7 @@ function formatTicketRequestSource(value?: string) {
                     {reportType === "maintenance_completion" ? (
                       <div className="tiny report-builder-overview-meta">ED Filter: {maintenanceCompletionFilterLabel}</div>
                     ) : null}
-                    {reportOverviewChips.length ? (
+                    {reportOverviewChips.length && reportType !== "it_vault" ? (
                       <div className="report-builder-active-row">
                         {reportOverviewChips.map((chip) => (
                           <span key={`report-overview-chip-${chip}`} className="report-builder-active-chip">
@@ -67846,13 +67822,23 @@ function formatTicketRequestSource(value?: string) {
                   <div className={`report-builder-actions report-builder-actions-smart ${reportType === "maintenance_completion" ? "report-builder-actions-maintenance" : ""}`}>
                     <div className="report-builder-actions-head">
                       <div className="report-builder-actions-kicker">
-                        {lang === "km" ? "ការគ្រប់គ្រងរបាយការណ៍" : "Report Controls"}
+                        {reportType === "it_vault"
+                          ? (lang === "km" ? "IT Vault Control" : "IT Vault Controls")
+                          : (lang === "km" ? "ការគ្រប់គ្រងរបាយការណ៍" : "Report Controls")}
                       </div>
-                      <strong>{lang === "km" ? "ជ្រើសប្រភេទ និងសកម្មភាព" : "Choose Type and Actions"}</strong>
+                      <strong>
+                        {reportType === "it_vault"
+                          ? (lang === "km" ? "សាមញ្ញ និងច្បាស់" : "Simple and Clear Controls")
+                          : (lang === "km" ? "ជ្រើសប្រភេទ និងសកម្មភាព" : "Choose Type and Actions")}
+                      </strong>
                       <span>
-                        {lang === "km"
-                          ? "ប្តូរប្រភេទរបាយការណ៍ និងគ្រប់គ្រងតម្រងនៅទីនេះ។"
-                          : "Switch report type and manage filters from one place."}
+                        {reportType === "it_vault"
+                          ? (lang === "km"
+                            ? "ស្វែងរក តម្រង និងបោះពុម្ពរបាយការណ៍នៅកន្លែងតែមួយ។"
+                            : "Search, filter, and print the report from one clean control area.")
+                          : (lang === "km"
+                            ? "ប្តូរប្រភេទរបាយការណ៍ និងគ្រប់គ្រងតម្រងនៅទីនេះ។"
+                            : "Switch report type and manage filters from one place.")}
                       </span>
                     </div>
                     <label className="field report-type-field report-type-field-card">
@@ -67882,7 +67868,7 @@ function formatTicketRequestSource(value?: string) {
                         title={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
                       >
                         <Printer size={16} aria-hidden={true} />
-                        {isPhoneView ? <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span> : null}
+                        {isPhoneView || reportType === "it_vault" ? <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span> : null}
                       </button>
                       <button
                         type="button"
@@ -67918,6 +67904,12 @@ function formatTicketRequestSource(value?: string) {
                             {reportMobileFiltersOpen
                               ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
                               : (lang === "km" ? "តម្រង" : "Filters")}
+                          </span>
+                        ) : reportType === "it_vault" ? (
+                          <span>
+                            {reportFiltersCollapsedDesktop
+                              ? (lang === "km" ? "បង្ហាញតម្រង" : "Show Filters")
+                              : (lang === "km" ? "លាក់តម្រង" : "Hide Filters")}
                           </span>
                         ) : reportFiltersCollapsedDesktop ? (
                           <Eye size={16} aria-hidden={true} />
@@ -67962,6 +67954,7 @@ function formatTicketRequestSource(value?: string) {
                           title={lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
                         >
                           <RotateCcw size={16} aria-hidden={true} />
+                          {reportType === "it_vault" ? <span>{lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}</span> : null}
                         </button>
                       ) : null}
                       {isPhoneView ? (
@@ -70889,7 +70882,7 @@ function formatTicketRequestSource(value?: string) {
                             </div>
                           </div>
                           <div className="report-card-meta">
-                            {visibleVaultReportColumnDefs.map((column) => (
+                            {effectiveVaultReportColumnDefs.map((column) => (
                               <div
                                 key={`report-vault-mobile-field-${row.id}-${column.key}`}
                                 className={column.key === "note" ? "report-card-row-wide" : undefined}
@@ -70897,11 +70890,6 @@ function formatTicketRequestSource(value?: string) {
                                 <strong>{column.label}:</strong> {vaultReportCellText(row, column.key)}
                               </div>
                             ))}
-                            <div className="report-card-row-wide">
-                              <button type="button" className="tab btn-small" onClick={() => void copyVaultText(`vault-report-row-${row.id}`, row.reportText)}>
-                                {vaultCopiedEntryId === `vault-report-row-${row.id}` ? "Copied" : "Copy Record"}
-                              </button>
-                            </div>
                           </div>
                         </article>
                       ))
@@ -70925,13 +70913,10 @@ function formatTicketRequestSource(value?: string) {
                               <span className={`report-it-vault-status-badge report-it-vault-status-${String(row.status || "ready").toLowerCase().replace(/\s+/g, "-")}`}>
                                 {row.status || "-"}
                               </span>
-                              <button type="button" className="tab btn-small" onClick={() => void copyVaultText(`vault-report-row-${row.id}`, row.reportText)}>
-                                {vaultCopiedEntryId === `vault-report-row-${row.id}` ? "Copied" : "Copy"}
-                              </button>
                             </div>
                           </div>
                           <div className="report-it-vault-record-grid">
-                            {visibleVaultReportColumnDefs.map((column) => (
+                            {effectiveVaultReportColumnDefs.map((column) => (
                               <div
                                 key={`report-vault-field-${row.id}-${column.key}`}
                                 className={`report-it-vault-record-item ${
