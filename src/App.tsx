@@ -38893,9 +38893,9 @@ export default function App() {
         return true;
       });
     return [...assetRows, ...serviceRows]
-      .filter((row) => !row.completed)
       .sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
         if (a.kind !== b.kind) return a.kind === "service" ? -1 : 1;
         return a.title.localeCompare(b.title);
       });
@@ -63373,41 +63373,6 @@ function formatTicketRequestSource(value?: string) {
             {maintenanceView === "dashboard" && (canAccessMenu("maintenance.history", "maintenance") || canAccessMenu("maintenance.record", "maintenance")) && (
             <>
             <h3 className="section-title">{lang === "km" ? "ផ្ទាំងសង្ខេបថែទាំ" : "Maintenance Dashboard"}</h3>
-            <div className="stats-grid maintenance-dashboard-stats">
-              <button
-                type="button"
-                className={`stat-card stat-card-button ${maintenanceDashboardModal === "overdue" ? "stat-card-selected" : ""}`}
-                onClick={() => setMaintenanceDashboardModal("overdue")}
-              >
-                <div className="stat-label">{lang === "km" ? "លើសកាលកំណត់" : "Overdue"}</div>
-                <div className="stat-value">{maintenanceDashboardSummary.overdue}</div>
-              </button>
-              <button
-                type="button"
-                className={`stat-card stat-card-button ${maintenanceDashboardModal === "upcoming" ? "stat-card-selected" : ""}`}
-                onClick={() => setMaintenanceDashboardModal("upcoming")}
-              >
-                <div className="stat-label">{lang === "km" ? "7 ថ្ងៃបន្ទាប់" : "Next 7 Days"}</div>
-                <div className="stat-value">{maintenanceDashboardSummary.upcoming}</div>
-              </button>
-              <button
-                type="button"
-                className={`stat-card stat-card-button ${maintenanceDashboardModal === "scheduled" ? "stat-card-selected" : ""}`}
-                onClick={() => setMaintenanceDashboardModal("scheduled")}
-              >
-                <div className="stat-label">{lang === "km" ? "កាលវិភាគសរុប" : "Scheduled"}</div>
-                <div className="stat-value">{maintenanceDashboardSummary.scheduled}</div>
-              </button>
-              <button
-                type="button"
-                className={`stat-card stat-card-button ${maintenanceDashboardModal === "done" ? "stat-card-selected" : ""}`}
-                onClick={() => setMaintenanceDashboardModal("done")}
-              >
-                <div className="stat-label">{lang === "km" ? "កំណត់ត្រា Done" : "Done Records"}</div>
-                <div className="stat-value">{maintenanceDashboardSummary.done}</div>
-              </button>
-            </div>
-
             <div className="panel" style={{ marginTop: 12 }}>
               <div className="panel-row">
                 <h3 className="section-title">Maintenance Calendar</h3>

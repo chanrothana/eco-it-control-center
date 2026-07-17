@@ -38,7 +38,7 @@ export default function CalendarGridTemplate({
   headKeyPrefix = "calendar-head",
   dayKeyPrefix = "calendar-day",
 }: CalendarGridTemplateProps) {
-  const baseGridClass = `calendar-grid ${isPhoneView ? "calendar-mobile-fit" : ""}`.trim();
+  const baseGridClass = `calendar-grid calendar-grid-eco ${isPhoneView ? "calendar-mobile-fit" : ""}`.trim();
   const mergedGridClass = `${baseGridClass} ${gridClassName}`.trim();
   return (
     <div className={mergedGridClass}>

@@ -25154,49 +25154,55 @@ tr.row-maint-maintenance:hover td {
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 7px;
+  gap: 8px;
   margin-top: 12px;
 }
 
+.calendar-grid-eco .calendar-day,
 .calendar-day {
   min-height: 58px;
   padding: 8px 10px;
-  border: 1px solid #adc6ea;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #f8fbff, #dfeaf8);
-  color: #1a3556;
+  border: 1px solid rgba(135, 165, 210, 0.52);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f7fbff 0%, #dce8f8 100%);
+  color: #28456f;
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
   text-align: center;
   min-inline-size: 0;
-  box-shadow: 0 8px 18px rgba(18, 37, 64, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 10px 22px rgba(18, 37, 64, 0.12);
 }
 
+.calendar-grid-eco .calendar-head,
 .calendar-head {
   min-height: 36px;
   justify-content: center;
-  background: linear-gradient(180deg, #edf4ff, #dbe8fb);
+  background: linear-gradient(180deg, #ffffff 0%, #edf4ff 100%);
   font-family: var(--font-head);
-  font-weight: 700;
-  color: #456790;
+  font-weight: 800;
+  color: #4c6d98;
 }
 
 .calendar-head-weekend {
   color: #b64b5c;
 }
 
+.calendar-grid-eco .calendar-day small,
 .calendar-day small {
   position: absolute;
   top: 8px;
   right: 8px;
   border-radius: 999px;
-  background: #cfe0f8;
-  color: #355b88;
+  background: rgba(255, 255, 255, 0.94);
+  color: #4d6f98;
   font-size: var(--font-size-xs);
-  font-weight: 700;
-  padding: 2px 7px;
+  font-weight: 800;
+  padding: 2px 8px;
+  box-shadow: 0 3px 8px rgba(22, 39, 66, 0.12);
 }
 
 .calendar-event-tag {
@@ -25213,40 +25219,49 @@ tr.row-maint-maintenance:hover td {
   white-space: nowrap;
 }
 
+.calendar-grid-eco .calendar-out,
 .calendar-out {
-  background: linear-gradient(180deg, #b8c5d8, #9fadc3);
-  border-color: #8fa0b8;
-  color: #eef4fc;
+  background: linear-gradient(180deg, #b9c7da, #a8b6ca);
+  border-color: #91a4bd;
+  color: #e9f2ff;
   opacity: 0.92;
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
+.calendar-grid-eco .calendar-has,
 .calendar-has {
-  border-color: #80a7df;
-  box-shadow: 0 0 0 2px rgba(104, 148, 220, 0.16);
+  border-color: #7fa3de;
+  box-shadow:
+    inset 0 0 0 2px rgba(95, 142, 231, 0.18),
+    0 10px 22px rgba(30, 65, 122, 0.16);
 }
 
+.calendar-grid-eco .calendar-today,
 .calendar-today {
-  border-color: #5b8fe8;
-  background: linear-gradient(180deg, #fafdff, #dbe9ff);
-  box-shadow: inset 0 0 0 2px rgba(91, 143, 232, 0.22), 0 12px 24px rgba(28, 61, 114, 0.12);
+  border-color: #6ccfe2;
+  background: linear-gradient(180deg, #f8feff, #cceff7);
+  box-shadow:
+    inset 0 0 0 2px rgba(41, 192, 214, 0.24),
+    0 12px 24px rgba(26, 97, 116, 0.18);
 }
 
+.calendar-grid-eco .calendar-today::after,
 .calendar-today::after {
   content: "";
   position: absolute;
   top: 8px;
   left: 8px;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
-  background: #e27a38;
+  background: #f28a3a;
 }
 
 .calendar-weekend span {
   color: #b64b5c;
 }
 
+.calendar-grid-eco .calendar-holiday,
 .calendar-holiday {
   background: linear-gradient(180deg, #d5545c, #bf414a);
   border-color: #9f2f39;
@@ -25254,57 +25269,68 @@ tr.row-maint-maintenance:hover td {
   box-shadow: 0 12px 22px rgba(122, 25, 38, 0.22);
 }
 
+.calendar-grid-eco .calendar-holiday span,
 .calendar-holiday span {
   color: #fff !important;
 }
 
+.calendar-grid-eco .calendar-holiday small,
 .calendar-holiday small {
   background: rgba(255, 255, 255, 0.26);
   color: #fff;
 }
 
+.calendar-grid-eco .calendar-holiday-public,
 .calendar-holiday-public {
   background: linear-gradient(180deg, #d5545c, #bf414a);
   border-color: #9f2f39;
   color: #fff;
 }
 
+.calendar-grid-eco .calendar-holiday-break,
 .calendar-holiday-break {
   background: linear-gradient(180deg, #d5545c, #bf414a);
   border-color: #9f2f39;
   color: #fff;
 }
 
+.calendar-grid-eco .calendar-holiday-ptc,
 .calendar-holiday-ptc {
-  background: linear-gradient(180deg, #7ec7d8, #57a9bd);
-  border-color: #3c8ca0;
+  background: linear-gradient(180deg, #f2a44b, #dc7f18);
+  border-color: #b96a12;
   color: #fff;
 }
 
+.calendar-grid-eco .calendar-holiday-term_end,
 .calendar-holiday-term_end {
   background: linear-gradient(180deg, #6ea0ee, #467cd4);
   border-color: #355faa;
   color: #fff;
 }
 
+.calendar-grid-eco .calendar-holiday-term_start,
 .calendar-holiday-term_start {
-  background: linear-gradient(180deg, #7cb0ec, #5a8ed9);
-  border-color: #456fb2;
+  background: linear-gradient(180deg, #68b24f, #4f933e);
+  border-color: #3c752f;
   color: #fff;
 }
 
+.calendar-grid-eco .calendar-holiday-camp,
 .calendar-holiday-camp {
-  background: linear-gradient(180deg, #d7e8ff, #b7d1f5);
-  border-color: #8fb0df;
-  color: #28466f;
+  background: linear-gradient(180deg, #f2ec2e, #d6cf1f);
+  border-color: #b8b112;
+  color: #3b3400;
 }
 
+.calendar-grid-eco .calendar-holiday-celebration,
 .calendar-holiday-celebration {
-  background: linear-gradient(180deg, #8fd7ea, #68bfd8);
-  border-color: #4a9fb8;
+  background: linear-gradient(180deg, #19d7e2, #11aeb8);
+  border-color: #0d8992;
   color: #103b45;
 }
 
+.calendar-grid-eco .calendar-holiday-camp span,
+.calendar-grid-eco .calendar-holiday-celebration span,
 .calendar-holiday-camp span,
 .calendar-holiday-celebration span {
   color: inherit !important;
@@ -25417,10 +25443,21 @@ tr.row-maint-maintenance:hover td {
   visibility: visible;
 }
 
+.calendar-grid-eco .calendar-selected,
 .calendar-selected {
-  border-color: #5e8fe6;
-  background: linear-gradient(180deg, #fafdff, #d6e6ff);
-  box-shadow: inset 0 0 0 2px rgba(94, 143, 230, 0.42), 0 12px 24px rgba(29, 62, 117, 0.16);
+  border-color: #5f8ee7;
+  background: linear-gradient(180deg, #6c97ee, #4778d8);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.18),
+    0 14px 24px rgba(32, 68, 132, 0.24);
+  color: #ffffff;
+}
+
+.calendar-grid-eco .calendar-selected span,
+.calendar-selected span,
+.calendar-grid-eco .calendar-selected small,
+.calendar-selected small {
+  color: #ffffff !important;
 }
 
 .schedule-mobile-card-list {
