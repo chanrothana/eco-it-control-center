@@ -1544,6 +1544,9 @@ type ScheduleCalendarRow =
       modeLabel: string;
       photo: string;
       completed: boolean;
+      statusKind: "completed" | "upcoming" | "overdue";
+      statusLabel: string;
+      lastCompletedDate: string;
       asset: Asset;
     }
   | {
@@ -1558,6 +1561,9 @@ type ScheduleCalendarRow =
       modeLabel: string;
       photo: string;
       completed: boolean;
+      statusKind: "completed" | "upcoming" | "overdue";
+      statusLabel: string;
+      lastCompletedDate: string;
       event: CalendarEvent;
       serviceType: ServiceTaskScheduleType;
     };
@@ -38310,10 +38316,16 @@ export default function App() {
   }, [calendarEvents, calendarEventTypeLabel, isServiceTaskCalendarType, lang, parseServiceScheduleEvent]);
   const scheduleGroupOptions = useMemo(
     () =>
-      Array.from(new Set(scheduleAssets.map((asset) => String(asset.scheduleGroup || "").trim()).filter(Boolean))).sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [scheduleAssets]
+      Array.from(
+        new Set([
+          ...scheduleAssets.map((asset) => String(asset.scheduleGroup || "").trim()),
+          ...calendarEvents
+            .filter((row) => isServiceTaskCalendarType(normalizeCalendarEventType(row.type)))
+            .map((row) => normalizeCalendarEventType(row.type))
+            .filter(Boolean),
+        ].filter(Boolean))
+      ).sort((a, b) => a.localeCompare(b)),
+    [scheduleAssets, calendarEvents, isServiceTaskCalendarType]
   );
   const reportScheduleCampusOptions = useMemo(
     () =>
@@ -38376,6 +38388,42 @@ export default function App() {
       });
     });
     return doneKeys;
+  }, [resolvedAssets]);
+  const latestCompletedAssetMap = useMemo(() => {
+    const map = new Map<string, string>();
+    resolvedAssets.forEach((asset) => {
+      let latest = "";
+      (asset.maintenanceHistory || []).forEach((entry) => {
+        if (String(entry.completion || "") !== "Done") return;
+        const compareDate = String(entry.scheduleSourceDate || entry.date || "").trim();
+        if (!compareDate) return;
+        const displayDate = String(entry.date || compareDate).trim();
+        if (!latest || compareDate > latest) {
+          latest = displayDate;
+        }
+      });
+      if (latest) map.set(String(asset.id), latest);
+    });
+    return map;
+  }, [resolvedAssets]);
+  const latestCompletedServiceMap = useMemo(() => {
+    const map = new Map<string, string>();
+    resolvedAssets.forEach((asset) => {
+      (asset.maintenanceHistory || []).forEach((entry) => {
+        if (String(entry.completion || "") !== "Done") return;
+        const taskId = String(entry.scheduleTaskId || "").trim();
+        if (!taskId || String(entry.scheduleTaskKind || "").trim() !== "service") return;
+        const compareDate = String(entry.scheduleSourceDate || entry.date || "").trim();
+        if (!compareDate) return;
+        const displayDate = String(entry.date || compareDate).trim();
+        const key = `${asset.campus}||${taskId}`;
+        const current = map.get(key) || "";
+        if (!current || compareDate > current) {
+          map.set(key, displayDate);
+        }
+      });
+    });
+    return map;
   }, [resolvedAssets]);
   const reportScheduleCalendarRows = useMemo(() => {
     const [yearText, monthText] = reportScheduleMonth.split("-");
@@ -38842,7 +38890,30 @@ export default function App() {
     });
   }, [scheduleListRows, scheduleListMonthFilter, scheduleListCampusFilter, scheduleListLocationFilter]);
   const filteredScheduleCalendarRows = useMemo<ScheduleCalendarRow[]>(() => {
-    const assetRows: ScheduleCalendarRow[] = filteredScheduleListRows.map((asset) => ({
+    const today = toYmd(new Date());
+    const statusForRow = (date: string, completed: boolean) => {
+      if (completed) {
+        return {
+          statusKind: "completed" as const,
+          statusLabel: lang === "km" ? "បានបញ្ចប់" : "Completed",
+        };
+      }
+      if (date && date < today) {
+        return {
+          statusKind: "overdue" as const,
+          statusLabel: lang === "km" ? "ហួសកំណត់" : "Overdue",
+        };
+      }
+      return {
+        statusKind: "upcoming" as const,
+        statusLabel: lang === "km" ? "កាលវិភាគបន្ទាប់" : "Next Due",
+      };
+    };
+    const assetRows: ScheduleCalendarRow[] = scheduleListRows.map((asset) => ({
+      ...statusForRow(
+        String(asset.nextMaintenanceDate || ""),
+        completedScheduleAssetKeys.has(`${asset.id}||${String(asset.nextMaintenanceDate || "")}`)
+      ),
       id: `asset-${asset.id}`,
       kind: "asset",
       date: String(asset.nextMaintenanceDate || ""),
@@ -38858,13 +38929,16 @@ export default function App() {
       ),
       photo: asset.photo || "",
       completed: completedScheduleAssetKeys.has(`${asset.id}||${String(asset.nextMaintenanceDate || "")}`),
+      lastCompletedDate: latestCompletedAssetMap.get(String(asset.id)) || "",
       asset,
     }));
     const serviceRows: ScheduleCalendarRow[] = calendarEvents
       .filter((row) => isServiceTaskCalendarType(normalizeCalendarEventType(row.type)))
       .map((row) => {
         const parsed = parseServiceScheduleEvent(row);
+        const completed = completedScheduleServiceKeys.has(`${parsed.campus}||${String(row.date || "")}||${String(row.id || "")}`);
         return {
+          ...statusForRow(String(row.date || ""), completed),
           id: `service-${row.id}`,
           kind: "service" as const,
           date: String(row.date || ""),
@@ -38878,18 +38952,14 @@ export default function App() {
           groupLabel: calendarEventTypeLabel(parsed.serviceType),
           modeLabel: normalizeCalendarEventTime(row.time) || (lang === "km" ? "គ្មានម៉ោង" : "No time"),
           photo: "",
-          completed: completedScheduleServiceKeys.has(`${parsed.campus}||${String(row.date || "")}||${String(row.id || "")}`),
+          completed,
+          lastCompletedDate: latestCompletedServiceMap.get(`${parsed.campus}||${String(row.id || "")}`) || "",
           event: row,
           serviceType: parsed.serviceType,
         };
       })
       .filter((row) => {
-        const monthKey = String(row.date || "").slice(0, 7);
-        if (scheduleListMonthFilter !== "ALL" && monthKey !== scheduleListMonthFilter) return false;
-        if (scheduleListCampusFilter !== "ALL" && row.campus !== "ALL" && row.campus !== scheduleListCampusFilter) return false;
-        if (scheduleListCampusFilter !== "ALL" && row.campus === "ALL") return false;
-        if (scheduleListLocationFilter !== "ALL") return false;
-        if (scheduleGroupFilter !== "ALL") return false;
+        if (scheduleGroupFilter !== "ALL" && row.serviceType !== scheduleGroupFilter) return false;
         return true;
       });
     return [...assetRows, ...serviceRows]
@@ -38904,16 +38974,15 @@ export default function App() {
     assetScheduleGroupLabel,
     calendarEvents,
     campusLabel,
-    filteredScheduleListRows,
     lang,
+    latestCompletedAssetMap,
+    latestCompletedServiceMap,
     maintenanceRepeatLabel,
     parseServiceScheduleEvent,
     completedScheduleAssetKeys,
     completedScheduleServiceKeys,
     scheduleGroupFilter,
-    scheduleListCampusFilter,
-    scheduleListLocationFilter,
-    scheduleListMonthFilter,
+    scheduleListRows,
     t.allCampuses,
   ]);
   const scheduleCalendarByDate = useMemo(() => {
@@ -39095,13 +39164,13 @@ export default function App() {
         day: d.getDate(),
         weekday: d.getDay(),
         inMonth: d.getMonth() === month,
-        hasItems: (scheduleByDate.get(ymd) || []).length > 0,
-        itemCount: (scheduleByDate.get(ymd) || []).length,
+        hasItems: (scheduleCalendarByDate.get(ymd) || []).length > 0,
+        itemCount: (scheduleCalendarByDate.get(ymd) || []).length,
         holidayName: holiday.name,
         holidayType: holiday.type,
       };
     });
-  }, [calendarMonth, scheduleByDate, getHolidayEvent]);
+  }, [calendarMonth, scheduleCalendarByDate, getHolidayEvent]);
   const selectedDateItems = useMemo(
     () => scheduleByDate.get(selectedCalendarDate) || [],
     [scheduleByDate, selectedCalendarDate]
@@ -59423,7 +59492,7 @@ function formatTicketRequestSource(value?: string) {
                               ))}
                             </select>
                           </label>
-                          <label className="field quickout-date-field inventory-admin-matrix-date-field inventory-admin-matrix-date-field-start">
+                          <label className="field quickout-date-field eco-date-floating-field inventory-admin-matrix-date-field inventory-admin-matrix-date-field-start">
                             <span>{lang === "km" ? "ចាប់ផ្តើម" : "Start"}</span>
                             <div className="quickout-date-input-wrap">
                               <input
@@ -59443,8 +59512,8 @@ function formatTicketRequestSource(value?: string) {
                               </button>
                             </div>
                             {inventoryAdminMatrixDatePickerOpen === "from" ? (
-                              <div className="quickout-eco-inline-panel">
-                                <div className="quickout-eco-head">
+                              <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+                                <div className="quickout-eco-head maintenance-datetime-eco-head">
                                   <div className="inventory-admin-matrix-date-panel-title">
                                     <strong className="quickout-eco-title">{inventoryAdminMatrixDateMonthLabel}</strong>
                                     <span className="inventory-admin-matrix-date-chip inventory-admin-matrix-date-chip-start">
@@ -59488,7 +59557,7 @@ function formatTicketRequestSource(value?: string) {
                                   isDayDisabled={(d) =>
                                     !d.inMonth || (!isSuperAdmin && (d.ymd < inventoryAdminMatrixMonthBounds.start || d.ymd > inventoryAdminMatrixMonthBounds.end))
                                   }
-                                  gridClassName="quickout-eco-grid"
+                                  gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
                                   renderHolidayTag={(d) =>
                                     d.holidayName ? (
                                       <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
@@ -59502,7 +59571,7 @@ function formatTicketRequestSource(value?: string) {
                               </div>
                             ) : null}
                           </label>
-                          <label className="field quickout-date-field inventory-admin-matrix-date-field inventory-admin-matrix-date-field-end">
+                          <label className="field quickout-date-field eco-date-floating-field inventory-admin-matrix-date-field inventory-admin-matrix-date-field-end">
                             <span>{lang === "km" ? "បញ្ចប់" : "End"}</span>
                             <div className="quickout-date-input-wrap">
                               <input
@@ -59522,8 +59591,8 @@ function formatTicketRequestSource(value?: string) {
                               </button>
                             </div>
                             {inventoryAdminMatrixDatePickerOpen === "to" ? (
-                              <div className="quickout-eco-inline-panel">
-                                <div className="quickout-eco-head">
+                              <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+                                <div className="quickout-eco-head maintenance-datetime-eco-head">
                                   <div className="inventory-admin-matrix-date-panel-title">
                                     <strong className="quickout-eco-title">{inventoryAdminMatrixDateMonthLabel}</strong>
                                     <span className="inventory-admin-matrix-date-chip inventory-admin-matrix-date-chip-end">
@@ -59567,7 +59636,7 @@ function formatTicketRequestSource(value?: string) {
                                   isDayDisabled={(d) =>
                                     !d.inMonth || (!isSuperAdmin && (d.ymd < inventoryAdminMatrixMonthBounds.start || d.ymd > inventoryAdminMatrixMonthBounds.end))
                                   }
-                                  gridClassName="quickout-eco-grid"
+                                  gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
                                   renderHolidayTag={(d) =>
                                     d.holidayName ? (
                                       <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
@@ -61159,7 +61228,7 @@ function formatTicketRequestSource(value?: string) {
                   emptyText={lang === "km" ? "មិនមានប្រភេទទំនិញ" : "No item type found."}
                 />
               </label>
-              <label className="field quickout-date-field" ref={bulkScheduleDateWrapRef}>
+              <label className="field quickout-date-field eco-date-floating-field" ref={bulkScheduleDateWrapRef}>
                 <span>Next Maintenance Date</span>
                 <div className="quickout-date-input-wrap">
                   <input
@@ -61180,8 +61249,8 @@ function formatTicketRequestSource(value?: string) {
                   </button>
                 </div>
                 {bulkScheduleDatePickerOpen ? (
-                  <div className="quickout-eco-inline-panel">
-                    <div className="quickout-eco-head">
+                  <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+                    <div className="quickout-eco-head maintenance-datetime-eco-head">
                       <strong className="quickout-eco-title">{bulkScheduleDateMonthLabel}</strong>
                       <div className="quickout-eco-nav">
                         <button
@@ -61214,7 +61283,7 @@ function formatTicketRequestSource(value?: string) {
                         setBulkScheduleDatePickerOpen(false);
                       }}
                       isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
-                      gridClassName="quickout-eco-grid"
+                      gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
                       renderHolidayTag={(d) =>
                         d.holidayName ? (
                           <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
@@ -61515,7 +61584,7 @@ function formatTicketRequestSource(value?: string) {
                   }}
                 />
               </label>
-              <label className="field quickout-date-field" ref={scheduleDateWrapRef}>
+              <label className="field quickout-date-field eco-date-floating-field" ref={scheduleDateWrapRef}>
                 <span>Next Maintenance Date</span>
                 <div className="quickout-date-input-wrap">
                   <input
@@ -61536,8 +61605,8 @@ function formatTicketRequestSource(value?: string) {
                   </button>
                 </div>
                 {scheduleDatePickerOpen ? (
-                  <div className="quickout-eco-inline-panel">
-                    <div className="quickout-eco-head">
+                  <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+                    <div className="quickout-eco-head maintenance-datetime-eco-head">
                       <strong className="quickout-eco-title">{scheduleDateMonthLabel}</strong>
                       <div className="quickout-eco-nav">
                         <button
@@ -61570,7 +61639,7 @@ function formatTicketRequestSource(value?: string) {
                         setScheduleDatePickerOpen(false);
                       }}
                       isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
-                      gridClassName="quickout-eco-grid"
+                      gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
                       renderHolidayTag={(d) =>
                         d.holidayName ? (
                           <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
@@ -61781,6 +61850,12 @@ function formatTicketRequestSource(value?: string) {
                           </div>
                           <div>{lang === "km" ? "របៀប" : "Mode"}: {row.modeLabel}</div>
                           <div>{t.scheduleNote}: {row.note || "-"}</div>
+                          <div>
+                            <span className={`schedule-status-badge schedule-status-${row.statusKind}`}>{row.statusLabel}</span>
+                          </div>
+                          {row.lastCompletedDate ? (
+                            <div>{lang === "km" ? "បញ្ចប់ចុងក្រោយ" : "Last done"}: {formatDate(row.lastCompletedDate)}</div>
+                          ) : null}
                         </div>
                         <div className="maintenance-schedule-action-row">
                           {row.kind === "asset" || row.campus !== "ALL" ? (
@@ -61842,7 +61917,7 @@ function formatTicketRequestSource(value?: string) {
                         <th>{lang === "km" ? "ធាតុ / កិច្ចការ" : "Item / Task"}</th>
                         <th>{lang === "km" ? "សាខា / ព័ត៌មាន" : "Campus / Details"}</th>
                         <th>{lang === "km" ? "កាលវិភាគ" : "Schedule"}</th>
-                        <th>Schedule Note</th>
+                        <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
                         <th>{t.actions}</th>
                       </tr>
                     </thead>
@@ -61868,8 +61943,18 @@ function formatTicketRequestSource(value?: string) {
                               <div className="maintenance-schedule-cell-subtitle">
                                 {row.kind === "asset" ? row.modeLabel : calendarEventTypeLabel(row.serviceType)}
                               </div>
+                              {row.note ? (
+                                <div className="maintenance-schedule-cell-subtitle">{row.note}</div>
+                              ) : null}
                             </td>
-                            <td>{row.note || "-"}</td>
+                            <td>
+                              <div className={`schedule-status-badge schedule-status-${row.statusKind}`}>{row.statusLabel}</div>
+                              {row.lastCompletedDate ? (
+                                <div className="maintenance-schedule-cell-subtitle">
+                                  {lang === "km" ? "បញ្ចប់ចុងក្រោយ" : "Last done"}: {formatDate(row.lastCompletedDate)}
+                                </div>
+                              ) : null}
+                            </td>
                             <td>
                               <div className="maintenance-schedule-action-row">
                                 {row.kind === "asset" || row.campus !== "ALL" ? (
@@ -61952,6 +62037,12 @@ function formatTicketRequestSource(value?: string) {
                           <div>{lang === "km" ? "ក្រុម" : "Group"}: {row.groupLabel}</div>
                           <div>{lang === "km" ? "របៀប" : "Mode"}: {row.modeLabel}</div>
                           <div>{t.scheduleNote}: {row.note || "-"}</div>
+                          <div>
+                            <span className={`schedule-status-badge schedule-status-${row.statusKind}`}>{row.statusLabel}</span>
+                          </div>
+                          {row.lastCompletedDate ? (
+                            <div>{lang === "km" ? "បញ្ចប់ចុងក្រោយ" : "Last done"}: {formatDate(row.lastCompletedDate)}</div>
+                          ) : null}
                         </div>
                         <div className="maintenance-schedule-action-row">
                           {row.kind === "asset" || row.campus !== "ALL" ? (
@@ -62013,7 +62104,7 @@ function formatTicketRequestSource(value?: string) {
                         <th>{lang === "km" ? "ធាតុ / កិច្ចការ" : "Item / Task"}</th>
                         <th>{lang === "km" ? "សាខា / ព័ត៌មាន" : "Campus / Details"}</th>
                         <th>{lang === "km" ? "កាលវិភាគ" : "Schedule"}</th>
-                        <th>{t.scheduleNote}</th>
+                        <th>{lang === "km" ? "ស្ថានភាព" : "Status"}</th>
                         <th>{t.actions}</th>
                       </tr>
                     </thead>
@@ -62039,8 +62130,18 @@ function formatTicketRequestSource(value?: string) {
                               <div className="maintenance-schedule-cell-subtitle">
                                 {row.kind === "asset" ? row.modeLabel : calendarEventTypeLabel(row.serviceType)}
                               </div>
+                              {row.note ? (
+                                <div className="maintenance-schedule-cell-subtitle">{row.note}</div>
+                              ) : null}
                             </td>
-                            <td>{row.note || "-"}</td>
+                            <td>
+                              <div className={`schedule-status-badge schedule-status-${row.statusKind}`}>{row.statusLabel}</div>
+                              {row.lastCompletedDate ? (
+                                <div className="maintenance-schedule-cell-subtitle">
+                                  {lang === "km" ? "បញ្ចប់ចុងក្រោយ" : "Last done"}: {formatDate(row.lastCompletedDate)}
+                                </div>
+                              ) : null}
+                            </td>
                             <td>
                               <div className="maintenance-schedule-action-row">
                                 {row.kind === "asset" || row.campus !== "ALL" ? (
@@ -62282,7 +62383,7 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 </div>
               </label>
-              <label className="field quickout-date-field" ref={transferDateWrapRef}>
+              <label className="field quickout-date-field eco-date-floating-field" ref={transferDateWrapRef}>
                 <span>Transfer Date</span>
                 <div className="quickout-date-input-wrap">
                   <input
@@ -62302,8 +62403,8 @@ function formatTicketRequestSource(value?: string) {
                   </button>
                 </div>
                 {transferDatePickerOpen ? (
-                  <div className="quickout-eco-inline-panel">
-                    <div className="quickout-eco-head">
+                  <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+                    <div className="quickout-eco-head maintenance-datetime-eco-head">
                       <strong className="quickout-eco-title">{transferDateMonthLabel}</strong>
                       <div className="quickout-eco-nav">
                         <button
@@ -62335,7 +62436,7 @@ function formatTicketRequestSource(value?: string) {
                         setTransferDatePickerOpen(false);
                       }}
                       isDayDisabled={(d) => !d.inMonth}
-                      gridClassName="quickout-eco-grid"
+                      gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
                       renderHolidayTag={(d) =>
                         d.holidayName ? (
                           <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
@@ -63562,79 +63663,84 @@ function formatTicketRequestSource(value?: string) {
                   )}
                 </div>
               ) : (
-                <div className="table-wrap vault-table-wrap maintenance-schedule-table-wrap" style={{ marginTop: 12 }}>
-                  <table className="maintenance-schedule-table">
-                    <thead>
-                      <tr>
-                        <th>{t.assetId}</th>
-                        <th>{t.name}</th>
-                        <th>{t.campus}</th>
-                        <th>{t.location}</th>
-                        <th>{t.date}</th>
-                        <th>{lang === "km" ? "របៀប" : "Mode"}</th>
-                        <th>{t.scheduleNote}</th>
-                        <th>{t.actions}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredScheduleListRows.length ? (
-                        filteredScheduleListRows.map((asset) => (
-                          <tr key={`maintenance-dashboard-schedule-row-${asset.id}`}>
-                            <td><strong>{asset.assetId}</strong></td>
-                            <td>{assetItemName(asset.category, asset.type, asset.pcType || "")}</td>
-                            <td>{campusLabel(asset.campus)}</td>
-                            <td>{asset.location || "-"}</td>
-                            <td>{formatDate(asset.nextMaintenanceDate || "-")}</td>
-                            <td>
+                <div className="maintenance-schedule-desktop-list" style={{ marginTop: 12 }}>
+                  {filteredScheduleListRows.length ? (
+                    filteredScheduleListRows.map((asset) => (
+                      <article key={`maintenance-dashboard-schedule-row-${asset.id}`} className="maintenance-schedule-desktop-card">
+                        <div className="maintenance-schedule-desktop-head">
+                          <div>
+                            <strong className="maintenance-schedule-desktop-id">{asset.assetId}</strong>
+                            <div className="maintenance-schedule-desktop-name">
+                              {assetItemName(asset.category, asset.type, asset.pcType || "")}
+                            </div>
+                          </div>
+                          <div className="maintenance-schedule-desktop-actions">
+                            <button
+                              className="btn-primary btn-small maintenance-schedule-icon-btn"
+                              disabled={!canAccessMenu("maintenance.record", "maintenance")}
+                              onClick={() => openMaintenanceRecordFromScheduleAsset(asset, asset.nextMaintenanceDate || selectedCalendarDate)}
+                              title={lang === "km" ? "កត់ត្រា" : "Record"}
+                              aria-label={lang === "km" ? "កត់ត្រា" : "Record"}
+                            >
+                              <ClipboardList size={16} strokeWidth={2.2} />
+                            </button>
+                            <button
+                              className="tab btn-small maintenance-schedule-icon-btn"
+                              disabled={!isAdmin}
+                              onClick={() => editScheduleForAsset(asset)}
+                              title={lang === "km" ? "កែប្រែ" : "Edit"}
+                              aria-label={lang === "km" ? "កែប្រែ" : "Edit"}
+                            >
+                              <Pencil size={16} strokeWidth={2.2} />
+                            </button>
+                            <button
+                              className="btn-danger maintenance-schedule-icon-btn"
+                              disabled={!isAdmin || busy}
+                              onClick={() => {
+                                void handleScheduleRowAction(asset, "delete");
+                              }}
+                              title={t.delete}
+                              aria-label={t.delete}
+                            >
+                              <Trash2 size={16} strokeWidth={2.2} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="maintenance-schedule-desktop-grid">
+                          <div className="maintenance-schedule-desktop-field">
+                            <span>{t.campus}</span>
+                            <strong>{campusLabel(asset.campus)}</strong>
+                          </div>
+                          <div className="maintenance-schedule-desktop-field">
+                            <span>{t.location}</span>
+                            <strong>{asset.location || "-"}</strong>
+                          </div>
+                          <div className="maintenance-schedule-desktop-field">
+                            <span>{t.date}</span>
+                            <strong>{formatDate(asset.nextMaintenanceDate || "-")}</strong>
+                          </div>
+                          <div className="maintenance-schedule-desktop-field">
+                            <span>{lang === "km" ? "របៀប" : "Mode"}</span>
+                            <strong>
                               {maintenanceRepeatLabel(
                                 String(asset.repeatMode || "NONE"),
                                 Number(asset.repeatWeekOfMonth || 1),
                                 Number(asset.repeatWeekday || 6)
                               )}
-                            </td>
-                            <td>{asset.scheduleNote || "-"}</td>
-                            <td>
-                              <div className="maintenance-schedule-action-stack">
-                                <button
-                                  className="btn-primary btn-small maintenance-schedule-icon-btn"
-                                  disabled={!canAccessMenu("maintenance.record", "maintenance")}
-                                  onClick={() => openMaintenanceRecordFromScheduleAsset(asset, asset.nextMaintenanceDate || selectedCalendarDate)}
-                                  title={lang === "km" ? "កត់ត្រា" : "Record"}
-                                  aria-label={lang === "km" ? "កត់ត្រា" : "Record"}
-                                >
-                                  <ClipboardList size={16} strokeWidth={2.2} />
-                                </button>
-                                <button
-                                  className="tab btn-small maintenance-schedule-icon-btn"
-                                  disabled={!isAdmin}
-                                  onClick={() => editScheduleForAsset(asset)}
-                                  title={lang === "km" ? "កែប្រែ" : "Edit"}
-                                  aria-label={lang === "km" ? "កែប្រែ" : "Edit"}
-                                >
-                                  <Pencil size={16} strokeWidth={2.2} />
-                                </button>
-                                <button
-                                  className="btn-danger maintenance-schedule-icon-btn"
-                                  disabled={!isAdmin || busy}
-                                  onClick={() => {
-                                    void handleScheduleRowAction(asset, "delete");
-                                  }}
-                                  title={t.delete}
-                                  aria-label={t.delete}
-                                >
-                                  <Trash2 size={16} strokeWidth={2.2} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={8}>{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                            </strong>
+                          </div>
+                        </div>
+
+                        <div className="maintenance-schedule-desktop-note">
+                          <span>{t.scheduleNote}</span>
+                          <strong>{asset.scheduleNote || "-"}</strong>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="panel-note">{lang === "km" ? "មិនមានកាលវិភាគ" : "No schedules found."}</div>
+                  )}
                 </div>
               )}
             </div>
@@ -64097,7 +64203,7 @@ function formatTicketRequestSource(value?: string) {
                       </button>
                     </div>
                     {maintenanceRecordDatePickerOpen ? (
-                      <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel">
+                      <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
                         <div className="quickout-eco-head maintenance-datetime-eco-head">
                           <strong className="quickout-eco-title">{lang === "km" ? "Eco Calendar View" : "Eco Calendar View"}</strong>
                           <div className="quickout-eco-nav">
@@ -64606,16 +64712,16 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 </div>
               ) : null}
-              <div className="maintenance-record-inline-triple field-wide">
-                <div className="field quickout-date-field" ref={maintenanceRecordDateWrapRef}>
-                  <span>{t.date}</span>
+              <div className="maintenance-record-inline-five field-wide">
+                <div className="field quickout-date-field eco-date-floating-field maintenance-record-datetime-field" ref={maintenanceRecordDateWrapRef}>
+                  <span>{lang === "km" ? "កាលបរិច្ឆេទ និងម៉ោង" : "Date & Time"}</span>
                   <div className="quickout-date-input-wrap">
                     <input
                       className="input"
                       type="text"
                       readOnly
-                      value={maintenanceRecordDisplayDate}
-                      placeholder="dd/mm/yyyy"
+                      value={maintenanceRecordDisplayDateTime}
+                      placeholder="dd/mm/yyyy, hh:mm"
                     />
                     <button
                       type="button"
@@ -64627,8 +64733,8 @@ function formatTicketRequestSource(value?: string) {
                     </button>
                   </div>
                   {maintenanceRecordDatePickerOpen ? (
-                    <div className="quickout-eco-inline-panel">
-                      <div className="quickout-eco-head">
+                    <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+                      <div className="quickout-eco-head maintenance-datetime-eco-head">
                         <strong className="quickout-eco-title">{maintenanceRecordDateMonthLabel}</strong>
                         <div className="quickout-eco-nav">
                           <button
@@ -64665,7 +64771,7 @@ function formatTicketRequestSource(value?: string) {
                           setMaintenanceRecordDatePickerOpen(false);
                         }}
                         isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
-                        gridClassName="quickout-eco-grid"
+                        gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
                         renderHolidayTag={(d) =>
                           d.holidayName ? (
                             <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
@@ -64676,18 +64782,18 @@ function formatTicketRequestSource(value?: string) {
                         headKeyPrefix="maintenance-record-date-head"
                         dayKeyPrefix="maintenance-record-date-day"
                       />
+                      <label className="field maintenance-datetime-eco-time">
+                        <span>{lang === "km" ? "ម៉ោង" : "Time"}</span>
+                        <input
+                          className="input"
+                          type="time"
+                          value={maintenanceRecordForm.time || "00:00"}
+                          onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, time: e.target.value }))}
+                        />
+                      </label>
                     </div>
                   ) : null}
                 </div>
-                <label className="field">
-                  <span>{lang === "km" ? "ម៉ោង" : "Time"}</span>
-                  <input
-                    className="input"
-                    type="time"
-                    value={maintenanceRecordForm.time || "00:00"}
-                    onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, time: e.target.value }))}
-                  />
-                </label>
                 <label className="field">
                   <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
                   <LocationPicker
@@ -64718,8 +64824,6 @@ function formatTicketRequestSource(value?: string) {
                       ))}
                   </select>
                 </label>
-              </div>
-              <div className="maintenance-record-review-row field-wide">
                 <label className="field">
                   <span>{lang === "km" ? "ដោយ" : "By"}</span>
                   <input
@@ -64727,11 +64831,6 @@ function formatTicketRequestSource(value?: string) {
                     value={maintenanceRecordForm.by}
                     onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, by: e.target.value }))}
                   />
-                  <div className="tiny">
-                    {lang === "km"
-                      ? "បំពេញស្វ័យប្រវត្តិតាមអ្នកចូលប្រើ ប៉ុន្តែអាចកែឈ្មោះបាន។"
-                      : "Auto-filled from login user, but you can change the name."}
-                  </div>
                 </label>
                 <label className="field">
                   <span>{lang === "km" ? "ត្រួតពិនិត្យដោយ" : "Checked By"}</span>
@@ -64742,6 +64841,11 @@ function formatTicketRequestSource(value?: string) {
                     placeholder={lang === "km" ? "ឈ្មោះអ្នកត្រួតពិនិត្យ" : "Supervisor / checker name"}
                   />
                 </label>
+              </div>
+              <div className="tiny maintenance-record-inline-note">
+                {lang === "km"
+                  ? "ដោយ: បំពេញស្វ័យប្រវត្តិតាមអ្នកចូលប្រើ ប៉ុន្តែអាចកែឈ្មោះបាន។"
+                  : "By: auto-filled from login user, but you can change the name."}
               </div>
               {renderMaintenanceWorkflowSection()}
               <div className="field field-wide maintenance-quick-photo-pair">
@@ -76542,7 +76646,7 @@ function formatTicketRequestSource(value?: string) {
                         </button>
                       </div>
                     </div>
-                    <label className="field quickout-date-field" ref={quickOutEcoWrapRef}>
+                    <label className="field quickout-date-field eco-date-floating-field" ref={quickOutEcoWrapRef}>
                       <span>{t.date}</span>
                       <div className="quickout-date-input-wrap">
                         <input
@@ -76572,8 +76676,8 @@ function formatTicketRequestSource(value?: string) {
                         <small className="tiny inventory-quickout-date-badge">{quickOutDateBadge}</small>
                       ) : null}
                       {quickOutEcoPickerOpen ? (
-                        <div className="quickout-eco-inline-panel">
-                          <div className="quickout-eco-head">
+                        <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+                          <div className="quickout-eco-head maintenance-datetime-eco-head">
                             <strong className="quickout-eco-title">
                               {quickOutEcoMonthLabel}
                             </strong>
@@ -76599,7 +76703,7 @@ function formatTicketRequestSource(value?: string) {
                               </button>
                             </div>
                           </div>
-                          <div className="calendar-grid quickout-eco-grid">
+                          <div className="calendar-grid quickout-eco-grid maintenance-datetime-eco-grid">
                             {quickOutEcoGridDays.map((d) => (
                               <button
                                 key={`quickout-eco-day-${d.ymd}`}
@@ -76806,16 +76910,16 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                       </div>
                       <div className="form-grid schedule-maintenance-modal-grid">
-                        <div className="maintenance-record-inline-triple field-wide">
-                          <div className="field quickout-date-field" ref={maintenanceRecordDateWrapRef}>
-                            <span>{t.date}</span>
+                        <div className="maintenance-record-inline-five field-wide">
+                          <div className="field quickout-date-field eco-date-floating-field maintenance-record-datetime-field" ref={maintenanceRecordDateWrapRef}>
+                            <span>{lang === "km" ? "កាលបរិច្ឆេទ និងម៉ោង" : "Date & Time"}</span>
                             <div className="quickout-date-input-wrap">
                               <input
                                 className="input"
                                 type="text"
                                 readOnly
-                                value={maintenanceRecordDisplayDate}
-                                placeholder="dd/mm/yyyy"
+                                value={maintenanceRecordDisplayDateTime}
+                                placeholder="dd/mm/yyyy, hh:mm"
                               />
                               <button
                                 type="button"
@@ -76827,8 +76931,8 @@ function formatTicketRequestSource(value?: string) {
                               </button>
                             </div>
                             {maintenanceRecordDatePickerOpen ? (
-                              <div className="quickout-eco-inline-panel">
-                                <div className="quickout-eco-head">
+                              <div className="quickout-eco-inline-panel maintenance-datetime-eco-panel eco-date-floating-panel">
+                                <div className="quickout-eco-head maintenance-datetime-eco-head">
                                   <strong className="quickout-eco-title">{maintenanceRecordDateMonthLabel}</strong>
                                   <div className="quickout-eco-nav">
                                     <button
@@ -76865,7 +76969,7 @@ function formatTicketRequestSource(value?: string) {
                                     setMaintenanceRecordDatePickerOpen(false);
                                   }}
                                   isDayDisabled={(d) => !d.inMonth || (!isSuperAdmin && d.ymd < todayYmd)}
-                                  gridClassName="quickout-eco-grid"
+                                  gridClassName="quickout-eco-grid maintenance-datetime-eco-grid"
                                   renderHolidayTag={(d) =>
                                     d.holidayName ? (
                                       <em className={`calendar-event-tag calendar-type-${normalizeCalendarEventType(d.holidayType)}`}>
@@ -76876,18 +76980,18 @@ function formatTicketRequestSource(value?: string) {
                                   headKeyPrefix="schedule-modal-maintenance-date-head"
                                   dayKeyPrefix="schedule-modal-maintenance-date-day"
                                 />
+                              <label className="field maintenance-datetime-eco-time">
+                                <span>{lang === "km" ? "ម៉ោង" : "Time"}</span>
+                                <input
+                                  className="input"
+                                  type="time"
+                                  value={maintenanceRecordForm.time || "00:00"}
+                                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, time: e.target.value }))}
+                                />
+                              </label>
                               </div>
                             ) : null}
                           </div>
-                          <label className="field">
-                            <span>{lang === "km" ? "ម៉ោង" : "Time"}</span>
-                            <input
-                              className="input"
-                              type="time"
-                              value={maintenanceRecordForm.time || "00:00"}
-                              onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, time: e.target.value }))}
-                            />
-                          </label>
                           <label className="field">
                             <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
                             <LocationPicker
@@ -76918,8 +77022,6 @@ function formatTicketRequestSource(value?: string) {
                               ))}
                             </select>
                           </label>
-                        </div>
-                        <div className="schedule-maintenance-modal-meta-row field-wide">
                           <label className="field">
                             <span>{lang === "km" ? "ដោយ" : "By"}</span>
                             <input
@@ -76937,6 +77039,12 @@ function formatTicketRequestSource(value?: string) {
                               placeholder={lang === "km" ? "ឈ្មោះអ្នកត្រួតពិនិត្យ" : "Supervisor / checker name"}
                             />
                           </label>
+                        </div>
+                        <div className="tiny maintenance-record-inline-note field-wide">
+                          {lang === "km"
+                            ? "ដោយ: បំពេញស្វ័យប្រវត្តិតាមអ្នកចូលប្រើ ប៉ុន្តែអាចកែឈ្មោះបាន។"
+                            : "By: auto-filled from login user, but you can change the name."}
+                        </div>
                         <div className="field">
                           <span>{maintenanceRecordSelectedAsset ? (lang === "km" ? "Asset Snapshot" : "Asset Snapshot") : (lang === "km" ? "Task Snapshot" : "Task Snapshot")}</span>
                           <div className="panel-note schedule-maintenance-modal-asset-snapshot">
@@ -76966,7 +77074,6 @@ function formatTicketRequestSource(value?: string) {
                                 </>
                               )}
                             </div>
-                          </div>
                         </div>
                         {maintenanceRecordSelectedAsset ? (
                           <div className="field field-wide">
