@@ -547,7 +547,21 @@ function countDbRows(db) {
     inventoryItems: Array.isArray(settings.inventoryItems) ? settings.inventoryItems.length : 0,
     inventoryTxns: Array.isArray(settings.inventoryTxns) ? settings.inventoryTxns.length : 0,
     toolReviewReports: Array.isArray(settings.toolReviewReports) ? settings.toolReviewReports.length : 0,
+    rentalPrinters: Array.isArray(settings.rentalPrinters) ? settings.rentalPrinters.length : 0,
+    rentalPrinterCounters: Array.isArray(settings.rentalPrinterCounters) ? settings.rentalPrinterCounters.length : 0,
+    rentalPrinterCounterResets: Array.isArray(settings.rentalPrinterCounterResets) ? settings.rentalPrinterCounterResets.length : 0,
   };
+}
+
+function settingsRecoveryScore(counts) {
+  return (
+    counts.inventoryItems * 1000 +
+    counts.inventoryTxns * 10 +
+    counts.toolReviewReports * 50 +
+    counts.rentalPrinters * 800 +
+    counts.rentalPrinterCounters * 25 +
+    counts.rentalPrinterCounterResets * 5
+  );
 }
 
 function dbScore(db) {
@@ -561,6 +575,9 @@ function dbScore(db) {
     counts.inventoryItems * 300 +
     counts.inventoryTxns * 5 +
     counts.toolReviewReports * 25 +
+    counts.rentalPrinters * 200 +
+    counts.rentalPrinterCounters * 8 +
+    counts.rentalPrinterCounterResets * 2 +
     counts.authSessions +
     counts.notifications
   );
@@ -576,17 +593,198 @@ function looksLikeDataLoss(db) {
 function hasRecoverableInventoryGap(currentDb, candidateDb) {
   const current = countDbRows(currentDb);
   const candidate = countDbRows(candidateDb);
-  const currentInventoryScore =
-    current.inventoryItems * 1000 +
-    current.inventoryTxns * 10 +
-    current.toolReviewReports * 50;
-  const candidateInventoryScore =
-    candidate.inventoryItems * 1000 +
-    candidate.inventoryTxns * 10 +
-    candidate.toolReviewReports * 50;
-  const currentInventoryLooksEmpty = current.inventoryItems === 0 && current.inventoryTxns === 0;
-  const candidateHasInventoryData = candidate.inventoryItems > 0 || candidate.inventoryTxns > 0;
-  return currentInventoryLooksEmpty && candidateHasInventoryData && candidateInventoryScore > currentInventoryScore;
+  const currentSettingsScore = settingsRecoveryScore(current);
+  const candidateSettingsScore = settingsRecoveryScore(candidate);
+  const currentMissingInventory = current.inventoryItems === 0 || current.inventoryTxns === 0;
+  const currentMissingRentalPrinters = current.rentalPrinters === 0;
+  const currentMissingRentalCounters = current.rentalPrinterCounters === 0;
+  const candidateHasRecoverableData =
+    candidate.inventoryItems > 0 ||
+    candidate.inventoryTxns > 0 ||
+    candidate.rentalPrinters > 0 ||
+    candidate.rentalPrinterCounters > 0 ||
+    candidate.rentalPrinterCounterResets > 0;
+  return (
+    (currentMissingInventory || currentMissingRentalPrinters || currentMissingRentalCounters) &&
+    candidateHasRecoverableData &&
+    candidateSettingsScore > currentSettingsScore
+  );
+}
+
+function countInventoryItemCategories(db) {
+  const safe = normalizeImportedDb(db);
+  const settings =
+    safe.settings && typeof safe.settings === "object" && !Array.isArray(safe.settings)
+      ? safe.settings
+      : {};
+  const items = Array.isArray(settings.inventoryItems) ? settings.inventoryItems : [];
+  const counts = {};
+  for (const row of items) {
+    const category = toUpper(row && row.category);
+    if (!category) continue;
+    counts[category] = (counts[category] || 0) + 1;
+  }
+  return counts;
+}
+
+function inventoryItemMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const itemCode = toUpper(row && row.itemCode);
+  const campus = toUpper(row && row.campus);
+  if (itemCode || campus) keys.push(`code:${itemCode}|campus:${campus}`);
+  return keys;
+}
+
+function inventoryTxnMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const itemId = Number(row && row.itemId);
+  const itemCode = toUpper(row && row.itemCode);
+  const date = toText(row && row.date);
+  const type = toUpper(row && row.type);
+  const qty = Number(row && row.qty);
+  const by = toText(row && row.by).trim().toLowerCase();
+  const note = toText(row && row.note).trim().toLowerCase();
+  keys.push(`sig:${itemId}|${itemCode}|${date}|${type}|${qty}|${by}|${note}`);
+  return keys;
+}
+
+function toolReviewReportMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const itemId = Number(row && row.itemId);
+  const month = toText(row && row.month);
+  if (itemId > 0 || month) keys.push(`item:${itemId}|month:${month}`);
+  return keys;
+}
+
+function rentalPrinterMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const machineCode = toUpper(row && row.machineCode);
+  if (machineCode) keys.push(`machine:${machineCode}`);
+  const vendor = toUpper(row && row.vendor);
+  const machineName = toText(row && row.machineName).trim().toLowerCase();
+  if (vendor || machineName) keys.push(`vendor:${vendor}|name:${machineName}`);
+  return keys;
+}
+
+function rentalPrinterCounterMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const rentalPrinterId = Number(row && row.rentalPrinterId);
+  const machineCode = toUpper(row && row.machineCode);
+  const billingMonth = toText(row && row.billingMonth);
+  const readingDate = toText(row && row.readingDate);
+  const currentMono = Number(row && row.currentMono);
+  const currentColor = Number(row && row.currentColor);
+  keys.push(`sig:${rentalPrinterId}|${machineCode}|${billingMonth}|${readingDate}|${currentMono}|${currentColor}`);
+  return keys;
+}
+
+function rentalPrinterCounterResetMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const rentalPrinterId = Number(row && row.rentalPrinterId);
+  const machineCode = toUpper(row && row.machineCode);
+  const date = toText(row && row.date);
+  const resetMono = Number(row && row.resetMono);
+  const resetColor = Number(row && row.resetColor);
+  keys.push(`sig:${rentalPrinterId}|${machineCode}|${date}|${resetMono}|${resetColor}`);
+  return keys;
+}
+
+function mergeUniqueRows(currentRows, candidateRows, buildKeys) {
+  const existing = new Set();
+  const merged = Array.isArray(currentRows) ? [...currentRows] : [];
+  let changed = false;
+  for (const row of merged) {
+    for (const key of buildKeys(row)) {
+      if (key) existing.add(key);
+    }
+  }
+  for (const row of Array.isArray(candidateRows) ? candidateRows : []) {
+    const keys = buildKeys(row).filter(Boolean);
+    if (!keys.length) continue;
+    if (keys.some((key) => existing.has(key))) continue;
+    merged.push(row);
+    changed = true;
+    for (const key of keys) existing.add(key);
+  }
+  return { rows: merged, changed };
+}
+
+function mergeInventorySettingsFromCandidate(currentDb, candidateDb) {
+  const current = normalizeImportedDb(currentDb);
+  const candidate = normalizeImportedDb(candidateDb);
+  const currentSettings =
+    current.settings && typeof current.settings === "object" && !Array.isArray(current.settings)
+      ? current.settings
+      : {};
+  const candidateSettings =
+    candidate.settings && typeof candidate.settings === "object" && !Array.isArray(candidate.settings)
+      ? candidate.settings
+      : {};
+
+  const mergedItems = mergeUniqueRows(
+    Array.isArray(currentSettings.inventoryItems) ? currentSettings.inventoryItems : [],
+    Array.isArray(candidateSettings.inventoryItems) ? candidateSettings.inventoryItems : [],
+    inventoryItemMergeKeys
+  );
+  const mergedTxns = mergeUniqueRows(
+    Array.isArray(currentSettings.inventoryTxns) ? currentSettings.inventoryTxns : [],
+    Array.isArray(candidateSettings.inventoryTxns) ? candidateSettings.inventoryTxns : [],
+    inventoryTxnMergeKeys
+  );
+  const mergedReports = mergeUniqueRows(
+    Array.isArray(currentSettings.toolReviewReports) ? currentSettings.toolReviewReports : [],
+    Array.isArray(candidateSettings.toolReviewReports) ? candidateSettings.toolReviewReports : [],
+    toolReviewReportMergeKeys
+  );
+  const mergedRentalPrinters = mergeUniqueRows(
+    Array.isArray(currentSettings.rentalPrinters) ? currentSettings.rentalPrinters : [],
+    Array.isArray(candidateSettings.rentalPrinters) ? candidateSettings.rentalPrinters : [],
+    rentalPrinterMergeKeys
+  );
+  const mergedRentalCounters = mergeUniqueRows(
+    Array.isArray(currentSettings.rentalPrinterCounters) ? currentSettings.rentalPrinterCounters : [],
+    Array.isArray(candidateSettings.rentalPrinterCounters) ? candidateSettings.rentalPrinterCounters : [],
+    rentalPrinterCounterMergeKeys
+  );
+  const mergedRentalCounterResets = mergeUniqueRows(
+    Array.isArray(currentSettings.rentalPrinterCounterResets) ? currentSettings.rentalPrinterCounterResets : [],
+    Array.isArray(candidateSettings.rentalPrinterCounterResets) ? candidateSettings.rentalPrinterCounterResets : [],
+    rentalPrinterCounterResetMergeKeys
+  );
+
+  if (
+    !mergedItems.changed &&
+    !mergedTxns.changed &&
+    !mergedReports.changed &&
+    !mergedRentalPrinters.changed &&
+    !mergedRentalCounters.changed &&
+    !mergedRentalCounterResets.changed
+  ) {
+    return { changed: false, db: current };
+  }
+
+  current.settings = {
+    ...currentSettings,
+    inventoryItems: mergedItems.rows,
+    inventoryTxns: mergedTxns.rows,
+    toolReviewReports: mergedReports.rows,
+    rentalPrinters: mergedRentalPrinters.rows,
+    rentalPrinterCounters: mergedRentalCounters.rows,
+    rentalPrinterCounterResets: mergedRentalCounterResets.rows,
+  };
+  return { changed: true, db: current };
 }
 
 function shouldUseSqlite() {
@@ -857,10 +1055,15 @@ function initStorageSync() {
     }
 
     let best = null;
+    let bestSettingsCandidate = null;
     for (const candidate of candidates) {
       const score = dbScore(candidate.db);
       if (!best || score > best.score) {
         best = { ...candidate, score };
+      }
+      const settingsScore = settingsRecoveryScore(countDbRows(candidate.db));
+      if (!bestSettingsCandidate || settingsScore >= bestSettingsCandidate.settingsScore) {
+        bestSettingsCandidate = { ...candidate, settingsScore };
       }
     }
 
@@ -869,17 +1072,21 @@ function initStorageSync() {
       best.score > sqliteScore &&
       (sqliteRowEmpty || sqliteScore === 0 || looksLikeDataLoss(sqliteCurrent));
     const shouldRecoverFromInventoryGap =
-      Boolean(best) && hasRecoverableInventoryGap(sqliteCurrent, best.db);
-    const shouldRecover = shouldRecoverFromScore || shouldRecoverFromInventoryGap;
+      Boolean(bestSettingsCandidate) && hasRecoverableInventoryGap(sqliteCurrent, bestSettingsCandidate.db);
 
-    if (shouldRecover && best) {
+    if (shouldRecoverFromScore && best) {
       replaceSqliteDataSync(best.db);
       sqliteCurrent = normalizeImportedDb(best.db);
-      console.log(
-        shouldRecoverFromInventoryGap && !shouldRecoverFromScore
-          ? `Recovered SQLite data from ${best.label} because inventory settings data was empty`
-          : `Recovered SQLite data from ${best.label}`
-      );
+      console.log(`Recovered SQLite data from ${best.label}`);
+    } else if (shouldRecoverFromInventoryGap && bestSettingsCandidate) {
+      const mergedSettings = mergeInventorySettingsFromCandidate(sqliteCurrent, bestSettingsCandidate.db);
+      if (mergedSettings.changed) {
+        sqliteCurrent = normalizeImportedDb(mergedSettings.db);
+        replaceSqliteDataSync(sqliteCurrent);
+        console.log(
+          `Recovered inventory and rental settings from ${bestSettingsCandidate.label} by merging missing records`
+        );
+      }
     }
 
     // Persist normalized/migrated data shape (including Asset ID format migration).
