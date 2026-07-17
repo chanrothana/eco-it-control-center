@@ -63,7 +63,9 @@ const PURCHASE_ORDER_LOGO_URL = EISLogo;
 const APP_ICON_FALLBACK_URL = publicAssetUrl("/logo192.png");
 const DEFAULT_CLASSROOM_IMAGE_URL = publicAssetUrl("/classroom-default.svg");
 const MAINTENANCE_NOTIFICATION_READ_FALLBACK_KEY = "maintenance_notification_read_map_v1";
+const DOCUMENT_LIBRARY_FALLBACK_KEY = "it_document_library_v1";
 const ASSET_DATA_REQUEST_TIMEOUT_MS = 45000;
+const SETTINGS_SNAPSHOT_REFRESH_MS = 60000;
 const TONER_OLD_STATUS_OPTIONS = ["Empty", "Low", "Leaking", "Defective"] as const;
 const SCHEDULE_GROUP_PRESET_OPTIONS = [
   { value: "", en: "Auto by asset type", km: "ស្វ័យប្រវត្តិតាមប្រភេទទ្រព្យ" },
@@ -944,6 +946,19 @@ function tabNeedsFullAssetDetail(tab: NavModule) {
   }
 }
 
+function tabNeedsSettingsSnapshot(tab: NavModule) {
+  switch (tab) {
+    case "inventory":
+    case "documents":
+    case "setup":
+    case "vault":
+    case "cctv":
+      return true;
+    default:
+      return false;
+  }
+}
+
 type ApiError = { error?: string };
 type Lang = "en" | "km";
 type UiTheme = "dark" | "light" | "warm";
@@ -1117,6 +1132,33 @@ type ServerSettings = {
   cctvCameraRecords?: CctvCameraRecord[];
   cctvServiceHistory?: CctvServiceHistoryRecord[];
   cctvChangeLogs?: CctvChangeLogRecord[];
+  customDocuments?: ManagedDocument[];
+};
+type ManagedDocumentStatus = "Draft" | "Approved" | "Archived";
+type ManagedDocument = {
+  id: number;
+  title: string;
+  type: string;
+  audience: string;
+  status: ManagedDocumentStatus;
+  summary: string;
+  content: string;
+  preparedBy: string;
+  checkedBy: string;
+  approvedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+type ManagedDocumentForm = {
+  title: string;
+  type: string;
+  audience: string;
+  status: ManagedDocumentStatus;
+  summary: string;
+  content: string;
+  preparedBy: string;
+  checkedBy: string;
+  approvedBy: string;
 };
 type TonerPurchaseForm = {
   itemId: string;
@@ -1822,6 +1864,112 @@ const DOCUMENT_FORMAL_SETUP_TEMPLATES = [
     title: "Shared Office / Reception Computer Setup",
     note: "Quick-use standard for shared admin counters and front desk machines.",
     items: ["Shared account rules", "Printer setup", "Shortcuts", "Browser home page", "Basic apps only", "Daily shutdown check"],
+  },
+] as const;
+
+const DOCUMENT_SOFTWARE_STANDARD_TEMPLATES = [
+  {
+    title: "Admin Staff Software Standard",
+    type: "Setup Template",
+    audience: "Admin Staff",
+    summary: "Official software list for Admin Staff computers including office, communication, printing, and CCTV viewing tools.",
+    content: `1. Purpose
+Set the minimum software standard for Admin Staff computers before handover or reinstallation.
+
+2. Required software
+- Google Chrome
+- Microsoft Office or equivalent office suite
+- Adobe Acrobat Reader
+- 7-Zip or WinRAR
+- Printer driver and scanner utility
+- School email setup
+- Telegram Desktop
+- CCTV view software
+- AnyDesk or approved remote support tool
+- Antivirus / endpoint protection
+
+3. Optional by role
+- Excel-heavy reporting add-ins
+- PDF editor
+- Zoom / Google Meet support apps
+
+4. Setup checklist
+- School email signed in
+- Printer tested
+- Telegram working
+- CCTV software tested
+- Shared folders or bookmarks added
+- Windows / macOS updates completed
+- Antivirus updated
+
+5. Notes
+Do not remove CCTV view software or Telegram from Admin Staff computers without approval.`,
+  },
+  {
+    title: "Teacher Software Standard",
+    type: "Setup Template",
+    audience: "Teacher",
+    summary: "Official software list for Teacher computers focused on classroom work, presentation, printing, and communication.",
+    content: `1. Purpose
+Set the standard software list for Teacher computers used in class and school preparation.
+
+2. Required software
+- Google Chrome
+- Microsoft Office or equivalent office suite
+- Adobe Acrobat Reader
+- VLC media player
+- Printer driver
+- School email setup
+- Telegram Desktop
+- Presentation support tools
+
+3. Optional by subject
+- Subject-specific learning software
+- Whiteboard or annotation tools
+- Language input tools
+
+4. Setup checklist
+- Projector / display output tested
+- Audio tested
+- Printer tested
+- School email signed in
+- Telegram working
+- Browser bookmarks for school systems added
+
+5. Notes
+Only approved teaching and presentation software should be installed on Teacher computers.`,
+  },
+  {
+    title: "Student Computer Software Standard",
+    type: "Setup Template",
+    audience: "Student",
+    summary: "Official software list for Student computers with controlled learning tools and limited access applications.",
+    content: `1. Purpose
+Set the allowed software standard for Student computers in labs or shared learning spaces.
+
+2. Required software
+- Google Chrome
+- Microsoft Office or equivalent office suite
+- Adobe Acrobat Reader
+- VLC media player
+- Approved learning applications
+- Keyboard / language support tools
+
+3. Restricted software
+- No personal chat apps
+- No unauthorized remote access tools
+- No unapproved games
+- No unapproved software installation
+
+4. Setup checklist
+- Student account profile ready
+- Browser restrictions applied
+- Learning shortcuts added
+- Printer access confirmed if allowed
+- Device name updated
+
+5. Notes
+Student computers must stay under controlled software rules and should be checked regularly.`,
   },
 ] as const;
 
@@ -3841,6 +3989,31 @@ function normalizeArray<T>(input: unknown): T[] {
   return input as T[];
 }
 
+function normalizeManagedDocuments(input: unknown): ManagedDocument[] {
+  return normalizeArray<Record<string, unknown>>(input)
+    .map((row) => {
+      const rawStatus = String(row.status || "Draft").trim();
+      const status: ManagedDocumentStatus =
+        rawStatus === "Approved" || rawStatus === "Archived" ? rawStatus : "Draft";
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 10000),
+        title: String(row.title || "").trim(),
+        type: String(row.type || "").trim() || "Template",
+        audience: String(row.audience || "").trim() || "Staff",
+        status,
+        summary: String(row.summary || "").trim(),
+        content: String(row.content || "").trim(),
+        preparedBy: String(row.preparedBy || "").trim(),
+        checkedBy: String(row.checkedBy || "").trim(),
+        approvedBy: String(row.approvedBy || "").trim(),
+        createdAt: String(row.createdAt || row.updatedAt || new Date().toISOString()).trim(),
+        updatedAt: String(row.updatedAt || row.createdAt || new Date().toISOString()).trim(),
+      };
+    })
+    .filter((row) => row.title || row.content)
+    .sort((a, b) => Date.parse(String(b.updatedAt || "")) - Date.parse(String(a.updatedAt || "")));
+}
+
 function normalizeMaintenanceReminderOffsets(input: unknown): number[] {
   const base = Array.isArray(input) ? input : DEFAULT_MAINTENANCE_REMINDER_OFFSETS;
   const cleaned = Array.from(
@@ -5294,6 +5467,20 @@ function readRentalPrinterCounterResetFallback(): RentalPrinterCounterReset[] {
 
 function writeRentalPrinterCounterResetFallback(rows: RentalPrinterCounterReset[]) {
   trySetLocalStorage(RENTAL_PRINTER_COUNTER_RESET_FALLBACK_KEY, JSON.stringify(rows));
+}
+
+function readDocumentLibraryFallback(): ManagedDocument[] {
+  try {
+    const raw = localStorage.getItem(DOCUMENT_LIBRARY_FALLBACK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return normalizeManagedDocuments(parsed);
+  } catch {
+    return [];
+  }
+}
+
+function writeDocumentLibraryFallback(rows: ManagedDocument[]) {
+  trySetLocalStorage(DOCUMENT_LIBRARY_FALLBACK_KEY, JSON.stringify(normalizeManagedDocuments(rows)));
 }
 
 function normalizeVaultAccounts(input: unknown): VaultAccount[] {
@@ -10292,6 +10479,24 @@ export default function App() {
   const [utilityHistoryMonthFilter, setUtilityHistoryMonthFilter] = useState("ALL");
   const [printerView, setPrinterView] = useState<"setup" | "entry" | "report" | "graph">("entry");
   const [documentsView, setDocumentsView] = useState<"overview" | "user" | "admin" | "templates" | "approvals">("user");
+  const [documentRecords, setDocumentRecords] = useState<ManagedDocument[]>(() => readDocumentLibraryFallback());
+  const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
+  const [documentForm, setDocumentForm] = useState<ManagedDocumentForm>({
+    title: "",
+    type: "Template",
+    audience: "Staff",
+    status: "Draft",
+    summary: "",
+    content: "",
+    preparedBy: "",
+    checkedBy: "",
+    approvedBy: "",
+  });
+  const activeManagedDocument = useMemo(
+    () => documentRecords.find((row) => row.id === activeDocumentId) || documentRecords[0] || null,
+    [activeDocumentId, documentRecords]
+  );
   const [poolView, setPoolView] = useState<"dashboard" | "schedule" | "equipment" | "chemical" | "operations" | "complaints">("dashboard");
   const [transferView, setTransferView] = useState<"record" | "history">("history");
   const [maintenanceView, setMaintenanceView] = useState<"dashboard" | "overdue" | "record" | "history" | "logbook">("dashboard");
@@ -11700,6 +11905,8 @@ export default function App() {
   const assetDataLoadedRef = useRef(false);
   const assetDataDetailLevelRef = useRef<"summary" | "full">("summary");
   const tabRef = useRef<NavModule>("dashboard");
+  const settingsSnapshotLoadedRef = useRef(false);
+  const settingsSnapshotLoadedAtRef = useRef(0);
 
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -20774,11 +20981,12 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
+      const activeTab = tabRef.current;
       const params = new URLSearchParams();
       if (campusFilter !== "ALL") params.set("campus", campusFilter);
       const shouldIncludeAssets =
-        options?.includeAssets ?? (tabNeedsAssetDataset(tabRef.current) || assetDataLoadedRef.current);
-      const assetDetail = tabNeedsFullAssetDetail(tabRef.current) ? "full" : "summary";
+        options?.includeAssets ?? (tabNeedsAssetDataset(activeTab) || assetDataLoadedRef.current);
+      const assetDetail = tabNeedsFullAssetDetail(activeTab) ? "full" : "summary";
       params.set("include", shouldIncludeAssets ? "assets,tickets,stats,locations" : "tickets,stats,locations");
       if (shouldIncludeAssets) {
         params.set("asset_scope", "all");
@@ -20788,9 +20996,19 @@ export default function App() {
         }
       }
 
-      const settingsPromise = requestJson<{ settings?: ServerSettings }>("/api/settings")
-        .then((settings) => ({ ok: true as const, settings }))
-        .catch(() => ({ ok: false as const }));
+      const shouldRefreshSettings =
+        !settingsSnapshotLoadedRef.current ||
+        (tabNeedsSettingsSnapshot(activeTab) &&
+          Date.now() - settingsSnapshotLoadedAtRef.current > SETTINGS_SNAPSHOT_REFRESH_MS);
+      const settingsPromise: Promise<
+        | { ok: true; settings: { settings?: ServerSettings } }
+        | { ok: false }
+        | { ok: "skip" }
+      > = shouldRefreshSettings
+        ? requestJson<{ settings?: ServerSettings }>("/api/settings")
+            .then((settings) => ({ ok: true as const, settings }))
+            .catch(() => ({ ok: false as const }))
+        : Promise.resolve({ ok: "skip" as const });
       const bootstrapRes = await requestJson<BootstrapPayload>(`/api/bootstrap?${params.toString()}`, {
         timeoutMs: shouldIncludeAssets ? ASSET_DATA_REQUEST_TIMEOUT_MS : 12000,
       });
@@ -20821,8 +21039,10 @@ export default function App() {
       setLoading(false);
 
       const settingsResult = await settingsPromise;
-      if (settingsResult.ok) {
+      if (settingsResult.ok === true) {
         const settingsRes = settingsResult.settings;
+        settingsSnapshotLoadedRef.current = true;
+        settingsSnapshotLoadedAtRef.current = Date.now();
         const fromServer = settingsRes.settings?.campusNames || {};
         if (fromServer && typeof fromServer === "object") {
           const mergedCampusNames: Record<string, string> = {};
@@ -20989,6 +21209,7 @@ export default function App() {
         const nextCctvCameraRecords = normalizeCctvCameraRecords(settingsRes.settings?.cctvCameraRecords);
         const nextCctvServiceHistory = normalizeCctvServiceHistory(settingsRes.settings?.cctvServiceHistory);
         const nextCctvChangeLogs = normalizeCctvChangeLogs(settingsRes.settings?.cctvChangeLogs);
+        const nextCustomDocuments = normalizeManagedDocuments(settingsRes.settings?.customDocuments);
         const serverItemTemplates = Array.isArray(settingsRes.settings?.itemTemplates)
           ? normalizeArray<ItemTemplate>(settingsRes.settings?.itemTemplates as unknown[])
           : [];
@@ -21059,6 +21280,17 @@ export default function App() {
             ? nextCctvChangeLogs
             : fallbackCctvChangeLogs
         );
+        const fallbackDocumentRecords = readDocumentLibraryFallback();
+        const resolvedDocumentRecords = Object.prototype.hasOwnProperty.call(settingsObj, "customDocuments")
+          ? nextCustomDocuments
+          : fallbackDocumentRecords;
+        setDocumentRecords(resolvedDocumentRecords);
+        writeDocumentLibraryFallback(resolvedDocumentRecords);
+        setActiveDocumentId((prev) =>
+          prev !== null && resolvedDocumentRecords.some((row) => row.id === prev)
+            ? prev
+            : resolvedDocumentRecords[0]?.id ?? null
+        );
         setItemTemplates(
           Object.prototype.hasOwnProperty.call(settingsObj, "itemTemplates")
             ? serverItemTemplates
@@ -21106,7 +21338,7 @@ export default function App() {
             assetSourceForSetup
           ));
         }
-      } else {
+      } else if (settingsResult.ok === false && !settingsSnapshotLoadedRef.current) {
         // Keep local settings if /api/settings is unavailable.
         setCustomTypeOptions(readItemTypeFallback());
         setItemNames((prev) => ({ ...prev, ...readStringMap(ITEM_NAME_FALLBACK_KEY) }));
@@ -21136,6 +21368,13 @@ export default function App() {
         setCctvCameraRecords(readCctvCameraFallback());
         setCctvServiceHistory(readCctvServiceFallback());
         setCctvChangeLogs(readCctvChangeLogFallback());
+        const fallbackDocumentRecords = readDocumentLibraryFallback();
+        setDocumentRecords(fallbackDocumentRecords);
+        setActiveDocumentId((prev) =>
+          prev !== null && fallbackDocumentRecords.some((row) => row.id === prev)
+            ? prev
+            : fallbackDocumentRecords[0]?.id ?? null
+        );
         setItemTemplates(readItemTemplateFallback());
         setFurnitureModels(enrichFurnitureModelsWithAssetPhotos(
           mergeFurnitureModelLists(deriveFurnitureModelsFromAssets(readAssetFallback()), readFurnitureModelFallback()),
@@ -21161,6 +21400,8 @@ export default function App() {
       setAssetDataLoaded(false);
       setAssetDataDetailLevel("summary");
       setAssets([]);
+      settingsSnapshotLoadedRef.current = false;
+      settingsSnapshotLoadedAtRef.current = 0;
       return;
     }
     const needsAssetDataset = tabNeedsAssetDataset(tab);
@@ -21204,7 +21445,7 @@ export default function App() {
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void loadInventorySync();
-    }, 4000);
+    }, 20000);
     const handleFocus = () => {
       void loadInventorySync();
     };
@@ -21224,7 +21465,7 @@ export default function App() {
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void loadTicketSync();
-    }, 4000);
+    }, 15000);
     const handleFocus = () => {
       void loadTicketSync();
     };
@@ -23174,6 +23415,134 @@ export default function App() {
     } catch (err) {
       if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
       throw err;
+    }
+  }
+
+  async function saveDocumentLibraryToServer(nextRows: ManagedDocument[]) {
+    try {
+      await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          settings: {
+            customDocuments: nextRows,
+          },
+        }),
+      });
+    } catch (err) {
+      if (isApiUnavailableError(err) || isMissingRouteError(err)) return;
+      throw err;
+    }
+  }
+
+  function resetManagedDocumentForm() {
+    setDocumentForm({
+      title: "",
+      type: "Template",
+      audience: "Staff",
+      status: "Draft",
+      summary: "",
+      content: "",
+      preparedBy: "",
+      checkedBy: "",
+      approvedBy: "",
+    });
+    setEditingDocumentId(null);
+  }
+
+  function startCreateManagedDocument(prefill?: Partial<ManagedDocumentForm>) {
+    resetManagedDocumentForm();
+    setDocumentForm((prev) => ({
+      ...prev,
+      ...prefill,
+    }));
+    setDocumentsView("templates");
+  }
+
+  function startEditManagedDocument(row: ManagedDocument) {
+    setEditingDocumentId(row.id);
+    setActiveDocumentId(row.id);
+    setDocumentForm({
+      title: row.title,
+      type: row.type,
+      audience: row.audience,
+      status: row.status,
+      summary: row.summary,
+      content: row.content,
+      preparedBy: row.preparedBy,
+      checkedBy: row.checkedBy,
+      approvedBy: row.approvedBy,
+    });
+    setDocumentsView("templates");
+  }
+
+  async function saveManagedDocument() {
+    if (!requireAdminAction()) return;
+    const title = documentForm.title.trim();
+    const content = documentForm.content.trim();
+    if (!title) {
+      setError("Document title is required.");
+      return;
+    }
+    if (!content) {
+      setError("Document content is required.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      const nextRow: ManagedDocument = {
+        id: editingDocumentId ?? Date.now(),
+        title,
+        type: documentForm.type.trim() || "Template",
+        audience: documentForm.audience.trim() || "Staff",
+        status: documentForm.status,
+        summary: documentForm.summary.trim(),
+        content,
+        preparedBy: documentForm.preparedBy.trim(),
+        checkedBy: documentForm.checkedBy.trim(),
+        approvedBy: documentForm.approvedBy.trim(),
+        createdAt:
+          editingDocumentId !== null
+            ? documentRecords.find((row) => row.id === editingDocumentId)?.createdAt || now
+            : now,
+        updatedAt: now,
+      };
+      const nextRows = normalizeManagedDocuments(
+        editingDocumentId !== null
+          ? documentRecords.map((row) => (row.id === editingDocumentId ? nextRow : row))
+          : [nextRow, ...documentRecords]
+      );
+      await saveDocumentLibraryToServer(nextRows);
+      setDocumentRecords(nextRows);
+      writeDocumentLibraryFallback(nextRows);
+      setActiveDocumentId(nextRow.id);
+      setSetupMessage(editingDocumentId !== null ? "Document updated." : "Document saved.");
+      resetManagedDocumentForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save document.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteManagedDocument(id: number) {
+    if (!requireAdminAction()) return;
+    if (!window.confirm("Delete this saved document?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      const nextRows = documentRecords.filter((row) => row.id !== id);
+      await saveDocumentLibraryToServer(nextRows);
+      setDocumentRecords(nextRows);
+      writeDocumentLibraryFallback(nextRows);
+      setActiveDocumentId((prev) => (prev === id ? nextRows[0]?.id ?? null : prev));
+      if (editingDocumentId === id) resetManagedDocumentForm();
+      setSetupMessage("Document deleted.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete document.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -32578,6 +32947,27 @@ export default function App() {
     const resolvedTime = String(maintenanceRecordForm.time || "").trim() || toHm(new Date());
     const normalizedBeforePhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []);
     const normalizedAfterPhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []);
+    const sameDayExistingEntries =
+      !isQuickGeneralTask && maintenanceRecordSelectedAsset
+        ? (maintenanceRecordSelectedAsset.maintenanceHistory || []).filter(
+            (entry) => String(entry.date || "").slice(0, 10) === resolvedDate
+          )
+        : [];
+    if (sameDayExistingEntries.length) {
+      const latestSameDayEntry = [...sameDayExistingEntries].sort((a, b) => {
+        const aDisplayAt = Date.parse(maintenanceEntryDisplayTime(a) || a.date || "");
+        const bDisplayAt = Date.parse(maintenanceEntryDisplayTime(b) || b.date || "");
+        if (!Number.isNaN(aDisplayAt) && !Number.isNaN(bDisplayAt)) return bDisplayAt - aDisplayAt;
+        return String(b.date || "").localeCompare(String(a.date || ""));
+      })[0];
+      const duplicateConfirmMessage =
+        lang === "km"
+          ? `Asset នេះមានកំណត់ត្រាថែទាំរួចហើយនៅថ្ងៃទី ${formatDate(resolvedDate)}${latestSameDayEntry?.type ? ` (${latestSameDayEntry.type})` : ""}។ តើអ្នកចង់បន្តរក្សាទុកម្តងទៀតឬទេ?`
+          : `This asset already has a maintenance record on ${formatDate(resolvedDate)}${latestSameDayEntry?.type ? ` (${latestSameDayEntry.type})` : ""}. Do you want to save another record for the same day?`;
+      if (!window.confirm(duplicateConfirmMessage)) {
+        return false;
+      }
+    }
     maintenanceRecordSaveLockRef.current = true;
     setMaintenanceRecordSaving(true);
     setBusy(true);
@@ -34851,7 +35241,11 @@ export default function App() {
     [approvalManagerAccounts]
   );
   const resolvedAssets = useMemo(
-    () => mergeAssets(readAssetFallback(), assets),
+    () => {
+      if (assets.length) return assets;
+      const fallbackAssets = readAssetFallback();
+      return fallbackAssets.length ? mergeAssets(fallbackAssets, assets) : assets;
+    },
     [assets]
   );
   const historyAsset = useMemo(
@@ -34874,6 +35268,23 @@ export default function App() {
   const maintenanceRecordSelectedAsset = useMemo(
     () => resolvedAssets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
     [resolvedAssets, maintenanceRecordForm.assetId]
+  );
+  const maintenanceRecordSortedHistory = useMemo(() => {
+    if (!maintenanceRecordSelectedAsset) return [];
+    return [...(maintenanceRecordSelectedAsset.maintenanceHistory || [])].sort((a, b) => {
+      const aDisplayAt = Date.parse(maintenanceEntryDisplayTime(a) || a.date || "");
+      const bDisplayAt = Date.parse(maintenanceEntryDisplayTime(b) || b.date || "");
+      if (!Number.isNaN(aDisplayAt) && !Number.isNaN(bDisplayAt)) return bDisplayAt - aDisplayAt;
+      return String(b.date || "").localeCompare(String(a.date || ""));
+    });
+  }, [maintenanceRecordSelectedAsset]);
+  const maintenanceRecordLatestEntry = useMemo(
+    () => maintenanceRecordSortedHistory[0] || null,
+    [maintenanceRecordSortedHistory]
+  );
+  const maintenanceRecordSameDayEntries = useMemo(
+    () => maintenanceRecordSortedHistory.filter((entry) => String(entry.date || "").slice(0, 10) === String(maintenanceRecordForm.date || "").slice(0, 10)),
+    [maintenanceRecordSortedHistory, maintenanceRecordForm.date]
   );
   const scheduleMaintenanceUsesGeneralTask = Boolean(scheduleMaintenanceGeneralContext) && maintenanceQuickGeneralTask;
   const maintenanceRecordIsComplete = useMemo(() => (
@@ -36717,7 +37128,7 @@ export default function App() {
       checkedBy: string;
       signature: string;
     }> = [];
-    for (const asset of assets) {
+    for (const asset of resolvedAssets) {
       for (const entry of asset.maintenanceHistory || []) {
         const normalizedPhotos = normalizeMaintenanceEntryPhotos(entry || {});
         const workflow = normalizeMaintenanceWorkflow(entry.workflow);
@@ -64115,6 +64526,60 @@ function formatTicketRequestSource(value?: string) {
                     : "No assets match current filters."}
                 </div>
               </label>
+              {maintenanceRecordSelectedAsset ? (
+                <div className="field field-wide">
+                  <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
+                  <div className={`maintenance-latest-service-card ${maintenanceRecordSameDayEntries.length ? "is-warning" : ""}`}>
+                    <div className="maintenance-latest-service-head">
+                      <strong>
+                        {maintenanceRecordSelectedAsset.assetId} | {assetItemName(
+                          maintenanceRecordSelectedAsset.category,
+                          maintenanceRecordSelectedAsset.type,
+                          maintenanceRecordSelectedAsset.pcType || ""
+                        )}
+                      </strong>
+                      {maintenanceRecordSameDayEntries.length ? (
+                        <span className="maintenance-latest-service-badge">
+                          {lang === "km" ? "មានកំណត់ត្រាថ្ងៃដូចគ្នា" : "Same-day record exists"}
+                        </span>
+                      ) : null}
+                    </div>
+                    {maintenanceRecordLatestEntry ? (
+                      <div className="maintenance-latest-service-grid">
+                        <div>
+                          <span>{lang === "km" ? "កាលបរិច្ឆេទចុងក្រោយ" : "Latest Date"}</span>
+                          <strong>
+                            {formatDate(maintenanceRecordLatestEntry.date || "-")}
+                            {maintenanceEntryDisplayTime(maintenanceRecordLatestEntry)
+                              ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordLatestEntry) || "")}`
+                              : ""}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
+                          <strong>{maintenanceRecordLatestEntry.type || "-"}</strong>
+                        </div>
+                        <div>
+                          <span>{lang === "km" ? "ស្ថានភាព" : "Status"}</span>
+                          <strong>{maintenanceCompletionText(maintenanceRecordLatestEntry.completion || "Not Yet")}</strong>
+                        </div>
+                        <div>
+                          <span>{lang === "km" ? "ដោយ" : "By"}</span>
+                          <strong>{maintenanceRecordLatestEntry.by || "-"}</strong>
+                        </div>
+                        <div className="maintenance-latest-service-note">
+                          <span>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</span>
+                          <strong>{maintenanceRecordLatestEntry.note || "-"}</strong>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="tiny">
+                        {lang === "km" ? "មិនទាន់មានប្រវត្តិថែទាំសម្រាប់ Asset នេះទេ។" : "No maintenance history for this asset yet."}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
               {!maintenanceRecordScheduleJumpMode ? (
                 <div className="field field-wide">
                   <span>{lang === "km" ? "ជ្រើស Asset ពី Gallery" : "Choose Asset from Gallery"}</span>
@@ -67653,34 +68118,296 @@ function formatTicketRequestSource(value?: string) {
                               <li key={`${template.title}-${item}`}>{item}</li>
                             ))}
                           </ul>
+                          <div className="row-actions" style={{ marginTop: 10 }}>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              onClick={() =>
+                                startCreateManagedDocument({
+                                  title: template.title,
+                                  type: "Setup Template",
+                                  audience: "Staff",
+                                  summary: template.note,
+                                  content: template.items.map((item, index) => `${index + 1}. ${item}`).join("\n"),
+                                })
+                              }
+                            >
+                              Use This Template
+                            </button>
+                          </div>
                         </article>
                       ))}
                     </div>
                   </section>
                   <section className="documents-card">
                     <div className="documents-section-head">
-                      <h3>Template Library</h3>
-                      <span className="documents-section-badge">Start with reusable official formats</span>
+                      <h3>Software Standards</h3>
+                      <span className="documents-section-badge">Ready-made software list for Admin Staff, Teacher, and Student computers</span>
+                    </div>
+                    <div className="documents-grid">
+                      {DOCUMENT_SOFTWARE_STANDARD_TEMPLATES.map((template) => (
+                        <article key={`document-software-template-${template.title}`} className="documents-subcard">
+                          <h4>{template.title}</h4>
+                          <p>{template.summary}</p>
+                          <div
+                            style={{
+                              whiteSpace: "pre-wrap",
+                              lineHeight: 1.55,
+                              color: "#536b95",
+                              fontSize: "0.92rem",
+                              maxHeight: 220,
+                              overflowY: "auto",
+                              paddingRight: 4,
+                            }}
+                          >
+                            {template.content}
+                          </div>
+                          <div className="row-actions" style={{ marginTop: 10 }}>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              onClick={() =>
+                                startCreateManagedDocument({
+                                  title: template.title,
+                                  type: template.type,
+                                  audience: template.audience,
+                                  summary: template.summary,
+                                  content: template.content,
+                                })
+                              }
+                            >
+                              Use This Software List
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Create and Store Documents</h3>
+                      <span className="documents-section-badge">Save once, print PDF anytime</span>
+                    </div>
+                    <div className="documents-grid">
+                      <article className="documents-card">
+                        <div className="panel-row">
+                          <div>
+                            <h3>{editingDocumentId !== null ? "Edit Document" : "Create New Document"}</h3>
+                            <p className="tiny">Create one school document, keep it in this system, then print or export PDF when needed.</p>
+                          </div>
+                          <div className="row-actions">
+                            <button type="button" className="tab btn-small" onClick={() => startCreateManagedDocument()}>
+                              New
+                            </button>
+                          </div>
+                        </div>
+                        <div className="form-grid">
+                          <label className="field">
+                            <span>Document Title</span>
+                            <input
+                              className="input"
+                              value={documentForm.title}
+                              onChange={(e) => setDocumentForm((prev) => ({ ...prev, title: e.target.value }))}
+                              placeholder="Example: Teacher Computer Setup Guideline"
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Document Type</span>
+                            <select
+                              className="input"
+                              value={documentForm.type}
+                              onChange={(e) => setDocumentForm((prev) => ({ ...prev, type: e.target.value }))}
+                            >
+                              <option value="Template">Template</option>
+                              <option value="Setup Template">Setup Template</option>
+                              <option value="Guideline">Guideline</option>
+                              <option value="Memo">Memo</option>
+                              <option value="Checklist">Checklist</option>
+                              <option value="SOP">SOP</option>
+                              <option value="Form">Form</option>
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Audience</span>
+                            <select
+                              className="input"
+                              value={documentForm.audience}
+                              onChange={(e) => setDocumentForm((prev) => ({ ...prev, audience: e.target.value }))}
+                            >
+                              <option value="Staff">Staff</option>
+                              <option value="Admin Staff">Admin Staff</option>
+                              <option value="Teacher">Teacher</option>
+                              <option value="Student">Student</option>
+                              <option value="Leadership">Leadership</option>
+                              <option value="All Users">All Users</option>
+                            </select>
+                          </label>
+                          <label className="field">
+                            <span>Status</span>
+                            <select
+                              className="input"
+                              value={documentForm.status}
+                              onChange={(e) =>
+                                setDocumentForm((prev) => ({ ...prev, status: e.target.value as ManagedDocumentStatus }))
+                              }
+                            >
+                              <option value="Draft">Draft</option>
+                              <option value="Approved">Approved</option>
+                              <option value="Archived">Archived</option>
+                            </select>
+                          </label>
+                          <label className="field field-wide">
+                            <span>Short Summary</span>
+                            <input
+                              className="input"
+                              value={documentForm.summary}
+                              onChange={(e) => setDocumentForm((prev) => ({ ...prev, summary: e.target.value }))}
+                              placeholder="Short purpose of this document"
+                            />
+                          </label>
+                          <label className="field field-wide">
+                            <span>Document Content</span>
+                            <textarea
+                              className="textarea"
+                              value={documentForm.content}
+                              onChange={(e) => setDocumentForm((prev) => ({ ...prev, content: e.target.value }))}
+                              placeholder={"Write the full document here.\nExample:\n1. Purpose\n2. Scope\n3. Steps\n4. Notes"}
+                              style={{ minHeight: 220 }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Prepared By</span>
+                            <input
+                              className="input"
+                              value={documentForm.preparedBy}
+                              onChange={(e) => setDocumentForm((prev) => ({ ...prev, preparedBy: e.target.value }))}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Checked By</span>
+                            <input
+                              className="input"
+                              value={documentForm.checkedBy}
+                              onChange={(e) => setDocumentForm((prev) => ({ ...prev, checkedBy: e.target.value }))}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>Approved By</span>
+                            <input
+                              className="input"
+                              value={documentForm.approvedBy}
+                              onChange={(e) => setDocumentForm((prev) => ({ ...prev, approvedBy: e.target.value }))}
+                            />
+                          </label>
+                        </div>
+                        <div className="row-actions" style={{ justifyContent: "flex-end", marginTop: 14 }}>
+                          {editingDocumentId !== null ? (
+                            <button type="button" className="tab btn-small" onClick={resetManagedDocumentForm}>
+                              Cancel Edit
+                            </button>
+                          ) : null}
+                          <button type="button" className="btn-primary btn-small" disabled={busy} onClick={() => void saveManagedDocument()}>
+                            {editingDocumentId !== null ? "Update Document" : "Save Document"}
+                          </button>
+                        </div>
+                      </article>
+                      <article className="documents-card documents-managed-preview-card">
+                        <div className="panel-row">
+                          <div>
+                            <h3>Print Preview</h3>
+                            <p className="tiny">Open one saved document here, then use print or save as PDF.</p>
+                          </div>
+                          {activeManagedDocument ? (
+                            <div className="row-actions">
+                              <button type="button" className="tab btn-small" onClick={() => window.print()}>
+                                Print This Document
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                        {activeManagedDocument ? (
+                          <div className="documents-managed-print-sheet">
+                            <div className="printer-report-kicker">Eco International School</div>
+                            <h3 className="documents-managed-print-title">{activeManagedDocument.title}</h3>
+                            <div className="documents-managed-print-meta">
+                              {activeManagedDocument.type} | {activeManagedDocument.audience} | {activeManagedDocument.status}
+                            </div>
+                            {activeManagedDocument.summary ? (
+                              <p className="documents-managed-print-summary">{activeManagedDocument.summary}</p>
+                            ) : null}
+                            <div className="documents-managed-print-body">{activeManagedDocument.content}</div>
+                            <div className="documents-grid documents-managed-signoff-grid">
+                              <article className="documents-subcard">
+                                <h4>Prepared By</h4>
+                                <p>{activeManagedDocument.preparedBy || "-"}</p>
+                              </article>
+                              <article className="documents-subcard">
+                                <h4>Checked By</h4>
+                                <p>{activeManagedDocument.checkedBy || "-"}</p>
+                              </article>
+                              <article className="documents-subcard">
+                                <h4>Approved By</h4>
+                                <p>{activeManagedDocument.approvedBy || "-"}</p>
+                              </article>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="panel-note">No saved document yet. Create one on the left, then it will appear here for printing.</div>
+                        )}
+                      </article>
+                    </div>
+                  </section>
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Saved Document Library</h3>
+                      <span className="documents-section-badge">All documents stored inside this system</span>
                     </div>
                     <div className="table-wrap">
                       <table>
                         <thead>
                           <tr>
-                            <th>Template</th>
-                            <th>Owner</th>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Audience</th>
                             <th>Status</th>
-                            <th>Data Source</th>
+                            <th>Updated</th>
+                            <th>Action</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {DOCUMENT_TEMPLATE_LIBRARY.map((row) => (
-                            <tr key={`document-template-${row.name}`}>
-                              <td><strong>{row.name}</strong></td>
-                              <td>{row.owner}</td>
+                          {documentRecords.length ? documentRecords.map((row) => (
+                            <tr key={`document-template-${row.id}`}>
+                              <td>
+                                <strong>{row.title}</strong>
+                                {row.summary ? <div className="tiny">{row.summary}</div> : null}
+                              </td>
+                              <td>{row.type}</td>
+                              <td>{row.audience}</td>
                               <td>{row.status}</td>
-                              <td>{row.source}</td>
+                              <td>{formatDate(row.updatedAt || row.createdAt || "-")}</td>
+                              <td>
+                                <div className="row-actions">
+                                  <button type="button" className="tab btn-small" onClick={() => setActiveDocumentId(row.id)}>
+                                    Open
+                                  </button>
+                                  {isAdmin ? (
+                                    <button type="button" className="tab btn-small" onClick={() => startEditManagedDocument(row)}>
+                                      Edit
+                                    </button>
+                                  ) : null}
+                                  {isAdmin ? (
+                                    <button type="button" className="tab btn-small" onClick={() => void deleteManagedDocument(row.id)}>
+                                      Delete
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
                             </tr>
-                          ))}
+                          )) : (
+                            <tr>
+                              <td colSpan={6}>No saved documents yet.</td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -76205,9 +76932,9 @@ function formatTicketRequestSource(value?: string) {
                               placeholder={lang === "km" ? "ឈ្មោះអ្នកត្រួតពិនិត្យ" : "Supervisor / checker name"}
                             />
                           </label>
-                          <div className="field">
-                            <span>{maintenanceRecordSelectedAsset ? (lang === "km" ? "Asset Snapshot" : "Asset Snapshot") : (lang === "km" ? "Task Snapshot" : "Task Snapshot")}</span>
-                            <div className="panel-note schedule-maintenance-modal-asset-snapshot">
+                        <div className="field">
+                          <span>{maintenanceRecordSelectedAsset ? (lang === "km" ? "Asset Snapshot" : "Asset Snapshot") : (lang === "km" ? "Task Snapshot" : "Task Snapshot")}</span>
+                          <div className="panel-note schedule-maintenance-modal-asset-snapshot">
                               {maintenanceRecordSelectedAsset ? (
                                 <>
                                   <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
@@ -76236,6 +76963,50 @@ function formatTicketRequestSource(value?: string) {
                             </div>
                           </div>
                         </div>
+                        {maintenanceRecordSelectedAsset ? (
+                          <div className="field field-wide">
+                            <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
+                            <div className={`maintenance-latest-service-card ${maintenanceRecordSameDayEntries.length ? "is-warning" : ""}`}>
+                              <div className="maintenance-latest-service-head">
+                                <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
+                                {maintenanceRecordSameDayEntries.length ? (
+                                  <span className="maintenance-latest-service-badge">
+                                    {lang === "km" ? "មានកំណត់ត្រាថ្ងៃដូចគ្នា" : "Same-day record exists"}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {maintenanceRecordLatestEntry ? (
+                                <div className="maintenance-latest-service-grid">
+                                  <div>
+                                    <span>{lang === "km" ? "កាលបរិច្ឆេទចុងក្រោយ" : "Latest Date"}</span>
+                                    <strong>
+                                      {formatDate(maintenanceRecordLatestEntry.date || "-")}
+                                      {maintenanceEntryDisplayTime(maintenanceRecordLatestEntry)
+                                        ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordLatestEntry) || "")}`
+                                        : ""}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
+                                    <strong>{maintenanceRecordLatestEntry.type || "-"}</strong>
+                                  </div>
+                                  <div>
+                                    <span>{lang === "km" ? "ដោយ" : "By"}</span>
+                                    <strong>{maintenanceRecordLatestEntry.by || "-"}</strong>
+                                  </div>
+                                  <div className="maintenance-latest-service-note">
+                                    <span>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</span>
+                                    <strong>{maintenanceRecordLatestEntry.note || "-"}</strong>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="tiny">
+                                  {lang === "km" ? "មិនទាន់មានប្រវត្តិថែទាំសម្រាប់ Asset នេះទេ។" : "No maintenance history for this asset yet."}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
                         <div className="field field-wide">
                           <div className="tiny schedule-maintenance-modal-note-help">
                             {lang === "km"

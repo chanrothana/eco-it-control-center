@@ -1487,6 +1487,31 @@ function normalizeStringMap(input) {
   return out;
 }
 
+function normalizeCustomDocuments(input) {
+  return normalizeArray(input)
+    .filter((row) => row && typeof row === "object")
+    .map((row) => {
+      const statusRaw = toText(row.status).trim();
+      const status = statusRaw === "Approved" || statusRaw === "Archived" ? statusRaw : "Draft";
+      return {
+        id: Number(row.id) || Date.now() + Math.floor(Math.random() * 10000),
+        title: toText(row.title).trim(),
+        type: toText(row.type).trim() || "Template",
+        audience: toText(row.audience).trim() || "Staff",
+        status,
+        summary: toText(row.summary).trim(),
+        content: toText(row.content).trim(),
+        preparedBy: toText(row.preparedBy).trim(),
+        checkedBy: toText(row.checkedBy).trim(),
+        approvedBy: toText(row.approvedBy).trim(),
+        createdAt: toText(row.createdAt).trim() || new Date().toISOString(),
+        updatedAt: toText(row.updatedAt).trim() || toText(row.createdAt).trim() || new Date().toISOString(),
+      };
+    })
+    .filter((row) => row.title || row.content)
+    .sort((a, b) => Date.parse(toText(b.updatedAt)) - Date.parse(toText(a.updatedAt)));
+}
+
 function normalizeItemTypeOptions(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
   const out = {};
@@ -7978,6 +8003,7 @@ const server = http.createServer(async (req, res) => {
           schoolKeys: normalizeSchoolKeys(settings.schoolKeys),
           schoolKeyLogs: normalizeSchoolKeyLogs(settings.schoolKeyLogs),
           furnitureModels: normalizeFurnitureModels(settings.furnitureModels),
+          customDocuments: normalizeCustomDocuments(settings.customDocuments),
           vaultAccounts: normalizeVaultAccounts(settings.vaultAccounts),
           vaultCredentials: normalizeVaultCredentials(settings.vaultCredentials),
           vaultDesignLinks: normalizeVaultDesignLinks(settings.vaultDesignLinks),
@@ -8157,6 +8183,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "furnitureModels")
           ? normalizeFurnitureModels(incoming.furnitureModels)
           : normalizeFurnitureModels(current.furnitureModels);
+      const nextCustomDocuments =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "customDocuments")
+          ? normalizeCustomDocuments(incoming.customDocuments)
+          : normalizeCustomDocuments(current.customDocuments);
       const nextVaultAccounts =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "vaultAccounts")
           ? normalizeVaultAccounts(incoming.vaultAccounts)
@@ -8205,6 +8235,7 @@ const server = http.createServer(async (req, res) => {
         schoolKeys: nextSchoolKeys,
         schoolKeyLogs: nextSchoolKeyLogs,
         furnitureModels: nextFurnitureModels,
+        customDocuments: nextCustomDocuments,
         vaultAccounts: nextVaultAccounts,
         vaultCredentials: nextVaultCredentials,
         vaultDesignLinks: nextVaultDesignLinks,

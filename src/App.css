@@ -1881,10 +1881,12 @@ h2 {
 
 .documents-card,
 .documents-subcard {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(90, 122, 170, 0.32);
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.92));
-  box-shadow: 0 12px 28px rgba(24, 45, 77, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(60, 122, 219, 0.12), rgba(60, 122, 219, 0) 34%),
+    linear-gradient(180deg, rgba(30, 48, 76, 0.98), rgba(22, 36, 59, 0.97));
+  box-shadow: 0 14px 30px rgba(8, 16, 31, 0.22);
 }
 
 .documents-card {
@@ -1898,13 +1900,13 @@ h2 {
 .documents-card h3,
 .documents-subcard h4 {
   margin: 0;
-  color: #1f314c;
+  color: #edf4ff;
 }
 
 .documents-card p,
 .documents-subcard p {
   margin: 10px 0 0;
-  color: #607796;
+  color: #a9bddc;
   line-height: 1.5;
 }
 
@@ -1923,8 +1925,9 @@ h2 {
 .documents-section-badge {
   padding: 7px 10px;
   border-radius: 999px;
-  background: #edf4ff;
-  color: #48658f;
+  background: rgba(52, 110, 203, 0.16);
+  border: 1px solid rgba(110, 157, 232, 0.22);
+  color: #cfe1ff;
   font-size: 12px;
   font-weight: 800;
 }
@@ -1932,7 +1935,7 @@ h2 {
 .documents-list {
   margin: 12px 0 0;
   padding-left: 18px;
-  color: #314763;
+  color: #d9e8ff;
   line-height: 1.7;
 }
 
@@ -1948,8 +1951,9 @@ h2 {
   align-items: center;
   padding: 6px 10px;
   border-radius: 999px;
-  background: #eef4ff;
-  color: #5f6f94;
+  background: rgba(83, 134, 214, 0.16);
+  border: 1px solid rgba(113, 160, 233, 0.22);
+  color: #d4e6ff;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1967,17 +1971,17 @@ h2 {
   align-items: start;
   padding: 12px 14px;
   border-radius: 14px;
-  background: #fff8ed;
-  border: 1px solid #ead8bf;
+  background: linear-gradient(180deg, rgba(39, 60, 91, 0.98), rgba(29, 47, 74, 0.96));
+  border: 1px solid rgba(84, 117, 166, 0.28);
 }
 
 .documents-flow-step strong {
-  color: #8f6a3d;
+  color: #85b7ff;
 }
 
 .documents-source-note {
   margin: 0 0 14px;
-  color: #775838;
+  color: #a9bddc;
   line-height: 1.55;
 }
 
@@ -2002,18 +2006,163 @@ h2 {
 }
 
 .documents-status-draft {
-  background: #fff2e6;
-  color: #a85d1f;
+  background: rgba(229, 137, 54, 0.16);
+  color: #ffd0a8;
 }
 
 .documents-status-ready {
-  background: #eef8ea;
-  color: #48783d;
+  background: rgba(74, 171, 108, 0.16);
+  color: #bff0cf;
 }
 
 .documents-status-filed {
-  background: #eaf1ff;
-  color: #48649e;
+  background: rgba(73, 127, 215, 0.16);
+  color: #cdddff;
+}
+
+.documents-managed-preview-card {
+  position: relative;
+}
+
+.documents-managed-print-sheet {
+  border: 1px solid rgba(110, 143, 191, 0.28);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(69, 136, 245, 0.12), rgba(69, 136, 245, 0) 28%),
+    linear-gradient(180deg, rgba(249, 252, 255, 0.98), rgba(236, 243, 252, 0.98));
+  padding: 22px;
+  color: #1c3556;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.documents-managed-print-sheet .printer-report-kicker {
+  color: #5577a7;
+}
+
+.documents-managed-print-title {
+  margin-top: 8px;
+  color: #17304f !important;
+  font-size: 1.95rem;
+  line-height: 1.15;
+}
+
+.documents-managed-print-meta {
+  margin-top: 8px;
+  margin-bottom: 14px;
+  color: #55719a;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.documents-managed-print-summary {
+  margin-top: 0 !important;
+  color: #36547e !important;
+  font-size: 1rem;
+}
+
+.documents-managed-print-body {
+  white-space: pre-wrap;
+  line-height: 1.68;
+  color: #193251;
+}
+
+.documents-managed-signoff-grid {
+  margin-top: 18px;
+}
+
+.documents-managed-signoff-grid .documents-subcard {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 247, 253, 0.96));
+  border-color: rgba(182, 200, 227, 0.6);
+  box-shadow: none;
+}
+
+.documents-managed-signoff-grid .documents-subcard h4 {
+  color: #264467;
+}
+
+.documents-managed-signoff-grid .documents-subcard p {
+  color: #547198;
+}
+
+.app-shell.theme-light .documents-card,
+.app-shell.theme-light .documents-subcard,
+.app-shell.theme-warm .documents-card,
+.app-shell.theme-warm .documents-subcard {
+  box-shadow: 0 12px 28px rgba(24, 45, 77, 0.08);
+}
+
+.app-shell.theme-light .documents-card,
+.app-shell.theme-light .documents-subcard {
+  border-color: rgba(160, 183, 214, 0.55);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 246, 255, 0.92));
+}
+
+.app-shell.theme-light .documents-card h3,
+.app-shell.theme-light .documents-subcard h4 {
+  color: #1f314c;
+}
+
+.app-shell.theme-light .documents-card p,
+.app-shell.theme-light .documents-subcard p,
+.app-shell.theme-light .documents-source-note {
+  color: #607796;
+}
+
+.app-shell.theme-light .documents-list {
+  color: #314763;
+}
+
+.app-shell.theme-light .documents-section-badge,
+.app-shell.theme-light .documents-tag {
+  background: #edf4ff;
+  border-color: rgba(188, 208, 236, 0.8);
+  color: #48658f;
+}
+
+.app-shell.theme-light .documents-flow-step {
+  background: #fff8ed;
+  border-color: #ead8bf;
+}
+
+.app-shell.theme-light .documents-flow-step strong {
+  color: #8f6a3d;
+}
+
+.app-shell.theme-warm .documents-card,
+.app-shell.theme-warm .documents-subcard {
+  border-color: rgba(213, 165, 116, 0.48);
+  background: linear-gradient(180deg, rgba(255, 251, 246, 0.98), rgba(255, 242, 228, 0.96));
+}
+
+.app-shell.theme-warm .documents-card h3,
+.app-shell.theme-warm .documents-subcard h4 {
+  color: #6d421d;
+}
+
+.app-shell.theme-warm .documents-card p,
+.app-shell.theme-warm .documents-subcard p,
+.app-shell.theme-warm .documents-source-note {
+  color: #8a6544;
+}
+
+.app-shell.theme-warm .documents-list {
+  color: #5d3b1c;
+}
+
+.app-shell.theme-warm .documents-section-badge,
+.app-shell.theme-warm .documents-tag {
+  background: rgba(228, 138, 61, 0.14);
+  border-color: rgba(213, 165, 116, 0.48);
+  color: #8d5a30;
+}
+
+.app-shell.theme-warm .documents-flow-step {
+  background: linear-gradient(180deg, rgba(255, 248, 239, 0.96), rgba(255, 239, 223, 0.94));
+  border-color: rgba(213, 165, 116, 0.42);
+}
+
+.app-shell.theme-warm .documents-flow-step strong {
+  color: #b06d2a;
 }
 
 .maintenance-quick-hero-card {
@@ -2072,6 +2221,86 @@ h2 {
   font-size: 12px;
   font-weight: 800;
   text-align: center;
+}
+
+.maintenance-latest-service-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(122, 156, 205, 0.28);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(66, 126, 221, 0.14), rgba(66, 126, 221, 0) 32%),
+    linear-gradient(180deg, rgba(28, 46, 72, 0.98), rgba(20, 35, 56, 0.96));
+}
+
+.maintenance-latest-service-card.is-warning {
+  border-color: rgba(229, 145, 58, 0.46);
+  background:
+    radial-gradient(circle at top right, rgba(230, 139, 46, 0.16), rgba(230, 139, 46, 0) 34%),
+    linear-gradient(180deg, rgba(52, 39, 28, 0.98), rgba(34, 28, 21, 0.96));
+}
+
+.maintenance-latest-service-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.maintenance-latest-service-head strong {
+  color: #f2f7ff;
+}
+
+.maintenance-latest-service-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(236, 155, 66, 0.18);
+  border: 1px solid rgba(236, 155, 66, 0.32);
+  color: #ffd8b0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.maintenance-latest-service-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.maintenance-latest-service-grid > div {
+  display: grid;
+  gap: 4px;
+}
+
+.maintenance-latest-service-grid span {
+  color: #8fb4f5;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.maintenance-latest-service-grid strong {
+  color: #eef5ff;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.maintenance-latest-service-note {
+  grid-column: 1 / -1;
+}
+
+.maintenance-latest-service-card.is-warning .maintenance-latest-service-grid span {
+  color: #f2bf88;
+}
+
+.maintenance-latest-service-card.is-warning .maintenance-latest-service-grid strong,
+.maintenance-latest-service-card.is-warning .maintenance-latest-service-head strong {
+  color: #fff3e6;
 }
 
 .maintenance-quick-facts {
@@ -35972,8 +36201,65 @@ main.app-shell.login-shell-sunset section.panel.login-panel-sunset {
   .maintenance-logbook-print-area > .maintenance-title-row,
   .maintenance-logbook-print-area > .panel-filters.maintenance-filters,
   .printer-graph-print-area > .report-title-row,
-  .printer-graph-print-area > .panel-filters.report-filters {
+  .printer-graph-print-area > .panel-filters.report-filters,
+  .documents-managed-preview-card > .panel-row {
     display: none !important;
+  }
+
+  .documents-print-area > * {
+    display: none !important;
+  }
+
+  .documents-print-area > .documents-card.documents-managed-preview-card {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  .documents-managed-preview-card .panel-note {
+    display: none !important;
+  }
+
+  .documents-managed-preview-card .documents-managed-print-sheet {
+    display: block !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    color: #183153 !important;
+  }
+
+  .documents-managed-preview-card .documents-managed-print-title,
+  .documents-managed-preview-card .documents-managed-print-meta,
+  .documents-managed-preview-card .documents-managed-print-summary,
+  .documents-managed-preview-card .documents-managed-print-body,
+  .documents-managed-preview-card .documents-managed-signoff-grid .documents-subcard h4,
+  .documents-managed-preview-card .documents-managed-signoff-grid .documents-subcard p,
+  .documents-managed-preview-card .printer-report-kicker {
+    color: #183153 !important;
+  }
+
+  .documents-managed-preview-card .documents-managed-signoff-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .documents-managed-preview-card .documents-managed-signoff-grid .documents-subcard {
+    display: block !important;
+    padding: 10px !important;
+    border: 1px solid #c9d7ea !important;
+    border-radius: 12px !important;
+    background: #f8fbff !important;
+    box-shadow: none !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .maintenance-logbook-print-area {
