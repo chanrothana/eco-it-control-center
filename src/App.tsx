@@ -6978,24 +6978,29 @@ function hasCompletedMaintenanceOnDate(asset: Asset, ymd: string) {
   const target = String(ymd || "").trim();
   if (!target) return false;
   const history = Array.isArray(asset.maintenanceHistory) ? asset.maintenanceHistory : [];
-  const doneDates = history
+  const doneEntries = history
     .map((entry) => {
       const completion = String(entry?.completion || "").trim().toLowerCase();
-      if (completion === "not yet") return "";
-      return normalizeLooseDateToYmd(String(entry?.date || ""));
+      if (completion === "not yet") return null;
+      return {
+        doneDate: normalizeLooseDateToYmd(String(entry?.date || "")),
+        sourceDate: normalizeLooseDateToYmd(String(entry?.scheduleSourceDate || "")),
+      };
     })
-    .filter(Boolean);
+    .filter((entry): entry is { doneDate: string; sourceDate: string } => Boolean(entry && (entry.doneDate || entry.sourceDate)));
+  const doneDates = doneEntries.map((entry) => entry.doneDate).filter(Boolean);
   if (!doneDates.length) return false;
+  if (doneEntries.some((entry) => entry.sourceDate === target)) return true;
   if (doneDates.some((entryDate) => entryDate === target)) return true;
   // One-time schedule should clear once any done record exists on/after scheduled date.
   if (asset.repeatMode === "NONE" && doneDates.some((entryDate) => entryDate >= target)) return true;
-  return history.some((entry) => {
-    const entryDate = normalizeLooseDateToYmd(String(entry?.date || ""));
-    if (entryDate !== target) return false;
-    const completion = String(entry?.completion || "").trim().toLowerCase();
-    if (!completion) return true;
-    return completion !== "not yet";
-  });
+  const nextScheduleDate = normalizeLooseDateToYmd(
+    advanceRepeatScheduleDate(asset, asset.repeatMode === "MONTHLY_WEEKDAY" ? shiftYmd(target, 1) : target)
+  );
+  if (!nextScheduleDate || nextScheduleDate <= target) {
+    return false;
+  }
+  return doneDates.some((entryDate) => entryDate > target && entryDate < nextScheduleDate);
 }
 
 function escapeHtml(input: string) {
@@ -38642,16 +38647,19 @@ export default function App() {
       };
       if (asset.repeatMode === "MONTHLY_WEEKDAY") {
         const next = nthWeekdayOfMonth(year, monthIndex, Number(asset.repeatWeekday || 6), Number(asset.repeatWeekOfMonth || 1));
-        if (next && !completedScheduleAssetKeys.has(`${asset.id}||${toYmd(next)}`)) addOccurrence(toYmd(next), false);
+        if (next) {
+          const nextYmd = toYmd(next);
+          addOccurrence(nextYmd, hasCompletedMaintenanceOnDate(asset, nextYmd));
+        }
         return;
       }
       const nextDate = String(asset.nextMaintenanceDate || "");
-      if (nextDate && !completedScheduleAssetKeys.has(`${asset.id}||${nextDate}`)) {
-        addOccurrence(nextDate, false);
+      if (nextDate) {
+        addOccurrence(nextDate, hasCompletedMaintenanceOnDate(asset, nextDate));
       }
       (asset.maintenanceHistory || []).forEach((entry) => {
         if (String(entry.completion || "") !== "Done") return;
-        const sourceDate = String(entry.scheduleSourceDate || "").trim();
+        const sourceDate = String(entry.scheduleSourceDate || entry.date || "").trim();
         if (!sourceDate || sourceDate < startYmd || sourceDate > endYmd) return;
         addOccurrence(sourceDate, true);
       });
@@ -38794,12 +38802,12 @@ export default function App() {
       };
 
       const nextDate = String(asset.nextMaintenanceDate || "");
-      if (nextDate && !completedScheduleAssetKeys.has(`${asset.id}||${nextDate}`)) {
-        pushRow(nextDate, false);
+      if (nextDate) {
+        pushRow(nextDate, hasCompletedMaintenanceOnDate(asset, nextDate));
       }
       (asset.maintenanceHistory || []).forEach((entry) => {
         if (String(entry.completion || "") !== "Done") return;
-        const sourceDate = String(entry.scheduleSourceDate || "").trim();
+        const sourceDate = String(entry.scheduleSourceDate || entry.date || "").trim();
         pushRow(sourceDate, true);
       });
     });
@@ -39043,7 +39051,7 @@ export default function App() {
     const assetRows: ScheduleCalendarRow[] = scheduleListRows.map((asset) => ({
       ...statusForRow(
         String(asset.nextMaintenanceDate || ""),
-        completedScheduleAssetKeys.has(`${asset.id}||${String(asset.nextMaintenanceDate || "")}`)
+        hasCompletedMaintenanceOnDate(asset, String(asset.nextMaintenanceDate || ""))
       ),
       id: `asset-${asset.id}`,
       kind: "asset",
@@ -39059,7 +39067,7 @@ export default function App() {
         Number(asset.repeatWeekday || 6)
       ),
       photo: asset.photo || "",
-      completed: completedScheduleAssetKeys.has(`${asset.id}||${String(asset.nextMaintenanceDate || "")}`),
+      completed: hasCompletedMaintenanceOnDate(asset, String(asset.nextMaintenanceDate || "")),
       lastCompletedDate: latestCompletedAssetMap.get(String(asset.id)) || "",
       asset,
     }));
@@ -53129,7 +53137,7 @@ function formatTicketRequestSource(value?: string) {
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
                   <SearchableMultiSelectPicker
-                    className="report-campus-picker"
+                    className="report-campus-picker picker-template-list-asset-light"
                     summary={assetCampusFilterSummary}
                     options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: rentalPrinterCampusLabel(campus) }))}
                     selectedValues={assetCampusMultiFilter}
@@ -65129,7 +65137,7 @@ function formatTicketRequestSource(value?: string) {
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
               <SearchableMultiSelectPicker
-                className="report-campus-picker"
+                className="report-campus-picker picker-template-list-asset-light"
                 summary={maintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(maintenanceCampusFilter)}
                 options={maintenanceCampusOptions.map((campus) => ({
                   value: campus,
