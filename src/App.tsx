@@ -39275,10 +39275,26 @@ export default function App() {
       lang === "km"
         ? [
             { value: "safety_maintenance", label: "ED Quick: ថែទាំសុវត្ថិភាពទាំងអស់" },
+            { value: "computer_service", label: "Computer: Desktop / iMac / Mac Mini" },
+            { value: "laptop_service", label: "Computer: Laptop / MacBook" },
+            { value: "ipad_service", label: "Computer: iPad / Tablet" },
+            { value: "tv_service", label: "IT: TV / Screen" },
+            { value: "aircon_cleaning", label: "Facility: Air-Con" },
+            { value: "walkie_service", label: "Facility: Walkie Talkie" },
+            { value: "it_maintenance", label: "IT: គ្រឿង IT ទាំងអស់" },
+            { value: "facility_maintenance", label: "Facility: គ្រឿង Facility ទាំងអស់" },
             { value: "manual", label: "ផ្សេងទៀត / ជ្រើសដោយដៃ (Computer, Air-Con...)" },
           ]
         : [
             { value: "safety_maintenance", label: "ED Quick: All Safety Maintenance" },
+            { value: "computer_service", label: "Computer: Desktop / iMac / Mac Mini" },
+            { value: "laptop_service", label: "Computer: Laptop / MacBook" },
+            { value: "ipad_service", label: "Computer: iPad / Tablet" },
+            { value: "tv_service", label: "IT: TV / Screen" },
+            { value: "aircon_cleaning", label: "Facility: Air-Con" },
+            { value: "walkie_service", label: "Facility: Walkie Talkie" },
+            { value: "it_maintenance", label: "IT: All IT Items" },
+            { value: "facility_maintenance", label: "Facility: All Facility Items" },
             { value: "manual", label: "Other / Manual (Computer, Air-Con...)" },
           ],
     [lang]
@@ -39555,14 +39571,31 @@ export default function App() {
   const reportMaintenanceItemOptions = useMemo(() => {
     return Array.from(
       new Set(
-        allMaintenanceRows
-          .filter((row) => reportMaintenanceCampusFilter === "ALL" || row.campus === reportMaintenanceCampusFilter)
-          .filter((row) => reportMaintenanceCategoryFilter === "ALL" || row.category === reportMaintenanceCategoryFilter)
-          .map((row) => row.itemName)
-          .filter(Boolean)
+        [
+          ...allMaintenanceRows
+            .filter((row) => reportMaintenanceCampusFilter === "ALL" || row.campus === reportMaintenanceCampusFilter)
+            .filter((row) => reportMaintenanceCategoryFilter === "ALL" || row.category === reportMaintenanceCategoryFilter)
+            .filter((row) => maintenanceQuickTemplateMatches(row))
+            .map((row) => String(row.itemName || "").trim())
+            .filter(Boolean),
+          ...assets
+            .filter((asset) => reportMaintenanceCampusFilter === "ALL" || asset.campus === reportMaintenanceCampusFilter)
+            .filter((asset) => reportMaintenanceCategoryFilter === "ALL" || asset.category === reportMaintenanceCategoryFilter)
+            .filter((asset) => maintenanceQuickTemplateAssetMatches(asset))
+            .map((asset) => assetItemName(asset.category, asset.type, asset.pcType || "").trim())
+            .filter(Boolean),
+        ]
       )
-    ).sort();
-  }, [allMaintenanceRows, reportMaintenanceCampusFilter, reportMaintenanceCategoryFilter]);
+    ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }, [
+    allMaintenanceRows,
+    assets,
+    assetItemName,
+    maintenanceQuickTemplateAssetMatches,
+    maintenanceQuickTemplateMatches,
+    reportMaintenanceCampusFilter,
+    reportMaintenanceCategoryFilter,
+  ]);
   const reportMaintenanceItemFilterValues = useMemo(
     () => reportMaintenanceItemOptions,
     [reportMaintenanceItemOptions]
