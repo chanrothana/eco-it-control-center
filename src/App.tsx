@@ -37600,11 +37600,11 @@ export default function App() {
   ]);
   const assetListRows = useMemo(() => {
     const assetsById = new Map<string, Asset>();
-    for (const asset of assets) {
+    for (const asset of resolvedAssets) {
       const assetId = String(asset.assetId || "").trim();
       if (assetId) assetsById.set(assetId, asset);
     }
-    const baseAssetList = assets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
+    const baseAssetList = resolvedAssets.filter((asset) => !isGeneralMaintenancePlaceholderAsset(asset));
     let list = baseAssetList.filter(
       (asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null)
     );
@@ -37690,7 +37690,7 @@ export default function App() {
       return String(a.assetId || "").localeCompare(String(b.assetId || ""), undefined, { sensitivity: "base" });
     });
   }, [
-    assets,
+    resolvedAssets,
     assetCampusMultiFilter,
     assetCategoryMultiFilter,
     assetNameMultiFilter,
