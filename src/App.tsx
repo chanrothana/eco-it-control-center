@@ -33203,28 +33203,14 @@ export default function App() {
 
   function renderMaintenanceWorkflowSection() {
     if (!maintenanceRecordSelectedAsset) return null;
-    const itemName = assetItemName(
-      maintenanceRecordSelectedAsset.category,
-      maintenanceRecordSelectedAsset.type,
-      maintenanceRecordSelectedAsset.pcType || ""
-    );
     return (
-      <>
-        <div className="field field-wide">
-          <span>{lang === "km" ? "Asset Snapshot" : "Asset Snapshot"}</span>
-          <div className="panel-note" style={{ marginTop: 8 }}>
-            <strong>{maintenanceRecordSelectedAsset.assetId}</strong> | {itemName} | {campusLabel(maintenanceRecordSelectedAsset.campus)}
-            {" • "}
-            {maintenanceRecordSelectedAsset.location || "-"}
-            {maintenanceRecordSelectedAsset.serialNumber ? ` • SN: ${maintenanceRecordSelectedAsset.serialNumber}` : ""}
-          </div>
-          <div className="tiny" style={{ marginTop: 6 }}>
-            {lang === "km"
-              ? "របៀបសាមញ្ញ: សរសេរកំណត់ចំណាំខ្លីៗ ហើយភ្ជាប់រូបមុន និងរូបក្រោយ។"
-              : "Simple mode: add a short note, then upload before and after photos."}
-          </div>
+      <div className="field field-wide">
+        <div className="tiny" style={{ marginTop: 2 }}>
+          {lang === "km"
+            ? "របៀបសាមញ្ញ: សរសេរកំណត់ចំណាំខ្លីៗ ហើយភ្ជាប់រូបមុន និងរូបក្រោយ។"
+            : "Simple mode: add a short note, then upload before and after photos."}
         </div>
-      </>
+      </div>
     );
   }
 
@@ -64497,34 +64483,60 @@ function formatTicketRequestSource(value?: string) {
               ) : null}
               <label className="field field-wide">
                 <span>{lang === "km" ? "Asset" : "Asset"}</span>
-                <AssetPicker
-                  value={maintenanceRecordForm.assetId}
-                  assets={maintenanceRecordFilteredAssets}
-                  getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
-                  onChange={(assetId) => {
-                    const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
-                    setMaintenanceRecordForm((f) => ({
-                      ...f,
-                      assetId,
-                      workflow: {
-                        ...normalizeMaintenanceWorkflow(f.workflow),
-                        template: getMaintenanceTemplateKey(selectedAsset),
-                        checklist: [],
-                      },
-                    }));
-                  }}
-                  placeholder={lang === "km" ? "ជ្រើស Asset ដែលបានចម្រោះ" : "Select filtered asset"}
-                  disabled={!maintenanceRecordFilteredAssets.length}
-                />
-                <div className="tiny">
-                  {maintenanceRecordFilteredAssets.length
-                    ? lang === "km"
-                      ? `${maintenanceRecordFilteredAssets.length} assets ត្រូវតាមតម្រងបច្ចុប្បន្ន`
-                      : `${maintenanceRecordFilteredAssets.length} assets match current filters`
-                    : lang === "km"
-                    ? "មិនមាន assets ត្រូវតាមតម្រងបច្ចុប្បន្ន។"
-                    : "No assets match current filters."}
-                </div>
+                {maintenanceRecordSelectedAsset && (maintenanceRecordFromDetail || maintenanceRecordScheduleJumpMode) ? (
+                  <>
+                    <div className="panel-note schedule-maintenance-modal-asset-snapshot">
+                      <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
+                      {" | "}
+                      {assetItemName(
+                        maintenanceRecordSelectedAsset.category,
+                        maintenanceRecordSelectedAsset.type,
+                        maintenanceRecordSelectedAsset.pcType || ""
+                      )}
+                      {" | "}
+                      {campusLabel(maintenanceRecordSelectedAsset.campus)}
+                      {" • "}
+                      {maintenanceRecordSelectedAsset.location || "-"}
+                      {maintenanceRecordSelectedAsset.serialNumber ? ` • SN: ${maintenanceRecordSelectedAsset.serialNumber}` : ""}
+                    </div>
+                    <div className="tiny">
+                      {lang === "km"
+                        ? "Asset នេះត្រូវបានជ្រើសរួចហើយពីបញ្ជី ដូច្នេះមិនចាំបាច់ជ្រើសម្ដងទៀតទេ។"
+                        : "This asset was already selected from the list, so no need to choose it again."}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <AssetPicker
+                      value={maintenanceRecordForm.assetId}
+                      assets={maintenanceRecordFilteredAssets}
+                      getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)}`}
+                      onChange={(assetId) => {
+                        const selectedAsset = assets.find((asset) => String(asset.id) === String(assetId)) || null;
+                        setMaintenanceRecordForm((f) => ({
+                          ...f,
+                          assetId,
+                          workflow: {
+                            ...normalizeMaintenanceWorkflow(f.workflow),
+                            template: getMaintenanceTemplateKey(selectedAsset),
+                            checklist: [],
+                          },
+                        }));
+                      }}
+                      placeholder={lang === "km" ? "ជ្រើស Asset ដែលបានចម្រោះ" : "Select filtered asset"}
+                      disabled={!maintenanceRecordFilteredAssets.length}
+                    />
+                    <div className="tiny">
+                      {maintenanceRecordFilteredAssets.length
+                        ? lang === "km"
+                          ? `${maintenanceRecordFilteredAssets.length} assets ត្រូវតាមតម្រងបច្ចុប្បន្ន`
+                          : `${maintenanceRecordFilteredAssets.length} assets match current filters`
+                        : lang === "km"
+                        ? "មិនមាន assets ត្រូវតាមតម្រងបច្ចុប្បន្ន។"
+                        : "No assets match current filters."}
+                    </div>
+                  </>
+                )}
               </label>
               {maintenanceRecordSelectedAsset ? (
                 <div className="field field-wide">
@@ -64540,36 +64552,43 @@ function formatTicketRequestSource(value?: string) {
                       </strong>
                       {maintenanceRecordSameDayEntries.length ? (
                         <span className="maintenance-latest-service-badge">
-                          {lang === "km" ? "មានកំណត់ត្រាថ្ងៃដូចគ្នា" : "Same-day record exists"}
+                          {lang === "km" ? "បានកត់ត្រារួចហើយថ្ងៃនេះ" : "Already recorded today"}
                         </span>
                       ) : null}
                     </div>
+                    {maintenanceRecordSameDayEntries.length ? (
+                      <div className="tiny maintenance-latest-service-warning-text">
+                        {lang === "km"
+                          ? "Asset នេះមានកំណត់ត្រាថែទាំរួចហើយក្នុងថ្ងៃនេះ។ ប្រព័ន្ធនឹងសួរបញ្ជាក់មុនពេលរក្សាទុកម្ដងទៀត។"
+                          : "This asset already has a maintenance record today. The system will ask you to confirm before saving again."}
+                      </div>
+                    ) : null}
                     {maintenanceRecordLatestEntry ? (
-                      <div className="maintenance-latest-service-grid">
-                        <div>
-                          <span>{lang === "km" ? "កាលបរិច្ឆេទចុងក្រោយ" : "Latest Date"}</span>
-                          <strong>
+                      <div className="maintenance-latest-service-summary">
+                        <div className="maintenance-latest-service-summary-item">
+                          <strong>{lang === "km" ? "ចុងក្រោយ" : "Latest"}</strong>
+                          <span>
                             {formatDate(maintenanceRecordLatestEntry.date || "-")}
                             {maintenanceEntryDisplayTime(maintenanceRecordLatestEntry)
                               ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordLatestEntry) || "")}`
                               : ""}
-                          </strong>
+                          </span>
                         </div>
-                        <div>
-                          <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
-                          <strong>{maintenanceRecordLatestEntry.type || "-"}</strong>
+                        <div className="maintenance-latest-service-summary-item">
+                          <strong>{lang === "km" ? "ប្រភេទ" : "Type"}</strong>
+                          <span>{maintenanceRecordLatestEntry.type || "-"}</span>
                         </div>
-                        <div>
-                          <span>{lang === "km" ? "ស្ថានភាព" : "Status"}</span>
-                          <strong>{maintenanceCompletionText(maintenanceRecordLatestEntry.completion || "Not Yet")}</strong>
+                        <div className="maintenance-latest-service-summary-item">
+                          <strong>{lang === "km" ? "ស្ថានភាព" : "Status"}</strong>
+                          <span>{maintenanceCompletionText(maintenanceRecordLatestEntry.completion || "Not Yet")}</span>
                         </div>
-                        <div>
-                          <span>{lang === "km" ? "ដោយ" : "By"}</span>
-                          <strong>{maintenanceRecordLatestEntry.by || "-"}</strong>
+                        <div className="maintenance-latest-service-summary-item">
+                          <strong>{lang === "km" ? "ដោយ" : "By"}</strong>
+                          <span>{maintenanceRecordLatestEntry.by || "-"}</span>
                         </div>
-                        <div className="maintenance-latest-service-note">
-                          <span>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</span>
-                          <strong>{maintenanceRecordLatestEntry.note || "-"}</strong>
+                        <div className="maintenance-latest-service-summary-item">
+                          <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
+                          <span>{maintenanceRecordLatestEntry.note || "-"}</span>
                         </div>
                       </div>
                     ) : (
@@ -64734,6 +64753,8 @@ function formatTicketRequestSource(value?: string) {
                       ))}
                   </select>
                 </label>
+              </div>
+              <div className="maintenance-record-review-row field-wide">
                 <label className="field">
                   <span>{lang === "km" ? "ដោយ" : "By"}</span>
                   <input
@@ -64758,45 +64779,6 @@ function formatTicketRequestSource(value?: string) {
                 </label>
               </div>
               {renderMaintenanceWorkflowSection()}
-              <label className="field field-wide">
-                <span>{lang === "km" ? "កំណត់ចំណាំថែទាំ" : "Maintenance Note"}</span>
-                <textarea
-                  className="textarea"
-                  value={maintenanceRecordForm.note}
-                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, note: e.target.value }))}
-                  placeholder={
-                    lang === "km"
-                      ? "ឧទាហរណ៍: ជួសជុលខ្សែភ្លើងរលុង សម្អាត និងសាកល្បងរួចដំណើរការល្អ"
-                      : "Example: Fixed loose power cable, cleaned unit, tested and working normally."
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>
-                  {maintenanceRecordForm.type === "Replacement"
-                    ? (lang === "km" ? "តម្លៃ / ចំណាយទំនិញថ្មី" : "Replacement Cost / Payment")
-                    : (lang === "km" ? "ចំណាយ / ថ្លៃទូទាត់" : "Cost / Payment")}
-                </span>
-                <input
-                  className="input"
-                  value={maintenanceRecordForm.cost}
-                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
-                  placeholder={
-                    maintenanceRecordForm.type === "Replacement"
-                      ? (lang === "km" ? "ឧ. 10$ សម្រាប់គ្រឿងថ្មី" : "Example: 10$ for new replacement item")
-                      : (lang === "km" ? "ឧ. 5$, 10$, ឬ Free" : "Example: 5$, 10$, or Free")
-                  }
-                />
-                <div className="tiny">
-                  {maintenanceRecordForm.type === "Replacement"
-                    ? (lang === "km"
-                      ? "បើប្តូរគ្រឿងថ្មី សូមបញ្ចូលតម្លៃ ឬចំណាយដែលបានទូទាត់។"
-                      : "If a new item was replaced, enter the amount paid for that replacement.")
-                    : (lang === "km"
-                      ? "បញ្ចូលចំណាយ បើមាន។ អាចដាក់ជា 10$, 40000៛ ឬ Free។"
-                      : "Enter the payment if any. You can use values like 10$, 40000៛, or Free.")}
-                </div>
-              </label>
               <div className="field field-wide maintenance-quick-photo-pair">
                 <label className="field maintenance-quick-photo-field">
                   <span>{lang === "km" ? "មុន" : "Before"} ({MAX_MAINTENANCE_PHOTOS})</span>
@@ -64858,30 +64840,65 @@ function formatTicketRequestSource(value?: string) {
                   ) : null}
                 </label>
               </div>
-              <div className="field field-wide">
-                <details>
-                  <summary style={{ cursor: "pointer", fontWeight: 600 }}>
-                    {lang === "km" ? "ជម្រើសបន្ថែម (មិនចាំបាច់)" : "Optional Details"}
-                  </summary>
-                  <div className="form-grid" style={{ marginTop: 12 }}>
-                    <label className="field field-wide">
-                      <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
-                      <input
-                        className="input"
-                        value={maintenanceRecordForm.condition}
-                        onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
-                        placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ, ថ្មខ្សោយ, ត្រូវប្តូរឆាប់ៗ..." : "Example: Working well, battery low, replace soon..."}
-                      />
-                    </label>
-                  </div>
-                </details>
-              </div>
+              <label className="field field-wide">
+                <span>{lang === "km" ? "កំណត់ចំណាំថែទាំ" : "Maintenance Note"}</span>
+                <textarea
+                  rows={1}
+                  className="textarea textarea-auto-grow schedule-maintenance-note-textarea"
+                  value={maintenanceRecordForm.note}
+                  onChange={(e) => {
+                    setMaintenanceRecordForm((f) => ({ ...f, note: e.target.value }));
+                    e.currentTarget.style.height = "auto";
+                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                  }}
+                  placeholder={
+                    lang === "km"
+                      ? "ឧទាហរណ៍: ជួសជុលខ្សែភ្លើងរលុង សម្អាត និងសាកល្បងរួចដំណើរការល្អ"
+                      : "Example: Fixed loose power cable, cleaned unit, tested and working normally."
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  {maintenanceRecordForm.type === "Replacement"
+                    ? (lang === "km" ? "តម្លៃ / ចំណាយទំនិញថ្មី" : "Replacement Cost / Payment")
+                    : (lang === "km" ? "ចំណាយ / ថ្លៃទូទាត់" : "Cost / Payment")}
+                </span>
+                <input
+                  className="input"
+                  value={maintenanceRecordForm.cost}
+                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                  placeholder={
+                    maintenanceRecordForm.type === "Replacement"
+                      ? (lang === "km" ? "ឧ. 10$ សម្រាប់គ្រឿងថ្មី" : "Example: 10$ for new replacement item")
+                      : (lang === "km" ? "ឧ. 5$, 10$, ឬ Free" : "Example: 5$, 10$, or Free")
+                  }
+                />
+                <div className="tiny">
+                  {maintenanceRecordForm.type === "Replacement"
+                    ? (lang === "km"
+                      ? "បើប្តូរគ្រឿងថ្មី សូមបញ្ចូលតម្លៃ ឬចំណាយដែលបានទូទាត់។"
+                      : "If a new item was replaced, enter the amount paid for that replacement.")
+                    : (lang === "km"
+                      ? "បញ្ចូលចំណាយ បើមាន។ អាចដាក់ជា 10$, 40000៛ ឬ Free។"
+                      : "Enter the payment if any. You can use values like 10$, 40000៛, or Free.")}
+                </div>
+              </label>
+              <label className="field">
+                <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
+                <input
+                  className="input"
+                  value={maintenanceRecordForm.condition}
+                  onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
+                  placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ, ថ្មខ្សោយ, ត្រូវប្តូរឆាប់ៗ..." : "Example: Working well, battery low, replace soon..."}
+                />
+              </label>
             </div>
             <div className="asset-actions">
               <div className="tiny">
                 {lang === "km"
-                  ? "ត្រូវការតែ កំណត់ចំណាំ រូបមុន និងរូបក្រោយ។"
-                  : "Only note, before photo, and after photo are required."}
+                  ? "ចំណាំ: ដើម្បីរក្សាទុក សូមបំពេញ Maintenance Note ហើយភ្ជាប់រូប Before និង After។ Cost / Payment និង Condition Comment ជាជម្រើសបន្ថែម។"
+                  : "Note: To save this record, add the maintenance note and attach before and after photos. Cost / Payment and Condition Comment are optional."}
               </div>
               <button
                 className="btn-primary"
@@ -76971,32 +76988,39 @@ function formatTicketRequestSource(value?: string) {
                                 <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
                                 {maintenanceRecordSameDayEntries.length ? (
                                   <span className="maintenance-latest-service-badge">
-                                    {lang === "km" ? "មានកំណត់ត្រាថ្ងៃដូចគ្នា" : "Same-day record exists"}
+                                    {lang === "km" ? "បានកត់ត្រារួចហើយថ្ងៃនេះ" : "Already recorded today"}
                                   </span>
                                 ) : null}
                               </div>
+                              {maintenanceRecordSameDayEntries.length ? (
+                                <div className="tiny maintenance-latest-service-warning-text">
+                                  {lang === "km"
+                                    ? "Asset នេះមានកំណត់ត្រាថែទាំរួចហើយក្នុងថ្ងៃនេះ។ ប្រព័ន្ធនឹងសួរបញ្ជាក់មុនពេលរក្សាទុកម្ដងទៀត។"
+                                    : "This asset already has a maintenance record today. The system will ask you to confirm before saving again."}
+                                </div>
+                              ) : null}
                               {maintenanceRecordLatestEntry ? (
-                                <div className="maintenance-latest-service-grid">
-                                  <div>
-                                    <span>{lang === "km" ? "កាលបរិច្ឆេទចុងក្រោយ" : "Latest Date"}</span>
-                                    <strong>
+                                <div className="maintenance-latest-service-summary">
+                                  <div className="maintenance-latest-service-summary-item">
+                                    <strong>{lang === "km" ? "ចុងក្រោយ" : "Latest"}</strong>
+                                    <span>
                                       {formatDate(maintenanceRecordLatestEntry.date || "-")}
                                       {maintenanceEntryDisplayTime(maintenanceRecordLatestEntry)
                                         ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordLatestEntry) || "")}`
                                         : ""}
-                                    </strong>
+                                    </span>
                                   </div>
-                                  <div>
-                                    <span>{lang === "km" ? "ប្រភេទ" : "Type"}</span>
-                                    <strong>{maintenanceRecordLatestEntry.type || "-"}</strong>
+                                  <div className="maintenance-latest-service-summary-item">
+                                    <strong>{lang === "km" ? "ប្រភេទ" : "Type"}</strong>
+                                    <span>{maintenanceRecordLatestEntry.type || "-"}</span>
                                   </div>
-                                  <div>
-                                    <span>{lang === "km" ? "ដោយ" : "By"}</span>
-                                    <strong>{maintenanceRecordLatestEntry.by || "-"}</strong>
+                                  <div className="maintenance-latest-service-summary-item">
+                                    <strong>{lang === "km" ? "ដោយ" : "By"}</strong>
+                                    <span>{maintenanceRecordLatestEntry.by || "-"}</span>
                                   </div>
-                                  <div className="maintenance-latest-service-note">
-                                    <span>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</span>
-                                    <strong>{maintenanceRecordLatestEntry.note || "-"}</strong>
+                                  <div className="maintenance-latest-service-summary-item">
+                                    <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
+                                    <span>{maintenanceRecordLatestEntry.note || "-"}</span>
                                   </div>
                                 </div>
                               ) : (
@@ -77014,42 +77038,6 @@ function formatTicketRequestSource(value?: string) {
                               : "Simple mode: add a short note, then upload before and after photos."}
                           </div>
                         </div>
-                        <label className="field field-wide">
-                          <span>{lang === "km" ? "កំណត់ចំណាំថែទាំ" : "Maintenance Note"}</span>
-                          <textarea
-                            className="textarea schedule-maintenance-note-textarea"
-                            rows={1}
-                            value={maintenanceRecordForm.note}
-                            onChange={(e) => {
-                              setMaintenanceRecordForm((f) => ({ ...f, note: e.target.value }));
-                              e.currentTarget.style.height = "auto";
-                              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                            }}
-                            placeholder={
-                              lang === "km"
-                                ? "ឧទាហរណ៍: ជួសជុលខ្សែភ្លើងរលុង សម្អាត និងសាកល្បងរួចដំណើរការល្អ"
-                                : "Example: Fixed loose power cable, cleaned unit, tested and working normally."
-                            }
-                          />
-                        </label>
-                        <label className="field">
-                          <span>{lang === "km" ? "ចំណាយ / ថ្លៃទូទាត់" : "Cost / Payment"}</span>
-                          <input
-                            className="input"
-                            value={maintenanceRecordForm.cost}
-                            onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
-                            placeholder={lang === "km" ? "ឧ. 5$, 10$, ឬ Free" : "Example: 5$, 10$, or Free"}
-                          />
-                        </label>
-                        <label className="field">
-                          <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
-                          <input
-                            className="input"
-                            value={maintenanceRecordForm.condition}
-                            onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
-                            placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ" : "Example: Working well"}
-                          />
-                        </label>
                         <div className="field field-wide maintenance-quick-photo-pair">
                           <label className="field maintenance-quick-photo-field">
                             <span>{lang === "km" ? "មុន" : "Before"} ({MAX_MAINTENANCE_PHOTOS})</span>
@@ -77111,13 +77099,49 @@ function formatTicketRequestSource(value?: string) {
                             ) : null}
                           </label>
                         </div>
+                        <label className="field field-wide">
+                          <span>{lang === "km" ? "កំណត់ចំណាំថែទាំ" : "Maintenance Note"}</span>
+                          <textarea
+                            className="textarea textarea-auto-grow schedule-maintenance-note-textarea"
+                            rows={1}
+                            value={maintenanceRecordForm.note}
+                            onChange={(e) => {
+                              setMaintenanceRecordForm((f) => ({ ...f, note: e.target.value }));
+                              e.currentTarget.style.height = "auto";
+                              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                            }}
+                            placeholder={
+                              lang === "km"
+                                ? "ឧទាហរណ៍: ជួសជុលខ្សែភ្លើងរលុង សម្អាត និងសាកល្បងរួចដំណើរការល្អ"
+                                : "Example: Fixed loose power cable, cleaned unit, tested and working normally."
+                            }
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{lang === "km" ? "ចំណាយ / ថ្លៃទូទាត់" : "Cost / Payment"}</span>
+                          <input
+                            className="input"
+                            value={maintenanceRecordForm.cost}
+                            onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, cost: e.target.value }))}
+                            placeholder={lang === "km" ? "ឧ. 5$, 10$, ឬ Free" : "Example: 5$, 10$, or Free"}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{lang === "km" ? "កំណត់ចំណាំលក្ខខណ្ឌ" : "Condition Comment"}</span>
+                          <input
+                            className="input"
+                            value={maintenanceRecordForm.condition}
+                            onChange={(e) => setMaintenanceRecordForm((f) => ({ ...f, condition: e.target.value }))}
+                            placeholder={lang === "km" ? "ឧទាហរណ៍: ដំណើរការល្អ, ថ្មខ្សោយ, ត្រូវប្តូរឆាប់ៗ..." : "Example: Working well, battery low, replace soon..."}
+                          />
+                        </label>
                       </div>
                       {maintenanceRecordMessage ? <div className="alert">{maintenanceRecordMessage}</div> : null}
                       <div className="asset-actions schedule-maintenance-modal-actions">
                         <div className="tiny">
                           {lang === "km"
-                            ? "ត្រូវការតែ Note និងរូប Before / After ដើម្បីរក្សាទុក។"
-                            : "Only note plus before/after photos are required to save."}
+                            ? "ចំណាំ: ដើម្បីរក្សាទុក សូមបំពេញ Maintenance Note ហើយភ្ជាប់រូប Before និង After។ Cost / Payment និង Condition Comment ជាជម្រើសបន្ថែម។"
+                            : "Note: To save this record, add the maintenance note and attach before and after photos. Cost / Payment and Condition Comment are optional."}
                         </div>
                         <button
                           className="btn-primary"
