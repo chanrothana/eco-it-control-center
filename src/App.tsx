@@ -12393,6 +12393,7 @@ export default function App() {
   const [vaultNetworkDocs, setVaultNetworkDocs] = useState<VaultNetworkDoc[]>(() => readVaultNetworkDocsFallback());
   const [vaultCctvRecords, setVaultCctvRecords] = useState<VaultCctvRecord[]>(() => readVaultCctvFallback());
   const [vaultSearchQuery, setVaultSearchQuery] = useState("");
+  const vaultQuickSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [vaultCopiedEntryId, setVaultCopiedEntryId] = useState<string | null>(null);
   const [vaultReportQuery, setVaultReportQuery] = useState("");
   const [vaultReportSectionFilter, setVaultReportSectionFilter] = useState<"ALL" | "Access Systems" | "Web Services" | "Design Folders" | "Network & WiFi Docs" | "CCTV Systems">("ALL");
@@ -12481,8 +12482,38 @@ export default function App() {
     note: "",
     changedBy: "",
   });
+  const [vaultCredentialSearchQuery, setVaultCredentialSearchQuery] = useState("");
   const [vaultCctvSearchQuery, setVaultCctvSearchQuery] = useState("");
   const [vaultCctvSiteFilter, setVaultCctvSiteFilter] = useState("ALL");
+  const filteredVaultCredentials = useMemo(() => {
+    const query = vaultCredentialSearchQuery.trim().toLowerCase();
+    if (!query) return vaultCredentials;
+    return vaultCredentials.filter((row) => {
+      const telegramDeviceText = (row.telegramDevices || [])
+        .flatMap((entry) => [entry.staffName, entry.role, entry.deviceName, entry.status, entry.note, entry.lastConfirmed])
+        .map((value) => String(value || ""))
+        .join(" ");
+      const passwordHistoryText = (row.passwordHistory || [])
+        .flatMap((entry) => [entry.created, entry.changedBy, entry.note])
+        .map((value) => String(value || ""))
+        .join(" ");
+      return [
+        row.systemName,
+        row.loginUrl,
+        row.username,
+        row.password,
+        row.secretHint,
+        row.twoFa,
+        row.recovery,
+        row.lastUpdated,
+        row.note,
+        telegramDeviceText,
+        passwordHistoryText,
+      ]
+        .map((value) => String(value || "").toLowerCase())
+        .some((value) => value.includes(query));
+    });
+  }, [vaultCredentialSearchQuery, vaultCredentials]);
   const cctvSiteOptions = useMemo(
     () =>
       Array.from(
@@ -20482,6 +20513,25 @@ export default function App() {
     if (vaultTab === "network" && !canAccessMenu("vault.network", "vault")) setVaultTab("cctv");
     if (vaultTab === "cctv" && !canAccessMenu("vault.cctv", "vault")) setVaultTab("dashboard");
   }, [tab, vaultTab, canAccessMenu]);
+
+  useEffect(() => {
+    if (tab !== "vault") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      if (canAccessMenu("vault.dashboard", "vault")) {
+        setVaultTab("dashboard");
+      }
+      window.setTimeout(() => {
+        vaultQuickSearchInputRef.current?.focus();
+        vaultQuickSearchInputRef.current?.select();
+      }, 0);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [tab, canAccessMenu]);
 
   const effectiveAssetCampusFilter =
     assetCampusFilter !== "ALL" ? assetCampusFilter : campusFilter;
@@ -74213,6 +74263,62 @@ function formatTicketRequestSource(value?: string) {
                 </div>
               </div>
               ) : null}
+              <div className="vault-main-nav-tools">
+                <label className="field vault-main-nav-search">
+                  <span>{lang === "km" ? "ស្វែងរកលឿន" : "Quick Search Shortcut"}</span>
+                  <div className="vault-main-nav-search-wrap">
+                    <Search size={18} />
+                    <input
+                      ref={vaultQuickSearchInputRef}
+                      type="search"
+                      className="input"
+                      value={vaultSearchQuery}
+                      onChange={(e) => {
+                        setVaultSearchQuery(e.target.value);
+                        if (canAccessMenu("vault.dashboard", "vault") && vaultTab !== "dashboard") {
+                          setVaultTab("dashboard");
+                        }
+                      }}
+                      onFocus={() => {
+                        if (canAccessMenu("vault.dashboard", "vault") && vaultTab !== "dashboard") {
+                          setVaultTab("dashboard");
+                        }
+                      }}
+                      placeholder={lang === "km" ? "ស្វែងរក system, username, IP, URL, owner..." : "Search system, username, IP, URL, owner..."}
+                    />
+                    <span className="vault-shortcut-badge">Ctrl/Cmd + K</span>
+                  </div>
+                </label>
+                <div className="vault-main-nav-search-actions">
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    onClick={() => {
+                      if (canAccessMenu("vault.dashboard", "vault")) {
+                        setVaultTab("dashboard");
+                      }
+                      window.setTimeout(() => {
+                        vaultQuickSearchInputRef.current?.focus();
+                        vaultQuickSearchInputRef.current?.select();
+                      }, 0);
+                    }}
+                  >
+                    {lang === "km" ? "បើកស្វែងរក" : "Open Search"}
+                  </button>
+                  {vaultSearchQuery ? (
+                    <button
+                      type="button"
+                      className="tab btn-small"
+                      onClick={() => {
+                        setVaultSearchQuery("");
+                        window.setTimeout(() => vaultQuickSearchInputRef.current?.focus(), 0);
+                      }}
+                    >
+                      {lang === "km" ? "សម្អាត" : "Clear"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
               {isPhoneView ? (
                 <div className="vault-mobile-workspace-picker">
                   <label className="eyebrow" htmlFor="vault-mobile-workspace-select">Workspace</label>
@@ -74661,9 +74767,29 @@ function formatTicketRequestSource(value?: string) {
                   </button>
                 </div>
                 {vaultCredentialPageTab === "records" ? (
+                <>
+                <div className="vault-search-toolbar" style={{ marginBottom: 10, marginTop: 12 }}>
+                  <label className="field vault-search-field">
+                    <span>{lang === "km" ? "ស្វែងរក Web Services" : "Search Web Services"}</span>
+                    <div className="vault-search-input-wrap">
+                      <Search size={18} />
+                      <input
+                        className="input"
+                        type="search"
+                        value={vaultCredentialSearchQuery}
+                        onChange={(e) => setVaultCredentialSearchQuery(e.target.value)}
+                        placeholder={
+                          lang === "km"
+                            ? "ស្វែងរកតាម system, username, URL, recovery, Telegram..."
+                            : "Search by system, username, URL, recovery, Telegram..."
+                        }
+                      />
+                    </div>
+                  </label>
+                </div>
                 isPhoneView ? (
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
-                    {vaultCredentials.length ? vaultCredentials.map((row) => (
+                    {filteredVaultCredentials.length ? filteredVaultCredentials.map((row) => (
                       <article className="vault-mobile-card" key={`vault-credential-mobile-${row.id}`}>
                         {(() => {
                           const isTelegram = isTelegramCredentialRecord(row);
@@ -74756,11 +74882,11 @@ function formatTicketRequestSource(value?: string) {
                           );
                         })()}
                       </article>
-                    )) : <div className="vault-mobile-empty">No website login records yet.</div>}
+                    )) : <div className="vault-mobile-empty">{lang === "km" ? "មិនមាន Web Services ត្រូវតម្រងនេះទេ។" : "No Web Services records match this search."}</div>}
                   </div>
                 ) : (
                   <div className="vault-record-grid" style={{ marginTop: 12 }}>
-                    {vaultCredentials.length ? vaultCredentials.map((row) => (
+                    {filteredVaultCredentials.length ? filteredVaultCredentials.map((row) => (
                       <article className="vault-record-card" key={`vault-credential-desktop-${row.id}`}>
                         {(() => {
                           const isTelegram = isTelegramCredentialRecord(row);
@@ -74871,9 +74997,10 @@ function formatTicketRequestSource(value?: string) {
                           );
                         })()}
                       </article>
-                    )) : <div className="vault-mobile-empty">No website login records yet.</div>}
+                    )) : <div className="vault-mobile-empty">{lang === "km" ? "មិនមាន Web Services ត្រូវតម្រងនេះទេ។" : "No Web Services records match this search."}</div>}
                   </div>
-                )) : (
+                </>
+                ) : (
                 <>
                 <div className="vault-register-head">
                   <h4>{editingVaultCredentialId ? "Edit Web Service Record" : "Register Web Service Record"}</h4>

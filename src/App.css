@@ -8857,7 +8857,7 @@ label.backup-action-btn {
   padding: 16px;
   border-radius: 22px;
   border: 1px solid rgba(120, 146, 182, 0.22);
-  background: linear-gradient(180deg, rgba(255, 149, 84, 0.16), rgba(255, 255, 255, 0.03));
+  background: linear-gradient(180deg, rgba(74, 132, 233, 0.18), rgba(255, 255, 255, 0.03));
   display: grid;
   gap: 6px;
 }
@@ -8870,7 +8870,7 @@ label.backup-action-btn {
 }
 
 .vault-stage-head-stat small {
-  color: #f5d1ad;
+  color: #c8dcfb;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -9229,14 +9229,14 @@ label.backup-action-btn {
   inset: 0 auto 0 0;
   width: 4px;
   height: auto;
-  background: linear-gradient(180deg, #ffb15d 0%, #35dbc6 100%);
+  background: linear-gradient(180deg, #6ca7ff 0%, #35dbc6 100%);
   opacity: 0.95;
 }
 
 .vault-guide-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 187, 109, 0.42);
-  background: #1b2939;
+  border-color: rgba(140, 183, 246, 0.42);
+  background: #1c2d42;
 }
 
 .vault-guide-card-top {
@@ -9253,9 +9253,9 @@ label.backup-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 160, 76, 0.12);
-  color: #ffe1b6;
-  border: 1px solid rgba(255, 176, 103, 0.18);
+  background: rgba(95, 149, 245, 0.14);
+  color: #dce9ff;
+  border: 1px solid rgba(132, 175, 244, 0.22);
 }
 
 .vault-guide-count {
@@ -9284,7 +9284,7 @@ label.backup-action-btn {
 }
 
 .vault-guide-card small {
-  color: #ffcb8b;
+  color: #aecdff;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -9293,7 +9293,7 @@ label.backup-action-btn {
 
 .vault-guide-card-active {
   border-color: rgba(144, 181, 241, 0.82);
-  background: #223a5b;
+  background: #213857;
   box-shadow: 0 14px 28px rgba(10, 19, 35, 0.18);
 }
 
@@ -9789,14 +9789,14 @@ label.backup-action-btn {
   min-width: 138px;
   padding: 12px 16px;
   border-radius: 22px;
-  border: 1px solid rgba(255, 182, 103, 0.24);
-  background: linear-gradient(135deg, rgba(255, 160, 76, 0.16), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(132, 175, 244, 0.24);
+  background: linear-gradient(135deg, rgba(74, 132, 233, 0.18), rgba(255, 255, 255, 0.03));
   display: grid;
   gap: 6px;
 }
 
 .vault-main-nav-pulse span {
-  color: #ffd39f;
+  color: #cde0ff;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -9804,10 +9804,74 @@ label.backup-action-btn {
 }
 
 .vault-main-nav-pulse strong {
-  color: #fff8ee;
+  color: #f4f8ff;
   font-family: var(--font-head);
   font-size: 28px;
   line-height: 1;
+}
+
+.vault-main-nav-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.vault-main-nav-search {
+  margin: 0;
+  max-width: none;
+}
+
+.vault-main-nav-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 1px solid rgba(111, 147, 201, 0.22);
+  border-radius: 18px;
+  background: #121b27;
+}
+
+.vault-main-nav-search-wrap svg {
+  color: #8fb0df;
+  flex: 0 0 auto;
+}
+
+.vault-main-nav-search-wrap .input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.vault-main-nav-search-wrap .input:focus {
+  outline: none;
+}
+
+.vault-shortcut-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(132, 175, 244, 0.22);
+  background: rgba(95, 149, 245, 0.12);
+  color: #dcebff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.vault-main-nav-search-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .vault-back-tab {
@@ -9847,13 +9911,13 @@ label.backup-action-btn {
 }
 
 .vault-main-tabs .tab:hover {
-  background: rgba(255, 160, 76, 0.12);
+  background: rgba(95, 149, 245, 0.12);
 }
 
 .vault-main-tabs .tab.tab-active {
-  border-color: rgba(255, 190, 120, 0.92);
-  background: linear-gradient(135deg, #ff9d45 0%, #ee6c2a 100%);
-  color: #1a0f08;
+  border-color: rgba(146, 188, 249, 0.84);
+  background: linear-gradient(135deg, #3d80e8 0%, #295fc4 100%);
+  color: #f7fbff;
   box-shadow: none;
 }
 
@@ -9978,9 +10042,9 @@ label.backup-action-btn {
 
 .vault-shell .tab.tab-active,
 .vault-shell .btn-primary {
-  border-color: rgba(255, 190, 120, 0.84);
-  background: linear-gradient(135deg, #ff9d45 0%, #ee6c2a 100%);
-  color: #1a0f08;
+  border-color: rgba(146, 188, 249, 0.84);
+  background: linear-gradient(135deg, #3d80e8 0%, #295fc4 100%);
+  color: #f7fbff;
 }
 
 .vault-shell .btn-danger {
@@ -26316,20 +26380,36 @@ tr.row-maint-maintenance:hover td {
 
 @media (max-width: 1366px) and (min-width: 1101px) {
   .app-shell {
-    padding: 20px 14px;
+    padding: 14px 12px calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-card {
-    padding: 20px;
+    padding: 16px;
+  }
+
+  .app-card.app-card-layout {
+    min-height: calc(100dvh - 28px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 28px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-top-controls-wrap {
+    margin-bottom: 8px;
+  }
+
+  .app-top-controls-grid {
+    padding: 8px;
   }
 
   .topbar {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 40%);
-    gap: 16px;
+    gap: 14px;
+    padding: 10px 12px;
   }
 
   .brand-block h1 {
     white-space: normal;
+    font-size: clamp(34px, 3.6vw, 52px);
+    line-height: 0.98;
   }
 
   .subhead {
@@ -26339,14 +26419,108 @@ tr.row-maint-maintenance:hover td {
   .top-controls-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 0;
+    gap: 6px;
+  }
+
+  .top-controls-grid .field > span {
+    font-size: 11px;
+  }
+
+  .top-controls-grid .input,
+  .top-controls-grid .detail-value {
+    min-height: 38px;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .top-controls-grid .tab {
+    height: 38px;
+    font-size: 13px;
+    padding: 0 12px;
   }
 
   .workspace-shell {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 214px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .main-nav-rail {
+    top: 10px;
+    max-height: calc(100dvh - 20px);
+    gap: 8px;
+    padding: 8px 8px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .main-nav-head {
+    padding: 8px;
+  }
+
+  .main-nav-list,
+  .main-nav-item-group,
+  .main-nav-sublist,
+  .main-nav-subitem-group {
+    gap: 5px;
+  }
+
+  .main-nav-btn {
+    min-height: 40px;
+    font-size: 14px;
+    padding: 0 10px 0 12px;
+  }
+
+  .main-nav-sub-btn {
+    min-height: 32px;
+    font-size: 12px;
+  }
+
+  .workspace-main {
+    padding: 12px;
+    border-radius: 20px;
+  }
+
+  .panel {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .panel-row {
+    gap: 10px;
+  }
+
+  .form-grid {
+    gap: 10px;
+  }
+
+  .asset-form-grid,
+  .modal-panel .form-grid.asset-detail-grid,
+  .modal-panel .form-grid.asset-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .asset-dual-textarea-row,
+  .aircon-inline-triple,
+  .edit-asset-inline-grid-two {
+    gap: 10px;
   }
 
   .table-compact {
     min-width: 1120px;
+  }
+
+  .workspace-main .table-wrap,
+  .workspace-main .vault-table-wrap,
+  .workspace-main .inventory-stock-table-wrap {
+    border-radius: 18px;
+  }
+
+  .workspace-main th {
+    font-size: 12px;
+    padding: 12px 10px;
+  }
+
+  .workspace-main td {
+    padding: 11px 10px;
+    font-size: 13px;
   }
 }
 
@@ -33279,6 +33453,36 @@ tr.row-maint-maintenance:hover td {
     display: grid;
     gap: 6px;
     margin-top: 6px;
+  }
+
+  .vault-main-nav-tools {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .vault-main-nav-search-wrap {
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .vault-shortcut-badge {
+    min-height: 26px;
+    padding: 0 8px;
+    font-size: 10px;
+  }
+
+  .vault-main-nav-search-actions {
+    justify-content: stretch;
+  }
+
+  .vault-main-nav-search-actions .tab.btn-small {
+    flex: 1 1 0;
+    min-height: 42px;
   }
 
   .vault-mobile-workspace-picker .eyebrow {
