@@ -70448,51 +70448,74 @@ function formatTicketRequestSource(value?: string) {
                         {weekday}
                       </div>
                     ))}
-	                    {reportScheduleDisplayDays.map((day) => (
-                      <div
-                        key={`report-schedule-day-${day.ymd}`}
-                        style={{
-                          minHeight: isPhoneView ? 86 : 132,
-                          padding: isPhoneView ? 4 : 8,
-                          background: day.inMonth ? "#fff" : "#f7f2e8",
-                          borderRight: day.weekday === 6 ? "0" : "1px solid rgba(151, 124, 85, 0.18)",
-                          borderBottom: "1px solid rgba(151, 124, 85, 0.18)",
-                          display: "grid",
-                          gridTemplateRows: "auto 1fr",
-                          gap: isPhoneView ? 3 : 6,
-                        }}
-                      >
-                        <div style={{ fontSize: isPhoneView ? 10 : 12, fontWeight: 800, color: day.weekday === 0 ? "#bb3f3f" : "#33443a" }}>{day.day}</div>
-                        <div style={{ display: "grid", gap: isPhoneView ? 3 : 6, alignContent: "start" }}>
-                          {day.entries.map((entry) => (
-                            <div
-                              key={entry.key}
-                              style={{
-                                borderRadius: isPhoneView ? 8 : 10,
-                                padding: isPhoneView ? "3px 4px" : "6px 7px",
-                                background: scheduleCalendarCampusColor(entry.campus),
-                                boxShadow: "inset 0 0 0 1px rgba(72, 63, 45, 0.08)",
-                                color: "#223128",
-                                overflow: "hidden",
-                                opacity: entry.completed ? 0.68 : 1,
-                              }}
-                            >
-                              <div style={{ fontSize: isPhoneView ? 7 : 10, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>{reportCampusName(entry.campus)}</div>
-                              <div style={{ fontSize: isPhoneView ? 7 : 10, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>{entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup)}</div>
-                              <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.82, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-	                                {entry.statusLabel}
-	                              </div>
-	                              <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.78, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>
-	                                {entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}
-	                              </div>
-	                              {!isPhoneView && entry.completedAssetIds.length ? (
-	                                <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.74, textDecoration: entry.completed ? "line-through" : "none" }}>{entry.completedAssetIds.join(", ")}</div>
-	                              ) : null}
-	                            </div>
-	                          ))}
-                        </div>
-                      </div>
-                    ))}
+	                    {reportScheduleDisplayDays.map((day) => {
+                        const visibleEntries = isPhoneView ? day.entries.slice(0, 1) : day.entries;
+                        const hiddenEntryCount = isPhoneView ? Math.max(0, day.entries.length - visibleEntries.length) : 0;
+                        return (
+                          <div
+                            key={`report-schedule-day-${day.ymd}`}
+                            style={{
+                              minHeight: isPhoneView ? 86 : 132,
+                              padding: isPhoneView ? 4 : 8,
+                              background: day.inMonth ? "#fff" : "#f7f2e8",
+                              borderRight: day.weekday === 6 ? "0" : "1px solid rgba(151, 124, 85, 0.18)",
+                              borderBottom: "1px solid rgba(151, 124, 85, 0.18)",
+                              display: "grid",
+                              gridTemplateRows: "auto 1fr",
+                              gap: isPhoneView ? 3 : 6,
+                            }}
+                          >
+                            <div style={{ fontSize: isPhoneView ? 10 : 12, fontWeight: 800, color: day.weekday === 0 ? "#bb3f3f" : "#33443a" }}>{day.day}</div>
+                            <div style={{ display: "grid", gap: isPhoneView ? 3 : 6, alignContent: "start" }}>
+                              {visibleEntries.map((entry) => (
+                                <div
+                                  key={entry.key}
+                                  style={{
+                                    borderRadius: isPhoneView ? 8 : 10,
+                                    padding: isPhoneView ? "3px 4px" : "6px 7px",
+                                    background: scheduleCalendarCampusColor(entry.campus),
+                                    boxShadow: "inset 0 0 0 1px rgba(72, 63, 45, 0.08)",
+                                    color: "#223128",
+                                    overflow: "hidden",
+                                    opacity: entry.completed ? 0.68 : 1,
+                                  }}
+                                >
+                                  <div style={{ fontSize: isPhoneView ? 7 : 10, fontWeight: 800, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>{reportCampusName(entry.campus)}</div>
+                                  <div style={{ fontSize: isPhoneView ? 7 : 10, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>
+                                    {entry.items[0] || reportScheduleGroupLabel(entry.scheduleGroup)}
+                                  </div>
+                                  <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.82, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+	                                    {entry.statusLabel}
+	                                  </div>
+	                                  <div style={{ fontSize: isPhoneView ? 7 : 9, lineHeight: 1.2, opacity: 0.78, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textDecoration: entry.completed ? "line-through" : "none" }}>
+	                                    {entry.timeLabel || entry.scheduleNote || reportScheduleGroupLabel(entry.scheduleGroup)}
+	                                  </div>
+	                                  {!isPhoneView && entry.completedAssetIds.length ? (
+	                                    <div style={{ fontSize: 9, lineHeight: 1.2, opacity: 0.74, textDecoration: entry.completed ? "line-through" : "none" }}>{entry.completedAssetIds.join(", ")}</div>
+	                                  ) : null}
+                                </div>
+                              ))}
+                              {hiddenEntryCount > 0 ? (
+                                <div
+                                  style={{
+                                    fontSize: 7,
+                                    fontWeight: 800,
+                                    lineHeight: 1.15,
+                                    color: "#7a5b2b",
+                                    background: "rgba(255, 239, 204, 0.92)",
+                                    border: "1px solid rgba(199, 157, 88, 0.34)",
+                                    borderRadius: 999,
+                                    padding: "2px 4px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  {lang === "km" ? `+${hiddenEntryCount} ការងារបន្ថែម` : `+${hiddenEntryCount} more task${hiddenEntryCount > 1 ? "s" : ""}`}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
 
