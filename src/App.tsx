@@ -4509,7 +4509,13 @@ function readCalendarEventFallback(defaultEvents: CalendarEvent[]) {
   try {
     const raw = localStorage.getItem(CALENDAR_EVENT_FALLBACK_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    const normalized = normalizeCalendarEvents(parsed, defaultEvents);
+    const normalized = normalizeCalendarEvents(
+      [
+        ...defaultEvents,
+        ...(Array.isArray(parsed) ? parsed : []),
+      ],
+      defaultEvents
+    );
     return normalized.length ? normalized : defaultEvents;
   } catch {
     return defaultEvents;
@@ -6685,6 +6691,98 @@ const DEFAULT_CALENDAR_EVENTS_BY_YEAR: Record<number, Array<{ date: string; name
   ],
 };
 
+const DEFAULT_SERVICE_TASK_CALENDAR_EVENTS: Array<{
+  date: string;
+  time: string;
+  type: ServiceTaskScheduleType;
+  name: string;
+}> = [
+  {
+    date: "2026-07-01",
+    time: "21:00",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Samdach Pan Campus - 9:00 - 10:00PM",
+  },
+  {
+    date: "2026-07-03",
+    time: "19:00",
+    type: "pest_service",
+    name: "Pest Service by Eco Team - Chaktomuk Campus (C2.2) - 7:00 - 7:30PM",
+  },
+  {
+    date: "2026-07-04",
+    time: "20:30",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Chaktomuk Campus - 8:30 - 9:30PM",
+  },
+  {
+    date: "2026-07-10",
+    time: "21:00",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Veng Sreng Campus - 9:00 - 10:30PM",
+  },
+  {
+    date: "2026-07-13",
+    time: "21:30",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Boeung Snor Campus - 9:30 - 11:00PM",
+  },
+  {
+    date: "2026-07-14",
+    time: "14:00",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Samdach Pan Campus - 2:00 - 3:00PM *",
+  },
+  {
+    date: "2026-07-15",
+    time: "21:00",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Samdach Pan Campus - 9:00 - 10:00PM",
+  },
+  {
+    date: "2026-07-17",
+    time: "19:00",
+    type: "pest_service",
+    name: "Pest Service by Eco Team - Chaktomuk Campus (C2.2) - 7:00 - 7:30PM",
+  },
+  {
+    date: "2026-07-18",
+    time: "21:00",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Chaktomuk Campus - 9:00 - 10:30PM",
+  },
+  {
+    date: "2026-07-24",
+    time: "21:00",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Veng Sreng Campus - 9:00 - 10:30PM",
+  },
+  {
+    date: "2026-07-27",
+    time: "21:30",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Boeung Snor Campus - 9:30 - 11:00PM",
+  },
+  {
+    date: "2026-07-28",
+    time: "14:00",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Samdach Pan Campus - 2:00 - 3:00PM *",
+  },
+  {
+    date: "2026-07-29",
+    time: "14:00",
+    type: "pest_service",
+    name: "Pest Service by ORKIN Team - Samdach Pan Campus - 2:00 - 3:00PM",
+  },
+  {
+    date: "2026-07-31",
+    time: "19:00",
+    type: "pest_service",
+    name: "Pest Service by Eco Team - Chaktomuk Campus (C2.2) - 7:00 - 7:30PM",
+  },
+];
+
 function classifyHolidayEvent(name: string): CalendarEventType {
   const text = String(name || "").toLowerCase();
   if (text.includes("ptc")) return "ptc";
@@ -6713,6 +6811,16 @@ function buildDefaultCalendarEvents() {
       });
       cursor += 1;
     }
+  }
+  for (const row of DEFAULT_SERVICE_TASK_CALENDAR_EVENTS) {
+    out.push({
+      id: cursor,
+      date: row.date,
+      time: row.time,
+      name: row.name,
+      type: row.type,
+    });
+    cursor += 1;
   }
   return out;
 }
@@ -6750,6 +6858,23 @@ function normalizeCalendarEventTime(value: unknown) {
     return "";
   }
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function isServiceScheduleExactTimeText(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return /\d/.test(text) && /(AM|PM)/i.test(text);
+}
+
+function serviceScheduleDisplayTime(row: Pick<CalendarEvent, "time">, note: unknown, lang: string) {
+  const noteText = String(note || "").trim();
+  if (isServiceScheduleExactTimeText(noteText)) return noteText;
+  return normalizeCalendarEventTime(row.time) || (lang === "km" ? "គ្មានម៉ោង" : "No time");
+}
+
+function serviceScheduleDisplayNote(note: unknown) {
+  const noteText = String(note || "").trim();
+  return isServiceScheduleExactTimeText(noteText) ? "" : noteText;
 }
 
 function formatCalendarEventDisplayName(row: Pick<CalendarEvent, "name" | "time">) {
@@ -21106,9 +21231,13 @@ export default function App() {
           return next;
         });
         const serverCalendarEvents = normalizeCalendarEvents(settingsRes.settings?.calendarEvents, []);
-        const nextCalendarEvents = serverCalendarEvents.length
-          ? serverCalendarEvents
-          : readCalendarEventFallback(defaultCalendarEvents);
+        const nextCalendarEvents = normalizeCalendarEvents(
+          [
+            ...defaultCalendarEvents,
+            ...(serverCalendarEvents.length ? serverCalendarEvents : readCalendarEventFallback(defaultCalendarEvents)),
+          ],
+          defaultCalendarEvents
+        );
         setCalendarEvents(nextCalendarEvents);
         writeCalendarEventFallback(nextCalendarEvents);
         setMaintenanceReminderOffsets(
@@ -38302,14 +38431,16 @@ export default function App() {
       .filter((row) => isServiceTaskCalendarType(normalizeCalendarEventType(row.type)))
       .map((row) => {
         const parsed = parseServiceScheduleEvent(row);
+        const displayTime = serviceScheduleDisplayTime(row, parsed.note, lang);
+        const displayNote = serviceScheduleDisplayNote(parsed.note);
         return {
           id: `service-${row.id}`,
           date: String(row.date || ""),
           campus: parsed.campus,
           scheduleGroup: parsed.serviceType,
-          scheduleNote: parsed.note,
+          scheduleNote: displayNote,
           entryLabel: parsed.title || calendarEventTypeLabel(parsed.serviceType),
-          timeLabel: normalizeCalendarEventTime(row.time) || (lang === "km" ? "គ្មានម៉ោង" : "No time"),
+          timeLabel: displayTime,
         };
       })
       .filter((row) => row.date);
@@ -38937,6 +39068,8 @@ export default function App() {
       .map((row) => {
         const parsed = parseServiceScheduleEvent(row);
         const completed = completedScheduleServiceKeys.has(`${parsed.campus}||${String(row.date || "")}||${String(row.id || "")}`);
+        const displayTime = serviceScheduleDisplayTime(row, parsed.note, lang);
+        const displayNote = serviceScheduleDisplayNote(parsed.note);
         return {
           ...statusForRow(String(row.date || ""), completed),
           id: `service-${row.id}`,
@@ -38948,9 +39081,9 @@ export default function App() {
             parsed.campus === "ALL"
               ? t.allCampuses
               : campusLabel(parsed.campus),
-          note: parsed.note,
+          note: displayNote,
           groupLabel: calendarEventTypeLabel(parsed.serviceType),
-          modeLabel: normalizeCalendarEventTime(row.time) || (lang === "km" ? "គ្មានម៉ោង" : "No time"),
+          modeLabel: displayTime,
           photo: "",
           completed,
           lastCompletedDate: latestCompletedServiceMap.get(`${parsed.campus}||${String(row.id || "")}`) || "",
