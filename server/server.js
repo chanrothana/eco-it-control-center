@@ -610,6 +610,126 @@ function countDbRows(db) {
   };
 }
 
+function inventorySettingsScore(counts) {
+  return (
+    counts.inventoryItems * 1000 +
+    counts.inventoryTxns * 10 +
+    counts.toolReviewReports * 50
+  );
+}
+
+function countInventoryItemCategories(db) {
+  const safe = normalizeImportedDb(db);
+  const settings =
+    safe.settings && typeof safe.settings === "object" && !Array.isArray(safe.settings)
+      ? safe.settings
+      : {};
+  const items = Array.isArray(settings.inventoryItems) ? settings.inventoryItems : [];
+  const counts = {};
+  for (const row of items) {
+    const category = toUpper(row && row.category);
+    if (!category) continue;
+    counts[category] = (counts[category] || 0) + 1;
+  }
+  return counts;
+}
+
+function inventoryItemMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const itemCode = toUpper(row && row.itemCode);
+  const campus = toUpper(row && row.campus);
+  if (itemCode || campus) keys.push(`code:${itemCode}|campus:${campus}`);
+  return keys;
+}
+
+function inventoryTxnMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const itemId = Number(row && row.itemId);
+  const itemCode = toUpper(row && row.itemCode);
+  const date = toText(row && row.date);
+  const type = toUpper(row && row.type);
+  const qty = Number(row && row.qty);
+  const by = toText(row && row.by).trim().toLowerCase();
+  const note = toText(row && row.note).trim().toLowerCase();
+  keys.push(`sig:${itemId}|${itemCode}|${date}|${type}|${qty}|${by}|${note}`);
+  return keys;
+}
+
+function toolReviewReportMergeKeys(row) {
+  const keys = [];
+  const id = Number(row && row.id);
+  if (id > 0) keys.push(`id:${id}`);
+  const itemId = Number(row && row.itemId);
+  const month = toText(row && row.month);
+  if (itemId > 0 || month) keys.push(`item:${itemId}|month:${month}`);
+  return keys;
+}
+
+function mergeUniqueRows(currentRows, candidateRows, buildKeys) {
+  const existing = new Set();
+  const merged = Array.isArray(currentRows) ? [...currentRows] : [];
+  let changed = false;
+  for (const row of merged) {
+    for (const key of buildKeys(row)) {
+      if (key) existing.add(key);
+    }
+  }
+  for (const row of Array.isArray(candidateRows) ? candidateRows : []) {
+    const keys = buildKeys(row).filter(Boolean);
+    if (!keys.length) continue;
+    if (keys.some((key) => existing.has(key))) continue;
+    merged.push(row);
+    changed = true;
+    for (const key of keys) existing.add(key);
+  }
+  return { rows: merged, changed };
+}
+
+function mergeInventorySettingsFromCandidate(currentDb, candidateDb) {
+  const current = normalizeImportedDb(currentDb);
+  const candidate = normalizeImportedDb(candidateDb);
+  const currentSettings =
+    current.settings && typeof current.settings === "object" && !Array.isArray(current.settings)
+      ? current.settings
+      : {};
+  const candidateSettings =
+    candidate.settings && typeof candidate.settings === "object" && !Array.isArray(candidate.settings)
+      ? candidate.settings
+      : {};
+
+  const mergedItems = mergeUniqueRows(
+    Array.isArray(currentSettings.inventoryItems) ? currentSettings.inventoryItems : [],
+    Array.isArray(candidateSettings.inventoryItems) ? candidateSettings.inventoryItems : [],
+    inventoryItemMergeKeys
+  );
+  const mergedTxns = mergeUniqueRows(
+    Array.isArray(currentSettings.inventoryTxns) ? currentSettings.inventoryTxns : [],
+    Array.isArray(candidateSettings.inventoryTxns) ? candidateSettings.inventoryTxns : [],
+    inventoryTxnMergeKeys
+  );
+  const mergedReports = mergeUniqueRows(
+    Array.isArray(currentSettings.toolReviewReports) ? currentSettings.toolReviewReports : [],
+    Array.isArray(candidateSettings.toolReviewReports) ? candidateSettings.toolReviewReports : [],
+    toolReviewReportMergeKeys
+  );
+
+  if (!mergedItems.changed && !mergedTxns.changed && !mergedReports.changed) {
+    return { changed: false, db: current };
+  }
+
+  current.settings = {
+    ...currentSettings,
+    inventoryItems: mergedItems.rows,
+    inventoryTxns: mergedTxns.rows,
+    toolReviewReports: mergedReports.rows,
+  };
+  return { changed: true, db: current };
+}
+
 function dbScore(db) {
   const counts = countDbRows(db);
   return (
@@ -636,17 +756,20 @@ function looksLikeDataLoss(db) {
 function hasRecoverableInventoryGap(currentDb, candidateDb) {
   const current = countDbRows(currentDb);
   const candidate = countDbRows(candidateDb);
-  const currentInventoryScore =
-    current.inventoryItems * 1000 +
-    current.inventoryTxns * 10 +
-    current.toolReviewReports * 50;
-  const candidateInventoryScore =
-    candidate.inventoryItems * 1000 +
-    candidate.inventoryTxns * 10 +
-    candidate.toolReviewReports * 50;
-  const currentInventoryLooksEmpty = current.inventoryItems === 0 && current.inventoryTxns === 0;
+  const currentInventoryScore = inventorySettingsScore(current);
+  const candidateInventoryScore = inventorySettingsScore(candidate);
+  const currentInventoryLooksIncomplete = current.inventoryItems === 0 || current.inventoryTxns === 0;
   const candidateHasInventoryData = candidate.inventoryItems > 0 || candidate.inventoryTxns > 0;
-  return currentInventoryLooksEmpty && candidateHasInventoryData && candidateInventoryScore > currentInventoryScore;
+  const currentCategoryCounts = countInventoryItemCategories(currentDb);
+  const candidateCategoryCounts = countInventoryItemCategories(candidateDb);
+  const hasMissingCategory = Object.entries(candidateCategoryCounts).some(
+    ([category, count]) => Number(count || 0) > 0 && Number(currentCategoryCounts[category] || 0) === 0
+  );
+  return (
+    (currentInventoryLooksIncomplete || hasMissingCategory) &&
+    candidateHasInventoryData &&
+    candidateInventoryScore > currentInventoryScore
+  );
 }
 
 function shouldUseSqlite() {
@@ -917,10 +1040,15 @@ function initStorageSync() {
     }
 
     let best = null;
+    let bestInventoryCandidate = null;
     for (const candidate of candidates) {
       const score = dbScore(candidate.db);
       if (!best || score > best.score) {
         best = { ...candidate, score };
+      }
+      const inventoryScore = inventorySettingsScore(countDbRows(candidate.db));
+      if (!bestInventoryCandidate || inventoryScore >= bestInventoryCandidate.inventoryScore) {
+        bestInventoryCandidate = { ...candidate, inventoryScore };
       }
     }
 
@@ -929,17 +1057,20 @@ function initStorageSync() {
       best.score > sqliteScore &&
       (sqliteRowEmpty || sqliteScore === 0 || looksLikeDataLoss(sqliteCurrent));
     const shouldRecoverFromInventoryGap =
-      Boolean(best) && hasRecoverableInventoryGap(sqliteCurrent, best.db);
-    const shouldRecover = shouldRecoverFromScore || shouldRecoverFromInventoryGap;
+      Boolean(bestInventoryCandidate) && hasRecoverableInventoryGap(sqliteCurrent, bestInventoryCandidate.db);
 
-    if (shouldRecover && best) {
+    if (shouldRecoverFromScore && best) {
       replaceSqliteDataSync(best.db);
       sqliteCurrent = normalizeImportedDb(best.db);
-      console.log(
-        shouldRecoverFromInventoryGap && !shouldRecoverFromScore
-          ? `Recovered SQLite data from ${best.label} because inventory settings data was empty`
-          : `Recovered SQLite data from ${best.label}`
-      );
+      console.log(`Recovered SQLite data from ${best.label}`);
+    } else if (shouldRecoverFromInventoryGap && bestInventoryCandidate) {
+      const mergedInventory = mergeInventorySettingsFromCandidate(sqliteCurrent, bestInventoryCandidate.db);
+      if (mergedInventory.changed) {
+        sqliteCurrent = normalizeImportedDb(mergedInventory.db);
+        console.log(
+          `Recovered inventory settings from ${bestInventoryCandidate.label} by merging missing inventory records`
+        );
+      }
     }
 
     // Persist normalized/migrated data shape (including Asset ID format migration).
