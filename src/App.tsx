@@ -1796,6 +1796,56 @@ const DOCUMENT_ADMIN_SUPPORT_ITEMS = [
   "Rental printer setup, counter, comparison, and graph reports",
   "Transfer, handover, inactive, and disposal forms",
   "Audit-ready PDF filing for admin orientation and review",
+  "Official software setup standards for Admin Staff, Teacher, and Student computers",
+  "Telegram account handling memo and staff responsibility guideline",
+  "School logo on / off operating time guideline",
+  "Pool cleaning schedule, checklist, and supervisor sign-off memo",
+] as const;
+
+const DOCUMENT_FORMAL_SETUP_TEMPLATES = [
+  {
+    title: "Admin Staff Computer Setup Template",
+    note: "Official baseline for office and management computers before handover.",
+    items: ["Windows / macOS ready", "Office apps", "Printer setup", "School email", "Browser bookmarks", "Antivirus + update check"],
+  },
+  {
+    title: "Teacher Computer Setup Template",
+    note: "Standard software and classroom-ready setup for teacher daily work.",
+    items: ["Presentation apps", "Projector / display check", "School email", "Browser + LMS links", "Printer access", "Final classroom test"],
+  },
+  {
+    title: "Student Computer Setup Template",
+    note: "Controlled classroom setup with only approved software and learning tools.",
+    items: ["Student account profile", "Learning apps", "Browser restriction", "Printing policy", "Device naming", "Inspection checklist"],
+  },
+  {
+    title: "Shared Office / Reception Computer Setup",
+    note: "Quick-use standard for shared admin counters and front desk machines.",
+    items: ["Shared account rules", "Printer setup", "Shortcuts", "Browser home page", "Basic apps only", "Daily shutdown check"],
+  },
+] as const;
+
+const DOCUMENT_OPERATION_GUIDELINES = [
+  {
+    title: "Telegram Account Handling Guideline",
+    note: "Define who can access, post, reset password, and confirm logged-in devices for school Telegram accounts.",
+    items: ["Account owner", "Backup contact", "Password reset rule", "Logged-in device review", "Staff handover when role changes"],
+  },
+  {
+    title: "School Logo On / Off Schedule",
+    note: "Official timing and staff responsibility for switching school logo or display signage on and off.",
+    items: ["Morning turn-on time", "Evening turn-off time", "Weekend / holiday rule", "Emergency override", "Responsible team"],
+  },
+  {
+    title: "Pool Cleaning Schedule and Checklist",
+    note: "Formal schedule for routine cleaning, water checking, and reporting.",
+    items: ["Daily task", "Weekly deep clean", "Chemical check", "Equipment inspection", "Supervisor sign-off"],
+  },
+  {
+    title: "Official Memo and SOP Library",
+    note: "Printable memo format for operations that need formal school approval.",
+    items: ["Prepared by", "Checked by", "Approved by", "Effective date", "Review date"],
+  },
 ] as const;
 
 const DOCUMENT_SETUP_GUIDE = [
@@ -1842,6 +1892,12 @@ const DOCUMENT_REPORT_GUIDE = [
 const DOCUMENT_TEMPLATE_LIBRARY = [
   { name: "Staff Orientation Overview", owner: "Documents", status: "Ready", source: "Document Center" },
   { name: "Daily Setup Checklist", owner: "User Support", status: "Ready", source: "Document Center" },
+  { name: "Admin Staff Computer Setup Template", owner: "Templates", status: "Ready to Draft", source: "Documents / Templates" },
+  { name: "Teacher Computer Setup Template", owner: "Templates", status: "Ready to Draft", source: "Documents / Templates" },
+  { name: "Student Computer Setup Template", owner: "Templates", status: "Ready to Draft", source: "Documents / Templates" },
+  { name: "Telegram Handling Guideline", owner: "Admin Support", status: "Ready to Draft", source: "Documents / Admin Support" },
+  { name: "School Logo On / Off SOP", owner: "Admin Support", status: "Ready to Draft", source: "Documents / Admin Support" },
+  { name: "Pool Cleaning Schedule and Checklist", owner: "Admin Support", status: "Ready to Draft", source: "Pool Maintenance / Documents" },
   { name: "Maintenance Completion Report", owner: "Admin Support", status: "Live Auto", source: "Maintenance" },
   { name: "Printer Counter and Comparison Report", owner: "Admin Support", status: "Live", source: "Rental Printer" },
   { name: "Asset Transfer / Handover Form", owner: "Admin Support", status: "Phase 1", source: "Transfer / Assets" },
@@ -39274,28 +39330,26 @@ export default function App() {
     () =>
       lang === "km"
         ? [
-            { value: "safety_maintenance", label: "ED Quick: ថែទាំសុវត្ថិភាពទាំងអស់" },
-            { value: "computer_service", label: "Computer: Desktop / iMac / Mac Mini" },
-            { value: "laptop_service", label: "Computer: Laptop / MacBook" },
-            { value: "ipad_service", label: "Computer: iPad / Tablet" },
-            { value: "tv_service", label: "IT: TV / Screen" },
-            { value: "aircon_cleaning", label: "Facility: Air-Con" },
-            { value: "walkie_service", label: "Facility: Walkie Talkie" },
-            { value: "it_maintenance", label: "IT: គ្រឿង IT ទាំងអស់" },
-            { value: "facility_maintenance", label: "Facility: គ្រឿង Facility ទាំងអស់" },
-            { value: "manual", label: "ផ្សេងទៀត / ជ្រើសដោយដៃ (Computer, Air-Con...)" },
+            { value: "computer_service", label: "All Computers" },
+            { value: "ipad_service", label: "iPad / Tablet" },
+            { value: "tv_service", label: "TV / Screen" },
+            { value: "aircon_cleaning", label: "Air-Con" },
+            { value: "walkie_service", label: "Walkie Talkie" },
+            { value: "safety_maintenance", label: "Safety Maintenance" },
+            { value: "it_maintenance", label: "All IT Items" },
+            { value: "facility_maintenance", label: "All Facility Items" },
+            { value: "manual", label: "Custom / Manual" },
           ]
         : [
-            { value: "safety_maintenance", label: "ED Quick: All Safety Maintenance" },
-            { value: "computer_service", label: "Computer: Desktop / iMac / Mac Mini" },
-            { value: "laptop_service", label: "Computer: Laptop / MacBook" },
-            { value: "ipad_service", label: "Computer: iPad / Tablet" },
-            { value: "tv_service", label: "IT: TV / Screen" },
-            { value: "aircon_cleaning", label: "Facility: Air-Con" },
-            { value: "walkie_service", label: "Facility: Walkie Talkie" },
-            { value: "it_maintenance", label: "IT: All IT Items" },
-            { value: "facility_maintenance", label: "Facility: All Facility Items" },
-            { value: "manual", label: "Other / Manual (Computer, Air-Con...)" },
+            { value: "computer_service", label: "All Computers" },
+            { value: "ipad_service", label: "iPad / Tablet" },
+            { value: "tv_service", label: "TV / Screen" },
+            { value: "aircon_cleaning", label: "Air-Con" },
+            { value: "walkie_service", label: "Walkie Talkie" },
+            { value: "safety_maintenance", label: "Safety Maintenance" },
+            { value: "it_maintenance", label: "All IT Items" },
+            { value: "facility_maintenance", label: "All Facility Items" },
+            { value: "manual", label: "Custom / Manual" },
           ],
     [lang]
   );
@@ -39314,10 +39368,7 @@ export default function App() {
         return row.category === "FACILITY" && assetType === "AC" && maintenanceType === "preventive";
       }
       if (maintenanceQuickTemplate === "computer_service") {
-        return row.category === "IT" && assetType === DESKTOP_PARENT_TYPE;
-      }
-      if (maintenanceQuickTemplate === "laptop_service") {
-        return row.category === "IT" && assetType === LAPTOP_TYPE;
+        return row.category === "IT" && (assetType === DESKTOP_PARENT_TYPE || assetType === LAPTOP_TYPE);
       }
       if (maintenanceQuickTemplate === "ipad_service") {
         return row.category === "IT" && assetType === "TAB";
@@ -39364,10 +39415,7 @@ export default function App() {
         return asset.category === "FACILITY" && assetType === "AC";
       }
       if (maintenanceQuickTemplate === "computer_service") {
-        return asset.category === "IT" && assetType === DESKTOP_PARENT_TYPE;
-      }
-      if (maintenanceQuickTemplate === "laptop_service") {
-        return asset.category === "IT" && assetType === LAPTOP_TYPE;
+        return asset.category === "IT" && (assetType === DESKTOP_PARENT_TYPE || assetType === LAPTOP_TYPE);
       }
       if (maintenanceQuickTemplate === "ipad_service") {
         return asset.category === "IT" && assetType === "TAB";
@@ -39426,7 +39474,6 @@ export default function App() {
       }
       if (
         template === "computer_service" ||
-        template === "laptop_service" ||
         template === "ipad_service" ||
         template === "tv_service" ||
         template === "it_maintenance"
@@ -67424,6 +67471,20 @@ function formatTicketRequestSource(value?: string) {
                       <div className="documents-flow-step"><strong>3.</strong><span>User opens Documents or Reports, reviews the page, then prints or saves PDF.</span></div>
                     </div>
                   </article>
+                  <article className="documents-card">
+                    <h3>Computer Setup Templates</h3>
+                    <p>
+                      Use these as formal setup checklists when preparing school computers for Admin Staff, Teachers, Students, or shared office machines.
+                    </p>
+                    <div className="documents-flow">
+                      {DOCUMENT_FORMAL_SETUP_TEMPLATES.map((template) => (
+                        <div key={`document-user-template-${template.title}`} className="documents-flow-step">
+                          <strong>{template.title}</strong>
+                          <span>{template.note}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
                 </div>
               )}
 
@@ -67452,6 +67513,26 @@ function formatTicketRequestSource(value?: string) {
                       </div>
                     </article>
                   </div>
+
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Official SOP and Memo Topics</h3>
+                      <span className="documents-section-badge">Formal school operating documents to prepare</span>
+                    </div>
+                    <div className="documents-grid">
+                      {DOCUMENT_OPERATION_GUIDELINES.map((guide) => (
+                        <article key={`document-admin-guide-${guide.title}`} className="documents-subcard">
+                          <h4>{guide.title}</h4>
+                          <p>{guide.note}</p>
+                          <ul className="documents-list">
+                            {guide.items.map((item) => (
+                              <li key={`${guide.title}-${item}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
 
                   <section className="documents-card">
                     <div className="documents-section-head">
@@ -67556,34 +67637,55 @@ function formatTicketRequestSource(value?: string) {
               )}
 
               {documentsView === "templates" && (
-                <section className="documents-card">
-                  <div className="documents-section-head">
-                    <h3>Template Library</h3>
-                    <span className="documents-section-badge">Start with reusable official formats</span>
-                  </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Template</th>
-                          <th>Owner</th>
-                          <th>Status</th>
-                          <th>Data Source</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {DOCUMENT_TEMPLATE_LIBRARY.map((row) => (
-                          <tr key={`document-template-${row.name}`}>
-                            <td><strong>{row.name}</strong></td>
-                            <td>{row.owner}</td>
-                            <td>{row.status}</td>
-                            <td>{row.source}</td>
+                <>
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Formal Setup Templates</h3>
+                      <span className="documents-section-badge">Standard software and handover checklists</span>
+                    </div>
+                    <div className="documents-grid">
+                      {DOCUMENT_FORMAL_SETUP_TEMPLATES.map((template) => (
+                        <article key={`document-template-card-${template.title}`} className="documents-subcard">
+                          <h4>{template.title}</h4>
+                          <p>{template.note}</p>
+                          <ul className="documents-list">
+                            {template.items.map((item) => (
+                              <li key={`${template.title}-${item}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                  <section className="documents-card">
+                    <div className="documents-section-head">
+                      <h3>Template Library</h3>
+                      <span className="documents-section-badge">Start with reusable official formats</span>
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Template</th>
+                            <th>Owner</th>
+                            <th>Status</th>
+                            <th>Data Source</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                        </thead>
+                        <tbody>
+                          {DOCUMENT_TEMPLATE_LIBRARY.map((row) => (
+                            <tr key={`document-template-${row.name}`}>
+                              <td><strong>{row.name}</strong></td>
+                              <td>{row.owner}</td>
+                              <td>{row.status}</td>
+                              <td>{row.source}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </>
               )}
 
               {documentsView === "approvals" && (
@@ -68109,11 +68211,11 @@ function formatTicketRequestSource(value?: string) {
                   <div className="tiny" style={{ gridColumn: "1 / -1", marginTop: -6 }}>
                     {maintenanceQuickTemplate === "manual"
                       ? (lang === "km"
-                        ? "សម្រាប់ Computer, Laptop, Air-Con និងមុខទំនិញផ្សេងៗ សូមជ្រើស Category និង Item ខាងក្រោម។ អាចជ្រើសបានច្រើន Item។"
-                        : "For Computer, Laptop, Air-Con, and other items, use Category and Item below. You can select multiple items.")
+                        ? "សូមជ្រើស Category និង Item ខាងក្រោម ដើម្បីបង្កើតរបាយការណ៍តាមចង់បាន។ អាចជ្រើសបានច្រើន Item។"
+                        : "Use Category and Item below to build your own report. You can select multiple items.")
                       : (lang === "km"
-                        ? "Template នេះផ្តោតលើ Safety Maintenance។ ប្រសិនបើចង់មុខទំនិញផ្សេង សូមប្តូរទៅ ផ្សេងទៀត / ជ្រើសដោយដៃ។"
-                        : "This template focuses on Safety Maintenance. For other items, switch to Other / Manual.")}
+                        ? "Template រហ័សនេះជួយជ្រើសមុខទំនិញសំខាន់ៗជាមុន។ ប្រសិនបើចង់កែដោយដៃ សូមប្តូរទៅ Custom / Manual។"
+                        : "This quick template preselects the main items for you. Use Custom / Manual if you want to choose everything yourself.")}
                   </div>
                   <input
                     className="input"
