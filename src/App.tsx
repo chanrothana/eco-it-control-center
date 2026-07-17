@@ -4372,6 +4372,25 @@ function readInventoryTxnFallback(): InventoryTxn[] {
   }
 }
 
+function inventorySnapshotScore(items: InventoryItem[], txns: InventoryTxn[]) {
+  return items.length * 1000 + txns.length * 10;
+}
+
+function selectPreferredInventorySnapshot(options: Array<{ items: InventoryItem[]; txns: InventoryTxn[] }>) {
+  let best = { items: [] as InventoryItem[], txns: [] as InventoryTxn[] };
+  let bestScore = -1;
+  for (const option of options) {
+    const items = normalizeArray<InventoryItem>(option.items);
+    const txns = normalizeArray<InventoryTxn>(option.txns);
+    const score = inventorySnapshotScore(items, txns);
+    if (score > bestScore) {
+      best = { items, txns };
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
 function normalizePoolCleaningSchedules(input: unknown): PoolCleaningSchedule[] {
   return normalizeArray<PoolCleaningSchedule>(input)
     .filter((row) => row && typeof row === "object")
@@ -19434,12 +19453,19 @@ export default function App() {
       const settingsRes = await requestJson<{ settings?: ServerSettings }>("/api/settings");
       const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
       const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
+      const fallbackInventoryItems = readInventoryItemFallback();
+      const fallbackInventoryTxns = readInventoryTxnFallback();
+      const preferredInventory = selectPreferredInventorySnapshot([
+        { items: serverInventoryItems, txns: serverInventoryTxns },
+        { items: inventoryItems, txns: inventoryTxns },
+        { items: fallbackInventoryItems, txns: fallbackInventoryTxns },
+      ]);
       const serverToolReviewReports = normalizeToolReviewReportsClient(settingsRes.settings?.toolReviewReports);
-      setInventoryItems(serverInventoryItems);
-      setInventoryTxns(serverInventoryTxns);
+      setInventoryItems(preferredInventory.items);
+      setInventoryTxns(preferredInventory.txns);
       setToolReviewReports(serverToolReviewReports);
-      writeInventoryItemFallback(serverInventoryItems);
-      writeInventoryTxnFallback(serverInventoryTxns);
+      writeInventoryItemFallback(preferredInventory.items);
+      writeInventoryTxnFallback(preferredInventory.txns);
     } catch (err) {
       if (
         isApiUnavailableError(err) ||
@@ -19450,7 +19476,7 @@ export default function App() {
       }
       console.warn("Failed to sync inventory data", err);
     }
-  }, [authUser]);
+  }, [authUser, inventoryItems, inventoryTxns]);
 
   const loadTicketSync = useCallback(async () => {
     if (!authUser) return;
@@ -19710,8 +19736,13 @@ export default function App() {
         const fallbackCctvCameras = readCctvCameraFallback();
         const fallbackCctvServiceHistory = readCctvServiceFallback();
         const fallbackCctvChangeLogs = readCctvChangeLogFallback();
-        const nextInventoryItems = serverInventoryItems.length ? serverInventoryItems : fallbackInventoryItems;
-        const nextInventoryTxns = serverInventoryTxns.length ? serverInventoryTxns : fallbackInventoryTxns;
+        const preferredInventory = selectPreferredInventorySnapshot([
+          { items: serverInventoryItems, txns: serverInventoryTxns },
+          { items: inventoryItems, txns: inventoryTxns },
+          { items: fallbackInventoryItems, txns: fallbackInventoryTxns },
+        ]);
+        const nextInventoryItems = preferredInventory.items;
+        const nextInventoryTxns = preferredInventory.txns;
         const nextUtilityMeters = serverUtilityMeters.length ? serverUtilityMeters : fallbackUtilityMeters;
         const nextUtilityReadings = serverUtilityReadings.length ? serverUtilityReadings : fallbackUtilityReadings;
         const nextRentalPrinters = serverRentalPrinters.length ? serverRentalPrinters : fallbackRentalPrinters;
@@ -19739,6 +19770,8 @@ export default function App() {
         setInventoryItems(nextInventoryItems);
         setInventoryTxns(nextInventoryTxns);
         setToolReviewReports(serverToolReviewReports);
+        writeInventoryItemFallback(nextInventoryItems);
+        writeInventoryTxnFallback(nextInventoryTxns);
         setUtilityMeters(nextUtilityMeters);
         setUtilityReadings(nextUtilityReadings);
         setPoolCleaningSchedules(nextPoolCleaningSchedules);
@@ -19911,6 +19944,8 @@ export default function App() {
       setLoading(false);
     }
   }, [
+    inventoryItems,
+    inventoryTxns,
     campusFilter,
     defaultCalendarEvents,
   ]);
