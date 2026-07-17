@@ -14954,20 +14954,32 @@ label.backup-action-btn {
 .quickout-eco-grid {
   margin-top: 0;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .quickout-eco-grid .calendar-day {
-  min-height: 54px;
-  padding: 4px 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: auto;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  padding: 2px;
   border-radius: 16px;
   border-color: rgba(135, 165, 210, 0.52);
   background: linear-gradient(180deg, #f7fbff 0%, #dce8f8 100%);
   color: #28456f;
+  overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .quickout-eco-grid .calendar-day.calendar-head {
-  min-height: 42px;
+  width: 100%;
+  min-width: 0;
+  min-height: auto;
+  height: auto;
+  aspect-ratio: 1 / 1;
   border-radius: 14px;
   color: #4c6d98;
 }
@@ -15305,6 +15317,27 @@ label.backup-action-btn {
     min-height: 36px;
     padding: 2px 4px;
     border-radius: 8px;
+  }
+
+  .quickout-eco-grid.maintenance-datetime-eco-grid .calendar-day,
+  .quickout-eco-grid.maintenance-datetime-eco-grid .calendar-day.calendar-head {
+    width: 100%;
+    min-width: 0;
+    min-height: auto;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    padding: 2px;
+    border-radius: 12px;
+    justify-self: stretch;
+    align-self: stretch;
+  }
+
+  .quickout-eco-grid.maintenance-datetime-eco-grid .calendar-day {
+    font-size: 13px;
+  }
+
+  .quickout-eco-grid.maintenance-datetime-eco-grid .calendar-day.calendar-head {
+    font-size: 11px;
   }
 }
 
@@ -35488,6 +35521,76 @@ tr.row-maint-maintenance:hover td {
   .eco-date-floating-field .eco-date-floating-panel {
     width: 100%;
     min-width: 0;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-panel.eco-date-floating-panel {
+    width: min(100%, 520px);
+    min-width: 0;
+    max-width: 100%;
+    padding: 12px;
+    border-radius: 22px;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-head {
+    margin-bottom: 10px;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-head .quickout-eco-title {
+    font-size: 16px;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-head .quickout-eco-nav-btn {
+    min-width: 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    font-size: 18px;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-month {
+    min-height: 36px;
+    padding: 0 14px;
+    margin-bottom: 12px;
+    border-radius: 999px;
+    font-size: 13px;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-grid {
+    gap: 6px;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-grid .calendar-day,
+  .eco-date-floating-field .maintenance-datetime-eco-grid .calendar-day.calendar-head {
+    width: 100%;
+    min-width: 0;
+    min-height: auto;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    padding: 2px;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-grid .calendar-day {
+    font-size: 13px;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-grid .calendar-day.calendar-head {
+    font-size: 11px;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-time {
+    margin-top: 12px;
+    gap: 6px;
+  }
+
+  .eco-date-floating-field .maintenance-datetime-eco-time .input {
+    min-height: 44px;
+    border-radius: 14px;
+    font-size: 14px;
   }
 
   .app-card-layout {
