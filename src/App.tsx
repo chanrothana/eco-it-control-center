@@ -9265,6 +9265,7 @@ type SearchableSelectPickerProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  className?: string;
   searchPlaceholder?: string;
   emptyText?: string;
 };
@@ -9439,6 +9440,7 @@ function SearchableSelectPicker({
   onChange,
   placeholder = "Select option",
   disabled,
+  className,
   searchPlaceholder = "Search option...",
   emptyText = "No option found.",
 }: SearchableSelectPickerProps) {
@@ -9494,7 +9496,10 @@ function SearchableSelectPicker({
   );
 
   return (
-    <div className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""}`} ref={wrapRef}>
+    <div
+      className={`asset-picker searchable-dropdown ${disabled ? "asset-picker-disabled" : ""} ${className || ""}`.trim()}
+      ref={wrapRef}
+    >
       <button
         type="button"
         className="asset-picker-trigger input"
@@ -33088,11 +33093,13 @@ export default function App() {
     const normalizedBeforePhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.beforePhotos || []);
     const normalizedAfterPhotos = normalizeMaintenancePhotoList(maintenanceRecordForm.afterPhotos || []);
     const sameDayExistingEntries =
-      !isQuickGeneralTask && maintenanceRecordSelectedAsset
-        ? (maintenanceRecordSelectedAsset.maintenanceHistory || []).filter(
-            (entry) => String(entry.date || "").slice(0, 10) === resolvedDate
-          )
-        : [];
+      scheduleMaintenanceUsesGeneralTask
+        ? maintenanceRecordGeneralTaskSameDayEntries
+        : !isQuickGeneralTask && maintenanceRecordSelectedAsset
+          ? (maintenanceRecordSelectedAsset.maintenanceHistory || []).filter(
+              (entry) => String(entry.date || "").slice(0, 10) === resolvedDate
+            )
+          : [];
     if (sameDayExistingEntries.length) {
       const latestSameDayEntry = [...sameDayExistingEntries].sort((a, b) => {
         const aDisplayAt = Date.parse(maintenanceEntryDisplayTime(a) || a.date || "");
@@ -33101,9 +33108,17 @@ export default function App() {
         return String(b.date || "").localeCompare(String(a.date || ""));
       })[0];
       const duplicateConfirmMessage =
-        lang === "km"
-          ? `Asset នេះមានកំណត់ត្រាថែទាំរួចហើយនៅថ្ងៃទី ${formatDate(resolvedDate)}${latestSameDayEntry?.type ? ` (${latestSameDayEntry.type})` : ""}។ តើអ្នកចង់បន្តរក្សាទុកម្តងទៀតឬទេ?`
-          : `This asset already has a maintenance record on ${formatDate(resolvedDate)}${latestSameDayEntry?.type ? ` (${latestSameDayEntry.type})` : ""}. Do you want to save another record for the same day?`;
+        scheduleMaintenanceUsesGeneralTask
+          ? (
+            lang === "km"
+              ? `ការងារសេវាកម្មនេះមានកំណត់ត្រារួចហើយនៅថ្ងៃទី ${formatDate(resolvedDate)}${latestSameDayEntry?.type ? ` (${latestSameDayEntry.type})` : ""}។ តើអ្នកចង់បន្តរក្សាទុកម្តងទៀតឬទេ?`
+              : `This service task already has a maintenance record on ${formatDate(resolvedDate)}${latestSameDayEntry?.type ? ` (${latestSameDayEntry.type})` : ""}. Do you want to save another record for the same day?`
+          )
+          : (
+            lang === "km"
+              ? `Asset នេះមានកំណត់ត្រាថែទាំរួចហើយនៅថ្ងៃទី ${formatDate(resolvedDate)}${latestSameDayEntry?.type ? ` (${latestSameDayEntry.type})` : ""}។ តើអ្នកចង់បន្តរក្សាទុកម្តងទៀតឬទេ?`
+              : `This asset already has a maintenance record on ${formatDate(resolvedDate)}${latestSameDayEntry?.type ? ` (${latestSameDayEntry.type})` : ""}. Do you want to save another record for the same day?`
+          );
       if (!window.confirm(duplicateConfirmMessage)) {
         return false;
       }
@@ -35222,7 +35237,7 @@ export default function App() {
       campus: preferredCampus || "ALL",
       taskId: String(row.event.id || ""),
       title: row.title,
-      subtitle: row.subtitle,
+      subtitle: row.groupLabel,
       time: defaultTime,
       note: row.note || "",
     });
@@ -35395,6 +35410,18 @@ export default function App() {
     () => resolvedAssets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
     [resolvedAssets, maintenanceRecordForm.assetId]
   );
+  const maintenanceRecordGeneralTaskAsset = useMemo(() => {
+    if (!scheduleMaintenanceGeneralContext || !maintenanceQuickGeneralTask) return null;
+    const campus = String(scheduleMaintenanceGeneralContext?.campus || "").trim();
+    if (!campus || campus === "ALL") return null;
+    return (
+      resolvedAssets.find(
+        (asset) =>
+          String(asset.campus || "").trim() === campus &&
+          isGeneralMaintenancePlaceholderAsset(asset)
+      ) || null
+    );
+  }, [resolvedAssets, scheduleMaintenanceGeneralContext, maintenanceQuickGeneralTask]);
   const maintenanceRecordSortedHistory = useMemo(() => {
     if (!maintenanceRecordSelectedAsset) return [];
     return [...(maintenanceRecordSelectedAsset.maintenanceHistory || [])].sort((a, b) => {
@@ -35413,6 +35440,48 @@ export default function App() {
     [maintenanceRecordSortedHistory, maintenanceRecordForm.date]
   );
   const scheduleMaintenanceUsesGeneralTask = Boolean(scheduleMaintenanceGeneralContext) && maintenanceQuickGeneralTask;
+  const maintenanceRecordGeneralTaskSortedHistory = useMemo(() => {
+    if (!scheduleMaintenanceUsesGeneralTask || !maintenanceRecordGeneralTaskAsset) return [];
+    const normalizedTitle = String(scheduleMaintenanceGeneralContext?.title || "").trim().toLowerCase();
+    const normalizedTaskId = String(scheduleMaintenanceGeneralContext?.taskId || "").trim();
+    const serviceEntries = [...(maintenanceRecordGeneralTaskAsset.maintenanceHistory || [])].filter(
+      (entry) => String(entry.scheduleTaskKind || "").trim() === "service"
+    );
+    const sameTitleEntries = normalizedTitle
+      ? serviceEntries.filter(
+          (entry) => String(entry.scheduleTaskTitle || "").trim().toLowerCase() === normalizedTitle
+        )
+      : [];
+    const sameTaskEntries = normalizedTaskId
+      ? serviceEntries.filter((entry) => String(entry.scheduleTaskId || "").trim() === normalizedTaskId)
+      : [];
+    const scopedEntries = sameTitleEntries.length
+      ? sameTitleEntries
+      : sameTaskEntries.length
+        ? sameTaskEntries
+        : serviceEntries;
+    return scopedEntries.sort((a, b) => {
+      const aDisplayAt = Date.parse(maintenanceEntryDisplayTime(a) || a.date || "");
+      const bDisplayAt = Date.parse(maintenanceEntryDisplayTime(b) || b.date || "");
+      if (!Number.isNaN(aDisplayAt) && !Number.isNaN(bDisplayAt)) return bDisplayAt - aDisplayAt;
+      return String(b.date || "").localeCompare(String(a.date || ""));
+    });
+  }, [
+    maintenanceRecordGeneralTaskAsset,
+    scheduleMaintenanceGeneralContext,
+    scheduleMaintenanceUsesGeneralTask,
+  ]);
+  const maintenanceRecordGeneralTaskLatestEntry = useMemo(
+    () => maintenanceRecordGeneralTaskSortedHistory[0] || null,
+    [maintenanceRecordGeneralTaskSortedHistory]
+  );
+  const maintenanceRecordGeneralTaskSameDayEntries = useMemo(
+    () =>
+      maintenanceRecordGeneralTaskSortedHistory.filter(
+        (entry) => String(entry.date || "").slice(0, 10) === String(maintenanceRecordForm.date || "").slice(0, 10)
+      ),
+    [maintenanceRecordGeneralTaskSortedHistory, maintenanceRecordForm.date]
+  );
   const maintenanceRecordIsComplete = useMemo(() => (
     (maintenanceQuickMode
       ? (maintenanceQuickGeneralTask || Boolean(maintenanceRecordForm.assetId))
@@ -37311,6 +37380,23 @@ export default function App() {
     }
     return Array.from(new Set(rows.map((r) => r.type).filter(Boolean))).sort();
   }, [allMaintenanceRows, maintenanceCategoryFilter, maintenanceCampusFilter]);
+  const maintenanceTypeFilterPickerOptions = useMemo<SearchableSelectOption[]>(
+    () => [
+      {
+        value: "ALL",
+        label: lang === "km" ? "គ្រប់ប្រភេទថែទាំ" : "All Maintenance Types",
+        description: "",
+        searchText: `ALL ${lang === "km" ? "គ្រប់ប្រភេទថែទាំ" : "All Maintenance Types"}`,
+      },
+      ...maintenanceTypeOptions.map((type) => ({
+        value: type,
+        label: lang === "km" ? (MAINTENANCE_TYPE_KM_LABEL[type] || type) : type,
+        description: "",
+        searchText: `${type} ${MAINTENANCE_TYPE_KM_LABEL[type] || ""}`,
+      })),
+    ],
+    [lang, maintenanceTypeOptions]
+  );
   const maintenanceCategoryFilterOptions = useMemo(
     () => Array.from(new Set(allMaintenanceRows.map((r) => r.category).filter(Boolean))).sort(),
     [allMaintenanceRows]
@@ -37318,6 +37404,20 @@ export default function App() {
   const maintenanceCampusOptions = useMemo(
     () => Array.from(new Set(allMaintenanceRows.map((r) => r.campus).filter(Boolean))).sort(compareCampusByCode),
     [allMaintenanceRows]
+  );
+  const maintenanceCampusPickerOptions = useMemo<SearchableMultiSelectOption[]>(
+    () =>
+      maintenanceCampusOptions.map((campus) => ({
+        value: campus,
+        label: rentalPrinterCampusLabel(campus),
+        description: "",
+        searchText: `${campus} ${campusLabel(campus)} ${rentalPrinterCampusLabel(campus)} ${CAMPUS_CODE[campus] || ""}`,
+      })),
+    [campusLabel, maintenanceCampusOptions, rentalPrinterCampusLabel]
+  );
+  const maintenanceCampusPickerSummary = useMemo(
+    () => (maintenanceCampusFilter === "ALL" ? t.allCampuses : rentalPrinterCampusLabel(maintenanceCampusFilter)),
+    [maintenanceCampusFilter, rentalPrinterCampusLabel, t.allCampuses]
   );
   const filteredMaintenanceRows = useMemo(() => {
     let rows = [...allMaintenanceRows];
@@ -39635,12 +39735,18 @@ export default function App() {
   }, [scheduleAssets, scheduleForm.assetId]);
 
   useEffect(() => {
-    if (maintenanceQuickMode && maintenanceQuickGeneralTask) return;
+    if ((maintenanceQuickMode && maintenanceQuickGeneralTask) || scheduleMaintenanceUsesGeneralTask) return;
     if (maintenanceRecordForm.assetId) return;
     if (maintenanceRecordFilteredAssets.length) {
       setMaintenanceRecordForm((f) => ({ ...f, assetId: String(maintenanceRecordFilteredAssets[0].id) }));
     }
-  }, [maintenanceQuickGeneralTask, maintenanceQuickMode, maintenanceRecordFilteredAssets, maintenanceRecordForm.assetId]);
+  }, [
+    maintenanceQuickGeneralTask,
+    maintenanceQuickMode,
+    maintenanceRecordFilteredAssets,
+    maintenanceRecordForm.assetId,
+    scheduleMaintenanceUsesGeneralTask,
+  ]);
 
   useEffect(() => {
     if (verificationRecordForm.assetId) return;
@@ -53137,7 +53243,7 @@ function formatTicketRequestSource(value?: string) {
                 </div>
                 <div className="panel-filters asset-list-filters asset-list-filter-row">
                   <SearchableMultiSelectPicker
-                    className="report-campus-picker picker-template-list-asset-light"
+                    className="report-campus-picker"
                     summary={assetCampusFilterSummary}
                     options={assetCampusFilterOptions.map((campus) => ({ value: campus, label: rentalPrinterCampusLabel(campus) }))}
                     selectedValues={assetCampusMultiFilter}
@@ -65138,11 +65244,8 @@ function formatTicketRequestSource(value?: string) {
             <div className="panel-filters maintenance-filters maintenance-filter-row">
               <SearchableMultiSelectPicker
                 className="report-campus-picker picker-template-list-asset-light"
-                summary={maintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(maintenanceCampusFilter)}
-                options={maintenanceCampusOptions.map((campus) => ({
-                  value: campus,
-                  label: campusLabel(campus),
-                }))}
+                summary={maintenanceCampusPickerSummary}
+                options={maintenanceCampusPickerOptions}
                 selectedValues={maintenanceCampusFilter === "ALL" ? ["ALL"] : [maintenanceCampusFilter]}
                 allOptionLabel={t.allCampuses}
                 allOptionChecked={maintenanceCampusFilter === "ALL"}
@@ -65189,18 +65292,15 @@ function formatTicketRequestSource(value?: string) {
                   ))}
                 </div>
               </details>
-              <select
-                className="input"
+              <SearchableSelectPicker
+                className="report-campus-picker picker-template-list-asset-light"
                 value={maintenanceTypeFilter}
-                onChange={(e) => setMaintenanceTypeFilter(e.target.value)}
-              >
-                <option value="ALL">{lang === "km" ? "គ្រប់ប្រភេទថែទាំ" : "All Maintenance Types"}</option>
-                {maintenanceTypeOptions.map((type) => (
-                  <option key={`maintenance-logbook-type-${type}`} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+                options={maintenanceTypeFilterPickerOptions}
+                onChange={setMaintenanceTypeFilter}
+                placeholder={lang === "km" ? "គ្រប់ប្រភេទថែទាំ" : "All Maintenance Types"}
+                searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទថែទាំ..." : "Search maintenance type..."}
+                emptyText={lang === "km" ? "មិនមានប្រភេទថែទាំ" : "No maintenance type found."}
+              />
               <input
                 className="input"
                 type="month"
@@ -65382,12 +65482,9 @@ function formatTicketRequestSource(value?: string) {
             </div>
             <div className="panel-filters maintenance-filters maintenance-filter-row">
               <SearchableMultiSelectPicker
-                className="report-campus-picker"
-                summary={maintenanceCampusFilter === "ALL" ? t.allCampuses : campusLabel(maintenanceCampusFilter)}
-                options={maintenanceCampusOptions.map((campus) => ({
-                  value: campus,
-                  label: campusLabel(campus),
-                }))}
+                className="report-campus-picker picker-template-list-asset-light"
+                summary={maintenanceCampusPickerSummary}
+                options={maintenanceCampusPickerOptions}
                 selectedValues={maintenanceCampusFilter === "ALL" ? ["ALL"] : [maintenanceCampusFilter]}
                 allOptionLabel={t.allCampuses}
                 allOptionChecked={maintenanceCampusFilter === "ALL"}
@@ -65434,18 +65531,15 @@ function formatTicketRequestSource(value?: string) {
                   ))}
                 </div>
               </details>
-              <select
-                className="input"
+              <SearchableSelectPicker
+                className="report-campus-picker picker-template-list-asset-light"
                 value={maintenanceTypeFilter}
-                onChange={(e) => setMaintenanceTypeFilter(e.target.value)}
-              >
-                <option value="ALL">All Maintenance Types</option>
-                {maintenanceTypeOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+                options={maintenanceTypeFilterPickerOptions}
+                onChange={setMaintenanceTypeFilter}
+                placeholder={lang === "km" ? "គ្រប់ប្រភេទថែទាំ" : "All Maintenance Types"}
+                searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទថែទាំ..." : "Search maintenance type..."}
+                emptyText={lang === "km" ? "មិនមានប្រភេទថែទាំ" : "No maintenance type found."}
+              />
               <EcoDateInput
                 value={maintenanceMonthFilter}
                 onChange={setMaintenanceMonthFilter}
@@ -77030,15 +77124,19 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                   {maintenanceRecordSelectedAsset || scheduleMaintenanceGeneralContext ? (
                     <>
-                      <div className="schedule-maintenance-modal-asset">
-                        <div className="schedule-maintenance-modal-asset-main">
-                          <strong>{maintenanceRecordSelectedAsset ? maintenanceRecordSelectedAsset.assetId : (lang === "km" ? "ការងារទូទៅ" : "General Task")}</strong>
-                          <span>
-                            {maintenanceRecordSelectedAsset
-                              ? assetItemName(maintenanceRecordSelectedAsset.category, maintenanceRecordSelectedAsset.type, maintenanceRecordSelectedAsset.pcType || "")
-                              : scheduleMaintenanceGeneralContext?.title || "-"}
-                          </span>
-                        </div>
+	                      <div className="schedule-maintenance-modal-asset">
+	                        <div className="schedule-maintenance-modal-asset-main">
+	                          <strong>
+	                            {maintenanceRecordSelectedAsset
+	                              ? maintenanceRecordSelectedAsset.assetId
+	                              : scheduleMaintenanceGeneralContext?.title || (lang === "km" ? "ការងារទូទៅ" : "General Task")}
+	                          </strong>
+	                          <span>
+	                            {maintenanceRecordSelectedAsset
+	                              ? assetItemName(maintenanceRecordSelectedAsset.category, maintenanceRecordSelectedAsset.type, maintenanceRecordSelectedAsset.pcType || "")
+	                              : scheduleMaintenanceGeneralContext?.subtitle || (lang === "km" ? "ការងារសេវាកម្ម" : "Service Task")}
+	                          </span>
+	                        </div>
                         <div className="schedule-maintenance-modal-asset-meta">
                           <span>
                             {campusLabel(
@@ -77047,9 +77145,9 @@ function formatTicketRequestSource(value?: string) {
                               maintenanceRecordCampusFilter
                             )}
                           </span>
-                          <span>{maintenanceRecordSelectedAsset?.location || scheduleMaintenanceGeneralContext?.subtitle || "-"}</span>
-                        </div>
-                      </div>
+	                          <span>{maintenanceRecordSelectedAsset?.location || scheduleMaintenanceGeneralContext?.time || "-"}</span>
+	                        </div>
+	                      </div>
                       <div className="form-grid schedule-maintenance-modal-grid">
                         <div className="maintenance-record-inline-five field-wide">
                           <div className="field quickout-date-field eco-date-floating-field maintenance-record-datetime-field" ref={maintenanceRecordDateWrapRef}>
@@ -77216,10 +77314,10 @@ function formatTicketRequestSource(value?: string) {
                               )}
                             </div>
                         </div>
-                        {maintenanceRecordSelectedAsset ? (
-                          <div className="field field-wide">
-                            <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
-                            <div className={`maintenance-latest-service-card ${maintenanceRecordSameDayEntries.length ? "is-warning" : ""}`}>
+	                        {maintenanceRecordSelectedAsset ? (
+	                          <div className="field field-wide">
+	                            <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
+	                            <div className={`maintenance-latest-service-card ${maintenanceRecordSameDayEntries.length ? "is-warning" : ""}`}>
                               <div className="maintenance-latest-service-head">
                                 <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
                                 {maintenanceRecordSameDayEntries.length ? (
@@ -77260,13 +77358,65 @@ function formatTicketRequestSource(value?: string) {
                                   </div>
                                 </div>
                               ) : (
-                                <div className="tiny">
-                                  {lang === "km" ? "មិនទាន់មានប្រវត្តិថែទាំសម្រាប់ Asset នេះទេ។" : "No maintenance history for this asset yet."}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
+	                                <div className="tiny">
+	                                  {lang === "km" ? "មិនទាន់មានប្រវត្តិថែទាំសម្រាប់ Asset នេះទេ។" : "No maintenance history for this asset yet."}
+	                                </div>
+	                              )}
+	                            </div>
+	                          </div>
+	                        ) : scheduleMaintenanceUsesGeneralTask ? (
+	                          <div className="field field-wide">
+	                            <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
+	                            <div className={`maintenance-latest-service-card ${maintenanceRecordGeneralTaskSameDayEntries.length ? "is-warning" : ""}`}>
+	                              <div className="maintenance-latest-service-head">
+	                                <strong>{scheduleMaintenanceGeneralContext?.title || (lang === "km" ? "ការងារសេវាកម្ម" : "Service Task")}</strong>
+	                                {maintenanceRecordGeneralTaskSameDayEntries.length ? (
+	                                  <span className="maintenance-latest-service-badge">
+	                                    {lang === "km" ? "បានកត់ត្រារួចហើយថ្ងៃនេះ" : "Already recorded today"}
+	                                  </span>
+	                                ) : null}
+	                              </div>
+	                              {maintenanceRecordGeneralTaskSameDayEntries.length ? (
+	                                <div className="tiny maintenance-latest-service-warning-text">
+	                                  {lang === "km"
+	                                    ? "សេវាកម្មសម្រាប់សាខានេះមានកំណត់ត្រារួចហើយក្នុងថ្ងៃនេះ។ ប្រព័ន្ធនឹងសួរបញ្ជាក់មុនពេលរក្សាទុកម្ដងទៀត។"
+	                                    : "This campus service task already has a maintenance record today. The system will ask you to confirm before saving again."}
+	                                </div>
+	                              ) : null}
+	                              {maintenanceRecordGeneralTaskLatestEntry ? (
+	                                <div className="maintenance-latest-service-summary">
+	                                  <div className="maintenance-latest-service-summary-item">
+	                                    <strong>{lang === "km" ? "ចុងក្រោយ" : "Latest"}</strong>
+	                                    <span>
+	                                      {formatDate(maintenanceRecordGeneralTaskLatestEntry.date || "-")}
+	                                      {maintenanceEntryDisplayTime(maintenanceRecordGeneralTaskLatestEntry)
+	                                        ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordGeneralTaskLatestEntry) || "")}`
+	                                        : ""}
+	                                    </span>
+	                                  </div>
+	                                  <div className="maintenance-latest-service-summary-item">
+	                                    <strong>{lang === "km" ? "ប្រភេទ" : "Type"}</strong>
+	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.type || "-"}</span>
+	                                  </div>
+	                                  <div className="maintenance-latest-service-summary-item">
+	                                    <strong>{lang === "km" ? "ដោយ" : "By"}</strong>
+	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.by || "-"}</span>
+	                                  </div>
+	                                  <div className="maintenance-latest-service-summary-item">
+	                                    <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
+	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.note || "-"}</span>
+	                                  </div>
+	                                </div>
+	                              ) : (
+	                                <div className="tiny">
+	                                  {lang === "km"
+	                                    ? "មិនទាន់មានប្រវត្តិសេវាកម្មសម្រាប់សាខា និងការងារនេះទេ។"
+	                                    : "No previous service history for this campus task yet."}
+	                                </div>
+	                              )}
+	                            </div>
+	                          </div>
+	                        ) : null}
                         <div className="field field-wide">
                           <div className="tiny schedule-maintenance-modal-note-help">
                             {lang === "km"

@@ -592,6 +592,10 @@ function readLatestBackupDbSync() {
 
 function countDbRows(db) {
   const safe = normalizeImportedDb(db);
+  const settings =
+    safe.settings && typeof safe.settings === "object" && !Array.isArray(safe.settings)
+      ? safe.settings
+      : {};
   return {
     assets: Array.isArray(safe.assets) ? safe.assets.length : 0,
     tickets: Array.isArray(safe.tickets) ? safe.tickets.length : 0,
@@ -600,6 +604,9 @@ function countDbRows(db) {
     auditLogs: Array.isArray(safe.auditLogs) ? safe.auditLogs.length : 0,
     authSessions: Array.isArray(safe.authSessions) ? safe.authSessions.length : 0,
     notifications: Array.isArray(safe.notifications) ? safe.notifications.length : 0,
+    inventoryItems: Array.isArray(settings.inventoryItems) ? settings.inventoryItems.length : 0,
+    inventoryTxns: Array.isArray(settings.inventoryTxns) ? settings.inventoryTxns.length : 0,
+    toolReviewReports: Array.isArray(settings.toolReviewReports) ? settings.toolReviewReports.length : 0,
   };
 }
 
@@ -611,6 +618,9 @@ function dbScore(db) {
     counts.locations * 200 +
     counts.users * 50 +
     counts.auditLogs * 10 +
+    counts.inventoryItems * 300 +
+    counts.inventoryTxns * 5 +
+    counts.toolReviewReports * 25 +
     counts.authSessions +
     counts.notifications
   );
@@ -621,6 +631,22 @@ function looksLikeDataLoss(db) {
   const looksEmptyCore = counts.assets === 0 && counts.tickets === 0;
   const hasPartialSideData = counts.locations > 0 || counts.users <= DEFAULT_USERS.length;
   return looksEmptyCore && hasPartialSideData;
+}
+
+function hasRecoverableInventoryGap(currentDb, candidateDb) {
+  const current = countDbRows(currentDb);
+  const candidate = countDbRows(candidateDb);
+  const currentInventoryScore =
+    current.inventoryItems * 1000 +
+    current.inventoryTxns * 10 +
+    current.toolReviewReports * 50;
+  const candidateInventoryScore =
+    candidate.inventoryItems * 1000 +
+    candidate.inventoryTxns * 10 +
+    candidate.toolReviewReports * 50;
+  const currentInventoryLooksEmpty = current.inventoryItems === 0 && current.inventoryTxns === 0;
+  const candidateHasInventoryData = candidate.inventoryItems > 0 || candidate.inventoryTxns > 0;
+  return currentInventoryLooksEmpty && candidateHasInventoryData && candidateInventoryScore > currentInventoryScore;
 }
 
 function shouldUseSqlite() {
@@ -898,15 +924,22 @@ function initStorageSync() {
       }
     }
 
-    const shouldRecover =
+    const shouldRecoverFromScore =
       Boolean(best) &&
       best.score > sqliteScore &&
       (sqliteRowEmpty || sqliteScore === 0 || looksLikeDataLoss(sqliteCurrent));
+    const shouldRecoverFromInventoryGap =
+      Boolean(best) && hasRecoverableInventoryGap(sqliteCurrent, best.db);
+    const shouldRecover = shouldRecoverFromScore || shouldRecoverFromInventoryGap;
 
     if (shouldRecover && best) {
       replaceSqliteDataSync(best.db);
       sqliteCurrent = normalizeImportedDb(best.db);
-      console.log(`Recovered SQLite data from ${best.label}`);
+      console.log(
+        shouldRecoverFromInventoryGap && !shouldRecoverFromScore
+          ? `Recovered SQLite data from ${best.label} because inventory settings data was empty`
+          : `Recovered SQLite data from ${best.label}`
+      );
     }
 
     // Persist normalized/migrated data shape (including Asset ID format migration).
