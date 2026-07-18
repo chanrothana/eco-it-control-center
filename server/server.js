@@ -2393,6 +2393,98 @@ function normalizeUtilityReadings(input) {
     .filter((row) => row.campus && row.billingMonth && row.invoiceDate);
 }
 
+function utilityRecoveryCampusCode(campus) {
+  const normalized = normalizeCampusInput(campus);
+  if (normalized === "Samdach Pan Campus") return "C1";
+  if (normalized === "Chaktomuk Campus") return "C2";
+  if (normalized === "Chaktomuk Campus (C2.2)") return "C2";
+  if (normalized === "Boeung Snor Campus") return "C3";
+  if (normalized === "Olympia Campus") return "C4";
+  return "GEN";
+}
+
+function inferUtilityMetersFromReadings(existingMeters, readings) {
+  const normalizedMeters = Array.isArray(existingMeters) ? existingMeters : [];
+  const normalizedReadings = Array.isArray(readings) ? readings : [];
+  if (normalizedMeters.length || !normalizedReadings.length) {
+    return { meters: normalizedMeters, readings: normalizedReadings };
+  }
+
+  const meterMap = new Map();
+  const meters = [];
+  const sortedReadings = normalizedReadings
+    .slice()
+    .sort((a, b) => `${a.invoiceDate}-${a.created}`.localeCompare(`${b.invoiceDate}-${b.created}`));
+
+  let seq = 1;
+  for (const row of sortedReadings) {
+    const campus = normalizeCampusInput(row.campus) || CAMPUS_LIST[0];
+    const building = toText(row.building);
+    const location = toText(row.location);
+    const utilityType = toText(row.utilityType) || "EDC";
+    const unit = toText(row.unit) || (utilityType === "PPWS" ? "m3" : "kWh");
+    const providerName =
+      toText(row.providerName) ||
+      (utilityType === "PPWS" ? "Phnom Penh Water Supply Authority" : "Electricite du Cambodge");
+    const key = [utilityType, campus, building, location, unit, providerName].join("|");
+    if (!meterMap.has(key)) {
+      const meterType = utilityType === "PPWS" ? "Water" : "Electricity";
+      const locationLabel = location || building || campus;
+      const meter = {
+        id: 880000000000 + seq,
+        meterType,
+        meterCode: `${utilityRecoveryCampusCode(campus)}-${utilityType}-${String(seq).padStart(2, "0")}`,
+        meterName: `${providerName} ${locationLabel}`.trim(),
+        campus,
+        building,
+        location,
+        provider: providerName,
+        serialNumber: "",
+        unit,
+        installedDate: toText(row.invoiceDate),
+        openingReading: Math.max(0, Number(row.previousReading) || 0),
+        status: "Active",
+        photo: "",
+        notes: "Recovered from saved utility invoice history.",
+        created: toText(row.created) || new Date().toISOString(),
+      };
+      meterMap.set(key, meter);
+      meters.push(meter);
+      seq += 1;
+    } else {
+      const meter = meterMap.get(key);
+      meter.openingReading = Math.min(meter.openingReading, Math.max(0, Number(row.previousReading) || 0));
+      if (toText(row.invoiceDate) && (!meter.installedDate || toText(row.invoiceDate) < meter.installedDate)) {
+        meter.installedDate = toText(row.invoiceDate);
+      }
+    }
+  }
+
+  const hydratedReadings = normalizedReadings.map((row) => {
+    const campus = normalizeCampusInput(row.campus) || CAMPUS_LIST[0];
+    const building = toText(row.building);
+    const location = toText(row.location);
+    const utilityType = toText(row.utilityType) || "EDC";
+    const unit = toText(row.unit) || (utilityType === "PPWS" ? "m3" : "kWh");
+    const providerName =
+      toText(row.providerName) ||
+      (utilityType === "PPWS" ? "Phnom Penh Water Supply Authority" : "Electricite du Cambodge");
+    const key = [utilityType, campus, building, location, unit, providerName].join("|");
+    const meter = meterMap.get(key);
+    if (!meter) return row;
+    return {
+      ...row,
+      meterId: Number(row.meterId) || meter.id,
+      meterCode: toText(row.meterCode) || meter.meterCode,
+      meterName: toText(row.meterName) || meter.meterName,
+      meterType: toText(row.meterType) || meter.meterType,
+      readingDate: toText(row.readingDate) || toText(row.invoiceDate),
+    };
+  });
+
+  return { meters, readings: hydratedReadings };
+}
+
 function normalizeRentalPrinters(input) {
   if (!Array.isArray(input)) return [];
   return input
@@ -2668,8 +2760,12 @@ function normalizeImportedDb(input) {
   const poolChemicalRecords = normalizePoolChemicalRecords(settings.poolChemicalRecords);
   const poolOperationRecords = normalizePoolOperationRecords(settings.poolOperationRecords);
   const poolComplaints = normalizePoolComplaints(settings.poolComplaints);
-  const utilityMeters = normalizeUtilityMeters(settings.utilityMeters);
-  const utilityReadings = normalizeUtilityReadings(settings.utilityReadings);
+  const recoveredUtility = inferUtilityMetersFromReadings(
+    normalizeUtilityMeters(settings.utilityMeters),
+    normalizeUtilityReadings(settings.utilityReadings)
+  );
+  const utilityMeters = recoveredUtility.meters;
+  const utilityReadings = recoveredUtility.readings;
   const normalizedAssetsRaw = Array.isArray(parsed.assets)
     ? parsed.assets.map((asset) => {
         if (!asset || typeof asset !== "object") return asset;
@@ -8240,39 +8336,11 @@ const server = http.createServer(async (req, res) => {
         db.settings && typeof db.settings === "object"
           ? db.settings
           : { campusNames: {}, staffUsers: [], calendarEvents: [], inventoryItems: [], inventoryTxns: [] };
+      const normalizedSettings = normalizeImportedDb({ settings }).settings;
       sendJson(res, 200, {
         settings: {
           ...settings,
-          itemNames: normalizeStringMap(settings.itemNames),
-          itemAssetCategories: normalizeStringMap(settings.itemAssetCategories),
-          itemTypeOptions: itemTypeOptionsWithDefaults(settings.itemTypeOptions),
-          inventoryApprovalRouting: normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting),
-          telegramChatIds: normalizeTelegramChatIds(settings.telegramChatIds),
-          telegramMaintenanceChatIds: normalizeTelegramChatIds(settings.telegramMaintenanceChatIds),
-          staffUsers: normalizeStaffUsers(settings.staffUsers),
-          calendarEvents: normalizeCalendarEvents(settings.calendarEvents),
-          inventoryItems: normalizeInventoryItems(settings.inventoryItems),
-          inventoryTxns: normalizeInventoryTxns(settings.inventoryTxns),
-          toolReviewReports: normalizeToolReviewReports(settings.toolReviewReports),
-          rentalPrinters: normalizeRentalPrinters(settings.rentalPrinters),
-          rentalPrinterCounters: normalizeRentalPrinterCounters(settings.rentalPrinterCounters),
-          rentalPrinterCounterResets: normalizeRentalPrinterCounterResets(settings.rentalPrinterCounterResets),
-          poolCleaningSchedules: normalizePoolCleaningSchedules(settings.poolCleaningSchedules),
-          poolEquipmentChecks: normalizePoolEquipmentChecks(settings.poolEquipmentChecks),
-          poolChemicalRecords: normalizePoolChemicalRecords(settings.poolChemicalRecords),
-          poolOperationRecords: normalizePoolOperationRecords(settings.poolOperationRecords),
-          poolComplaints: normalizePoolComplaints(settings.poolComplaints),
-          utilityMeters: normalizeUtilityMeters(settings.utilityMeters),
-          utilityReadings: normalizeUtilityReadings(settings.utilityReadings),
-          schoolKeys: normalizeSchoolKeys(settings.schoolKeys),
-          schoolKeyLogs: normalizeSchoolKeyLogs(settings.schoolKeyLogs),
-          furnitureModels: normalizeFurnitureModels(settings.furnitureModels),
-          customDocuments: normalizeCustomDocuments(settings.customDocuments),
-          vaultAccounts: normalizeVaultAccounts(settings.vaultAccounts),
-          vaultCredentials: normalizeVaultCredentials(settings.vaultCredentials),
-          vaultDesignLinks: normalizeVaultDesignLinks(settings.vaultDesignLinks),
-          vaultNetworkDocs: normalizeVaultNetworkDocs(settings.vaultNetworkDocs),
-          vaultCctvRecords: normalizeVaultCctvRecords(settings.vaultCctvRecords),
+          ...normalizedSettings,
         },
       });
       return;
@@ -8443,6 +8511,7 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "schoolKeyLogs")
           ? normalizeSchoolKeyLogs(incoming.schoolKeyLogs)
           : normalizeSchoolKeyLogs(current.schoolKeyLogs);
+      const recoveredUtility = inferUtilityMetersFromReadings(nextUtilityMeters, nextUtilityReadings);
       const nextFurnitureModels =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "furnitureModels")
           ? normalizeFurnitureModels(incoming.furnitureModels)
@@ -8494,8 +8563,8 @@ const server = http.createServer(async (req, res) => {
         poolChemicalRecords: nextPoolChemicalRecords,
         poolOperationRecords: nextPoolOperationRecords,
         poolComplaints: nextPoolComplaints,
-        utilityMeters: nextUtilityMeters,
-        utilityReadings: nextUtilityReadings,
+        utilityMeters: recoveredUtility.meters,
+        utilityReadings: recoveredUtility.readings,
         schoolKeys: nextSchoolKeys,
         schoolKeyLogs: nextSchoolKeyLogs,
         furnitureModels: nextFurnitureModels,
