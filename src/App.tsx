@@ -4508,15 +4508,13 @@ function readCalendarEventFallback(defaultEvents: CalendarEvent[]) {
   if (SERVER_ONLY_STORAGE) return defaultEvents;
   try {
     const raw = localStorage.getItem(CALENDAR_EVENT_FALLBACK_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
+    if (raw === null) return defaultEvents;
+    const parsed = JSON.parse(raw);
     const normalized = normalizeCalendarEvents(
-      [
-        ...defaultEvents,
-        ...(Array.isArray(parsed) ? parsed : []),
-      ],
+      Array.isArray(parsed) ? parsed : [],
       defaultEvents
     );
-    return normalized.length ? normalized : defaultEvents;
+    return normalized;
   } catch {
     return defaultEvents;
   }
@@ -21266,14 +21264,11 @@ export default function App() {
           writeStringMap(ITEM_ASSET_CATEGORY_FALLBACK_KEY, next);
           return next;
         });
+        const hasServerCalendarEvents = Object.prototype.hasOwnProperty.call(settingsObj, "calendarEvents");
         const serverCalendarEvents = normalizeCalendarEvents(settingsRes.settings?.calendarEvents, []);
-        const nextCalendarEvents = normalizeCalendarEvents(
-          [
-            ...defaultCalendarEvents,
-            ...(serverCalendarEvents.length ? serverCalendarEvents : readCalendarEventFallback(defaultCalendarEvents)),
-          ],
-          defaultCalendarEvents
-        );
+        const nextCalendarEvents = hasServerCalendarEvents
+          ? serverCalendarEvents
+          : readCalendarEventFallback(defaultCalendarEvents);
         setCalendarEvents(nextCalendarEvents);
         writeCalendarEventFallback(nextCalendarEvents);
         setMaintenanceReminderOffsets(
