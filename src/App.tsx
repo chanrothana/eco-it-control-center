@@ -65291,10 +65291,12 @@ function formatTicketRequestSource(value?: string) {
               />
               <details className="filter-menu">
                 <summary>
-                  {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
-                    const row = CATEGORY_OPTIONS.find((item) => item.value === value);
-                    return row ? (lang === "km" ? row.km : row.en) : value;
-                  })}
+                  <span className="maintenance-filter-summary-label">
+                    {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
+                      const row = CATEGORY_OPTIONS.find((item) => item.value === value);
+                      return row ? (lang === "km" ? row.km : row.en) : value;
+                    })}
+                  </span>
                 </summary>
                 <div className="filter-menu-list">
                   <label className="filter-menu-item">
@@ -65530,10 +65532,12 @@ function formatTicketRequestSource(value?: string) {
               />
               <details className="filter-menu">
                 <summary>
-                  {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
-                    const row = CATEGORY_OPTIONS.find((item) => item.value === value);
-                    return row ? (lang === "km" ? row.km : row.en) : value;
-                  })}
+                  <span className="maintenance-filter-summary-label">
+                    {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
+                      const row = CATEGORY_OPTIONS.find((item) => item.value === value);
+                      return row ? (lang === "km" ? row.km : row.en) : value;
+                    })}
+                  </span>
                 </summary>
                 <div className="filter-menu-list">
                   <label className="filter-menu-item">
