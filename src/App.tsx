@@ -21206,6 +21206,7 @@ export default function App() {
       const settingsResult = await settingsPromise;
       if (settingsResult.ok === true) {
         const settingsRes = settingsResult.settings;
+        const settingsObj = settingsRes.settings || {};
         settingsSnapshotLoadedRef.current = true;
         settingsSnapshotLoadedAtRef.current = Date.now();
         const fromServer = settingsRes.settings?.campusNames || {};
@@ -21397,7 +21398,6 @@ export default function App() {
               }))
               .filter((row) => row.type && row.model)
           : [];
-        const settingsObj = settingsRes.settings || {};
         setRentalPrinters(
           Object.prototype.hasOwnProperty.call(settingsObj, "rentalPrinters")
             ? (nextRentalPrinters.length ? nextRentalPrinters : fallbackRentalPrinters)
