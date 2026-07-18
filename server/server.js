@@ -1751,6 +1751,10 @@ function normalizeStringMap(input) {
   return out;
 }
 
+function normalizeArray(input) {
+  return Array.isArray(input) ? input : [];
+}
+
 function normalizeCustomDocuments(input) {
   return normalizeArray(input)
     .filter((row) => row && typeof row === "object")
