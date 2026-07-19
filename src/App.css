@@ -24401,27 +24401,26 @@ tr.row-maint-maintenance:hover td {
 .report-compare-stock-cell {
   text-align: center;
   vertical-align: middle;
+  font-weight: 800;
+  color: #2a3e5f;
 }
 
 .report-compare-stock-cell strong {
-  min-width: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 10px;
-  border-radius: 999px;
+  display: inline-block;
 }
 
-.report-compare-stock-cell.is-zero strong {
-  background: rgba(226, 92, 92, 0.16);
+.report-compare-stock-cell.is-zero {
+  background: rgba(226, 92, 92, 0.14);
   color: #d95b5b;
-  box-shadow: inset 0 0 0 1px rgba(217, 91, 91, 0.22);
 }
 
-.report-compare-stock-total strong {
+.report-compare-total-col,
+.report-compare-stock-total {
   background: rgba(77, 132, 217, 0.12);
+}
+
+.report-compare-stock-total {
   color: #2b5394;
-  box-shadow: inset 0 0 0 1px rgba(77, 132, 217, 0.18);
 }
 
 .report-table-wrap td strong {

@@ -15664,11 +15664,11 @@ export default function App() {
     (campus: string) => {
       const raw = String(campus || "").trim();
       if (!raw) return "-";
-      if (raw === "Samdach Pan Campus" || raw === "C1") return "Campus 1 | Samdach Pan Campus";
-      if (raw === "Chaktomuk Campus" || raw === "C2" || raw === "C2.1") return "Campus 2.1 | Chaktomuk Campus";
-      if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") return "Campus 2.2 | Chaktomuk Campus (C2.2)";
-      if (raw === "Boeung Snor Campus" || raw === "C3") return "Campus 3 | Boeung Snor Campus";
-      if (raw === "Veng Sreng Campus" || raw === "C4") return "Campus 4 | Veng Sreng Campus";
+      if (raw === "Samdach Pan Campus" || raw === "C1") return "Campus 1 | Samdach Pan";
+      if (raw === "Chaktomuk Campus" || raw === "C2" || raw === "C2.1") return "Campus 2.1 | Chaktomuk";
+      if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") return "Campus 2.2 | Chaktomuk (C2.2)";
+      if (raw === "Boeung Snor Campus" || raw === "C3") return "Campus 3 | Boeung Snor";
+      if (raw === "Veng Sreng Campus" || raw === "C4") return "Campus 4 | Veng Sreng";
       return campusLabel(raw);
     },
     [campusLabel]
@@ -44529,10 +44529,14 @@ export default function App() {
       ]);
     } else if (reportType === "inventory_balance") {
       if (reportInventoryViewMode === "campus_compare") {
+        const campusCompareTitleLabel =
+          reportInventoryGroupFilter !== "ALL" && reportInventoryGroupFilterLabel
+            ? reportInventoryGroupFilterLabel
+            : (lang === "km" ? "ទំនិញ" : "Item");
         title =
           lang === "km"
-            ? "របាយការណ៍ប្រៀបធៀបទំនិញតាមសាខា"
-            : "Campus Item Comparison Report";
+            ? `របាយការណ៍ប្រៀបធៀប${campusCompareTitleLabel}តាមសាខា`
+            : `${campusCompareTitleLabel} Campus Comparison Report`;
         columns = [
           lang === "km" ? "រូប" : "Photo",
           lang === "km" ? "ទំនិញ" : "Item",
@@ -44544,10 +44548,9 @@ export default function App() {
           row.itemName,
           ...reportInventoryComparisonCampuses.map((campus) => {
             const match = row.campusStocks.find((entry) => entry.campusName === campus);
-            const stock = Number(match?.stock || 0);
-            return `<div class="compare-stock-pill${stock <= 0 ? " is-zero" : ""}">${escapeHtml(String(stock))}</div>`;
+            return String(Number(match?.stock || 0));
           }),
-          `<div class="compare-stock-pill compare-stock-pill-total">${escapeHtml(String(row.totalStock))}</div>`,
+          String(row.totalStock),
         ]);
       } else {
         title = reportInventoryIsToolGroup
@@ -44910,8 +44913,23 @@ export default function App() {
               if (!reportInventoryComparisonRows.length) {
                 return `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
               }
-              return rows
-                .map((row) => `<tr>${row.map((cell) => printableCellHtml(cell)).join("")}</tr>`)
+              return reportInventoryComparisonRows
+                .map((row, index) => {
+                  const campusCells = reportInventoryComparisonCampuses
+                    .map((campus) => {
+                      const match = row.campusStocks.find((entry) => entry.campusName === campus);
+                      const stock = Number(match?.stock || 0);
+                      return `<td class="compare-stock-print-cell${stock <= 0 ? " is-zero" : ""}">${escapeHtml(String(stock))}</td>`;
+                    })
+                    .join("");
+                  return `<tr>
+                    <td>${index + 1}</td>
+                    ${printableCellHtml(toPrintablePhotoUrl(row.photo || ""))}
+                    <td><strong>${escapeHtml(row.itemName)}</strong></td>
+                    ${campusCells}
+                    <td class="compare-stock-print-cell compare-stock-print-total">${escapeHtml(String(row.totalStock))}</td>
+                  </tr>`;
+                })
                 .join("");
             }
             if (!reportInventoryGroupedRows.length) {
@@ -46522,24 +46540,16 @@ export default function App() {
             white-space: nowrap;
             text-align: center;
           }
-          .compare-stock-pill {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 34px;
-            padding: 4px 10px;
-            border-radius: 999px;
+          .compare-stock-print-cell {
+            text-align: center;
             font-weight: 800;
             color: #27405e;
-            background: rgba(77, 132, 217, 0.08);
-            box-shadow: inset 0 0 0 1px rgba(77, 132, 217, 0.12);
           }
-          .compare-stock-pill.is-zero {
-            color: #bf4444;
+          .compare-stock-print-cell.is-zero {
             background: rgba(226, 92, 92, 0.12);
-            box-shadow: inset 0 0 0 1px rgba(191, 68, 68, 0.18);
+            color: #bf4444;
           }
-          .compare-stock-pill-total {
+          .compare-stock-print-total {
             background: rgba(77, 132, 217, 0.14);
             color: #21457f;
           }
@@ -71864,7 +71874,7 @@ function formatTicketRequestSource(value?: string) {
                               {reportInventoryComparisonCampuses.map((campus) => (
                                 <th key={`report-compare-campus-col-${campus}`}>{rentalPrinterCampusLabel(campus)}</th>
                               ))}
-                              <th>{lang === "km" ? "ស្តុកសរុប" : "Total Stock"}</th>
+                              <th className="report-compare-total-col">{lang === "km" ? "ស្តុកសរុប" : "Total Stock"}</th>
                               <th>{lang === "km" ? "សកម្មភាព" : "Actions"}</th>
                             </tr>
                           </thead>
