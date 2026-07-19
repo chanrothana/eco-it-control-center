@@ -13330,6 +13330,44 @@ label.backup-action-btn {
   align-items: start;
 }
 
+.tool-review-borrow-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tool-review-borrow-grid .field-wide {
+  grid-column: 1 / -1;
+}
+
+.tool-review-borrow-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(220px, 0.9fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.tool-review-borrow-note-field {
+  min-width: 0;
+}
+
+.tool-review-borrow-note-field .tool-review-borrow-note-textarea {
+  min-height: 46px;
+  height: 46px;
+  resize: vertical;
+  overflow-y: hidden;
+}
+
+.tool-review-borrow-save-box {
+  display: grid;
+  gap: 10px;
+  align-self: stretch;
+  align-content: end;
+}
+
+.tool-review-borrow-save-box .btn-primary {
+  width: 100%;
+}
+
 .tool-review-modal-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.95fr);
@@ -14152,6 +14190,11 @@ label.backup-action-btn {
   gap: 7px;
 }
 
+.tool-review-modal-panel .tool-review-borrow-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .tool-review-modal-panel .tool-review-compact-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -14177,6 +14220,24 @@ label.backup-action-btn {
   padding: 8px 11px;
   font-size: 13px;
   border-radius: 16px;
+}
+
+@media (max-width: 900px) {
+  .tool-review-borrow-grid,
+  .tool-review-modal-panel .tool-review-borrow-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tool-review-borrow-action-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .tool-review-borrow-grid,
+  .tool-review-modal-panel .tool-review-borrow-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .tool-review-modal-panel .tool-review-upload-control {
@@ -15018,6 +15079,70 @@ label.backup-action-btn {
   min-height: 42px;
   justify-content: center;
   font-weight: 700;
+}
+
+.tool-review-controller-switch {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tool-review-controller-tab {
+  min-width: 0;
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(182, 204, 236, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+  color: #dce7fb;
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.tool-review-controller-tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-review-controller-tab svg {
+  flex: 0 0 auto;
+}
+
+.tool-review-controller-tab-verify {
+  border-color: rgba(103, 226, 160, 0.35);
+  color: #8ef0b6;
+}
+
+.tool-review-controller-tab-borrow {
+  border-color: rgba(89, 170, 255, 0.38);
+  color: #8bc7ff;
+}
+
+.tool-review-controller-tab-return {
+  border-color: rgba(255, 191, 94, 0.4);
+  color: #ffd489;
+}
+
+.tool-review-controller-tab.active {
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.tool-review-controller-tab-verify.active {
+  background: linear-gradient(135deg, rgba(56, 173, 110, 0.9), rgba(85, 213, 137, 0.78));
+  border-color: rgba(119, 235, 171, 0.82);
+}
+
+.tool-review-controller-tab-borrow.active {
+  background: linear-gradient(135deg, rgba(45, 118, 231, 0.92), rgba(84, 170, 255, 0.82));
+  border-color: rgba(128, 193, 255, 0.85);
+}
+
+.tool-review-controller-tab-return.active {
+  background: linear-gradient(135deg, rgba(232, 139, 44, 0.92), rgba(255, 184, 92, 0.82));
+  border-color: rgba(255, 211, 134, 0.88);
 }
 
 .quickout-note-head {

@@ -10663,6 +10663,22 @@ export default function App() {
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
   const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
+  const [reportInventoryViewMode, setReportInventoryViewMode] = useState<"list" | "campus_compare">("list");
+  const [reportInventoryBorrowModal, setReportInventoryBorrowModal] = useState<null | {
+    itemKey: string;
+    itemName: string;
+    photo: string;
+    action: "BORROW_OUT" | "BORROW_IN";
+    date: string;
+    qty: string;
+    sourceCampus: string;
+    destinationCampus: string;
+    requestedBy: string;
+    approvedBy: string;
+    receivedBy: string;
+    expectedReturnDate: string;
+    note: string;
+  }>(null);
   const [reportInventoryGroupFilter, setReportInventoryGroupFilter] = useState<
     "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL"
   >("CLEAN_TOOL");
@@ -14511,6 +14527,7 @@ export default function App() {
   const [toolReviewPhotoFileKey, setToolReviewPhotoFileKey] = useState(0);
   const [toolReviewPhotoName, setToolReviewPhotoName] = useState("");
   const [toolReviewModalOpen, setToolReviewModalOpen] = useState(false);
+  const [toolReviewControlMode, setToolReviewControlMode] = useState<"verify" | "borrow" | "return">("verify");
   const [toolReviewForm, setToolReviewForm] = useState({
     itemId: "",
     action: "good" as "good" | "add_more" | "take_out",
@@ -14521,6 +14538,17 @@ export default function App() {
     supervisor: "",
     note: "",
     photo: "",
+  });
+  const [toolReviewBorrowForm, setToolReviewBorrowForm] = useState({
+    date: toYmd(new Date()),
+    qty: "",
+    sourceCampus: "",
+    destinationCampus: "",
+    requestedBy: "",
+    approvedBy: "",
+    receivedBy: "",
+    expectedReturnDate: toYmd(new Date()),
+    note: "",
   });
   const [inventoryItemSort, setInventoryItemSort] = useState<{
     key:
@@ -17401,6 +17429,45 @@ export default function App() {
       }),
     [reportInventoryBaseRows, reportInventoryCampusFilter, reportInventoryGroupFilter, reportInventoryPropertyFilter]
   );
+  const reportInventoryComparisonSourceRows = useMemo(
+    () =>
+      reportInventoryBaseRows.filter((row) => {
+        const isToolGroupFilter =
+          reportInventoryGroupFilter === "ALL" ||
+          reportInventoryGroupFilter === "CLEAN_TOOL" ||
+          reportInventoryGroupFilter === "MAINT_TOOL" ||
+          reportInventoryGroupFilter === "GARDEN_TOOL";
+        const rowGroup = inventoryBusinessGroupValue(row);
+        if (reportInventoryGroupFilter === "ALL") {
+          if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
+            return false;
+          }
+        } else if (rowGroup !== reportInventoryGroupFilter) {
+          return false;
+        }
+        if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
+          const isProvider = isProviderToolOwnerType(row.ownerType);
+          if (reportInventoryPropertyFilter === "SCHOOL" && isProvider) {
+            return false;
+          }
+          if (reportInventoryPropertyFilter === "PROVIDER" && !isProvider) {
+            return false;
+          }
+        }
+        return true;
+    }),
+    [reportInventoryBaseRows, reportInventoryGroupFilter, reportInventoryPropertyFilter]
+  );
+  const reportInventoryComparisonCampuses = useMemo(() => {
+    const campuses = Array.from(
+      new Set(
+        reportInventoryComparisonSourceRows
+          .map((row) => String(row.campus || "").trim())
+          .filter(Boolean)
+      )
+    );
+    return campuses.sort(compareCampusByCode);
+  }, [reportInventoryComparisonSourceRows]);
   const reportInventoryGroupedRows = useMemo(() => {
     const byGroup = new Map<InventoryBusinessGroup, typeof reportInventoryRows>();
     for (const row of reportInventoryRows) {
@@ -17430,6 +17497,163 @@ export default function App() {
     }
     return ordered;
   }, [reportInventoryRows]);
+  const reportInventoryComparisonRows = useMemo(() => {
+    const itemMap = new Map<
+      string,
+      {
+        itemKey: string;
+        itemName: string;
+        photo: string;
+        totalStock: number;
+        unit: string;
+        itemCodes: Set<string>;
+        campuses: Set<string>;
+        campusDetails: Map<string, { stock: number; low: boolean }>;
+        ownerTypes: Set<string>;
+        checkedCount: number;
+        totalRows: number;
+        lowCampusCount: number;
+        sortCode: string;
+        campusItemDetails: Map<string, { itemId: number; location: string; campusLabel: string }>;
+      }
+    >();
+    for (const row of reportInventoryComparisonSourceRows) {
+      const itemKey = normalizeInventoryCompareText(row.itemName);
+      const campus = String(row.campus || "").trim();
+      if (!itemKey || !campus) continue;
+      const current = itemMap.get(itemKey) || {
+        itemKey,
+        itemName: inventoryDisplayName(row.itemName, lang),
+        photo: String(row.photo || "").trim(),
+        totalStock: 0,
+        unit: String(row.unit || "").trim(),
+        itemCodes: new Set<string>(),
+        campuses: new Set<string>(),
+        campusDetails: new Map<string, { stock: number; low: boolean }>(),
+        ownerTypes: new Set<string>(),
+        checkedCount: 0,
+        totalRows: 0,
+        lowCampusCount: 0,
+        sortCode: String(row.itemCode || "").trim(),
+        campusItemDetails: new Map<string, { itemId: number; location: string; campusLabel: string }>(),
+      };
+      current.totalStock += Number(row.currentStock || 0);
+      if (!current.photo && row.photo) current.photo = String(row.photo || "").trim();
+      if (!current.unit && row.unit) current.unit = String(row.unit || "").trim();
+      if (row.itemCode) current.itemCodes.add(String(row.itemCode || "").trim());
+      current.campuses.add(campus);
+      const campusCurrent = current.campusDetails.get(campus) || { stock: 0, low: false };
+      campusCurrent.stock += Number(row.currentStock || 0);
+      campusCurrent.low = campusCurrent.low || Boolean(row.lowStock);
+      current.campusDetails.set(campus, campusCurrent);
+      if (!current.campusItemDetails.has(campus) && Number(row.id || 0) > 0) {
+        current.campusItemDetails.set(campus, {
+          itemId: Number(row.id || 0),
+          location: String(row.location || "").trim(),
+          campusLabel: inventoryCampusLabel(campus),
+        });
+      }
+      if (row.ownerType) current.ownerTypes.add(ownerTypeLabel(row.ownerType));
+      if (latestToolReviewByItemId.has(Number(row.id || 0))) current.checkedCount += 1;
+      current.totalRows += 1;
+      if (Boolean(row.lowStock)) current.lowCampusCount += 1;
+      if (!current.sortCode && row.itemCode) current.sortCode = String(row.itemCode || "").trim();
+      itemMap.set(itemKey, current);
+    }
+    return Array.from(itemMap.values())
+      .map((row) => {
+        const campusStocks = reportInventoryComparisonCampuses.map((campusName) => {
+          const detail = row.campusDetails.get(campusName);
+          const itemDetail = row.campusItemDetails.get(campusName);
+          return {
+            campusName,
+            campusLabel: inventoryCampusLabel(campusName),
+            stock: detail?.stock || 0,
+            low: Boolean(detail?.low),
+            itemId: itemDetail?.itemId || 0,
+            location: itemDetail?.location || "",
+          };
+        });
+        const campusSummary = campusStocks.map((entry) => `${entry.campusLabel}: ${entry.stock}`);
+        const shareCampuses = campusStocks.filter((entry) => entry.stock > 1).map((entry) => entry.campusLabel);
+        const needCampuses = campusStocks.filter((entry) => entry.low || entry.stock <= 0).map((entry) => entry.campusLabel);
+        let borrowSuggestion = lang === "km" ? "សមតុល្យល្អ" : "Balanced";
+        if (needCampuses.length && shareCampuses.length) {
+          borrowSuggestion =
+            lang === "km"
+              ? `អាចផ្ទេរពី ${shareCampuses.join(", ")} ទៅ ${needCampuses.join(", ")}`
+              : `Share from ${shareCampuses.join(", ")} to ${needCampuses.join(", ")}`;
+        } else if (needCampuses.length) {
+          borrowSuggestion =
+            lang === "km"
+              ? `ត្រូវការខ្ចី/បន្ថែមនៅ ${needCampuses.join(", ")}`
+              : `Need borrow/restock at ${needCampuses.join(", ")}`;
+        } else if (shareCampuses.length) {
+          borrowSuggestion =
+            lang === "km"
+              ? `សាខាអាចចែករំលែក: ${shareCampuses.join(", ")}`
+              : `Can share: ${shareCampuses.join(", ")}`;
+        }
+        return {
+          itemKey: row.itemKey,
+          itemName: row.itemName,
+          photo: row.photo,
+          totalStock: row.totalStock,
+          unit: row.unit || "-",
+          itemCodes: Array.from(row.itemCodes).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" })),
+          campuses: Array.from(row.campuses).filter(Boolean).sort(compareCampusByCode),
+          campusStocks,
+          campusSummary,
+          ownerTypes: Array.from(row.ownerTypes).filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+          checkedCount: row.checkedCount,
+          totalRows: row.totalRows,
+          lowCampusCount: row.lowCampusCount,
+          campusCount: row.campuses.size,
+          shareCampuses,
+          needCampuses,
+          borrowSuggestion,
+          sortCode: row.sortCode,
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.sortCode.localeCompare(b.sortCode, undefined, { numeric: true, sensitivity: "base" }) ||
+          a.itemName.localeCompare(b.itemName, undefined, { sensitivity: "base" })
+      );
+  }, [
+    inventoryCampusLabel,
+    inventoryDisplayName,
+    lang,
+    latestToolReviewByItemId,
+    ownerTypeLabel,
+    reportInventoryComparisonCampuses,
+    reportInventoryComparisonSourceRows,
+  ]);
+  const reportInventoryComparisonSummary = useMemo(
+    () => ({
+      itemCount: reportInventoryComparisonRows.length,
+      campusCount: new Set(reportInventoryComparisonRows.flatMap((row) => row.campuses)).size,
+      totalStock: reportInventoryComparisonRows.reduce((sum, row) => sum + row.totalStock, 0),
+    }),
+    [reportInventoryComparisonRows]
+  );
+  const reportInventoryBorrowCampuses = useMemo(() => {
+    if (!reportInventoryBorrowModal) return [] as Array<{
+      campusName: string;
+      campusLabel: string;
+      stock: number;
+      itemId: number;
+      location: string;
+    }>;
+    const row = reportInventoryComparisonRows.find((entry) => entry.itemKey === reportInventoryBorrowModal.itemKey);
+    if (!row) return [];
+    return row.campusStocks.filter((entry) => entry.itemId > 0);
+  }, [reportInventoryBorrowModal, reportInventoryComparisonRows]);
+  const reportInventoryBorrowSourceEntry = useMemo(
+    () =>
+      reportInventoryBorrowCampuses.find((entry) => entry.campusName === reportInventoryBorrowModal?.sourceCampus) || null,
+    [reportInventoryBorrowCampuses, reportInventoryBorrowModal?.sourceCampus]
+  );
   const reportInventoryModeLabel = useMemo(
     () =>
       reportInventoryMode === "low"
@@ -17497,12 +17721,19 @@ export default function App() {
     [reportInventoryGroupFilter]
   );
   const reportInventorySplitByCategoryPages = useMemo(
-    () => reportInventoryGroupFilter === "ALL" && reportInventoryIsToolGroup,
-    [reportInventoryGroupFilter, reportInventoryIsToolGroup]
+    () => reportInventoryViewMode === "list" && reportInventoryGroupFilter === "ALL" && reportInventoryIsToolGroup,
+    [reportInventoryGroupFilter, reportInventoryIsToolGroup, reportInventoryViewMode]
   );
   const reportInventoryPropertyFilterLabel = useMemo(() => {
     return reportInventoryPropertyFilterOptions.find((option) => option.value === reportInventoryPropertyFilter)?.label || "Auto Default";
   }, [reportInventoryPropertyFilter, reportInventoryPropertyFilterOptions]);
+  const reportInventoryViewModeLabel = useMemo(
+    () =>
+      reportInventoryViewMode === "campus_compare"
+        ? (lang === "km" ? "ប្រៀបធៀបតាមសាខា" : "Compare by Campus")
+        : (lang === "km" ? "បញ្ជីស្តុក" : "Stock List"),
+    [lang, reportInventoryViewMode]
+  );
   useEffect(() => {
     if (reportInventoryGroupFilter === "ALL") {
       setReportInventoryGroupFilter("CLEAN_TOOL");
@@ -18706,6 +18937,33 @@ export default function App() {
     }
     return out;
   }, [inventoryVisibleItems, inventoryVisibleTxns]);
+  const toolReviewCampusItemOptions = useMemo(() => {
+    if (!toolReviewSelectedItem) return [] as Array<{
+      itemId: number;
+      campusName: string;
+      campusLabel: string;
+      location: string;
+      stock: number;
+    }>;
+    const sourceCodeKey = inventoryTransferMatchCode(toolReviewSelectedItem.itemCode);
+    const sourceNameKey = inventoryTransferMatchName(toolReviewSelectedItem.itemName);
+    return inventoryVisibleItems
+      .filter(
+        (item) =>
+          inventoryTransferMatchCode(item.itemCode) === sourceCodeKey &&
+          inventoryTransferMatchName(item.itemName) === sourceNameKey &&
+          String(item.category || "").trim() === String(toolReviewSelectedItem.category || "").trim() &&
+          String(item.unit || "").trim().toLowerCase() === String(toolReviewSelectedItem.unit || "").trim().toLowerCase()
+      )
+      .map((item) => ({
+        itemId: Number(item.id || 0),
+        campusName: String(item.campus || "").trim(),
+        campusLabel: inventoryCampusLabel(item.campus),
+        location: String(item.location || "").trim(),
+        stock: Number(inventoryStockMap.get(Number(item.id || 0)) || 0),
+      }))
+      .sort((a, b) => compareCampusByCode(a.campusName, b.campusName));
+  }, [compareCampusByCode, inventoryCampusLabel, inventoryStockMap, inventoryVisibleItems, toolReviewSelectedItem]);
   const inventoryDailyItemOptions = useMemo(() => {
     const q = String(inventoryDailyForm.search || "").trim().toLowerCase();
     let list = [...inventoryVisibleItems];
@@ -20775,6 +21033,28 @@ export default function App() {
       };
     });
   }, [toolReviewExpectedQty, toolReviewSelectedItem, toolReviewForm.action, toolReviewForm.adjustQty]);
+  useEffect(() => {
+    if (!toolReviewModalOpen || !toolReviewSelectedItem) return;
+    const recorder = String(authUser?.displayName || authUser?.username || "").trim();
+    const today = toYmd(new Date());
+    const sourceEntry = toolReviewCampusItemOptions.find((entry) => entry.stock > 0) || toolReviewCampusItemOptions[0] || null;
+    const destinationEntry =
+      toolReviewCampusItemOptions.find((entry) => entry.campusName !== sourceEntry?.campusName) ||
+      toolReviewCampusItemOptions[0] ||
+      null;
+    setToolReviewBorrowForm((prev) => ({
+      ...prev,
+      date: today,
+      qty: "",
+      sourceCampus: sourceEntry?.campusName || "",
+      destinationCampus: destinationEntry?.campusName || "",
+      requestedBy: recorder,
+      approvedBy: recorder,
+      receivedBy: recorder,
+      expectedReturnDate: today,
+      note: "",
+    }));
+  }, [authUser?.displayName, authUser?.username, toolReviewCampusItemOptions, toolReviewModalOpen, toolReviewSelectedItem]);
   useEffect(() => {
     if (inventoryCodeManual) return;
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
@@ -27806,6 +28086,64 @@ export default function App() {
     }
   }
 
+  async function saveToolReviewBorrowAction() {
+    if (!requireAdminAction()) return;
+    const selectedItem = toolReviewSelectedItem;
+    if (!selectedItem) {
+      setError(lang === "km" ? "សូមជ្រើសឧបករណ៍ជាមុន។" : "Please select a tool first.");
+      return;
+    }
+    const normalizedDate = normalizeYmdInput(toolReviewBorrowForm.date) || toYmd(new Date());
+    const recorder = authUser?.displayName || authUser?.username || "";
+    if (toolReviewControlMode === "borrow") {
+      const sourceEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.sourceCampus) || null;
+      if (!sourceEntry?.itemId) {
+        setError(lang === "km" ? "សូមជ្រើសសាខាដើម។" : "Please choose the source campus.");
+        return;
+      }
+      if (!toolReviewBorrowForm.destinationCampus || toolReviewBorrowForm.destinationCampus === toolReviewBorrowForm.sourceCampus) {
+        setError(lang === "km" ? "សូមជ្រើសសាខាទទួលខុសពីសាខាដើម។" : "Please choose a different destination campus.");
+        return;
+      }
+      const saved = await saveInventoryTxnEntry({
+        itemId: String(sourceEntry.itemId),
+        date: normalizedDate,
+        type: "BORROW_OUT",
+        qty: toolReviewBorrowForm.qty,
+        by: recorder || toolReviewBorrowForm.requestedBy,
+        note: toolReviewBorrowForm.note,
+        toCampus: toolReviewBorrowForm.destinationCampus,
+        expectedReturnDate: normalizeYmdInput(toolReviewBorrowForm.expectedReturnDate) || "",
+        requestedBy: toolReviewBorrowForm.requestedBy,
+        approvedBy: toolReviewBorrowForm.approvedBy,
+      });
+      if (!saved.ok) return;
+    } else if (toolReviewControlMode === "return") {
+      const destinationEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.destinationCampus) || null;
+      if (!destinationEntry?.itemId) {
+        setError(lang === "km" ? "សូមជ្រើសសាខាទទួលត្រឡប់។" : "Please choose the return campus.");
+        return;
+      }
+      if (!toolReviewBorrowForm.sourceCampus || toolReviewBorrowForm.sourceCampus === toolReviewBorrowForm.destinationCampus) {
+        setError(lang === "km" ? "សូមជ្រើសសាខាដែលបានខ្ចីខុសពីសាខាទទួល។" : "Please choose a different borrowed-from campus.");
+        return;
+      }
+      const saved = await saveInventoryTxnEntry({
+        itemId: String(destinationEntry.itemId),
+        date: normalizedDate,
+        type: "BORROW_IN",
+        qty: toolReviewBorrowForm.qty,
+        by: recorder || toolReviewBorrowForm.receivedBy,
+        note: toolReviewBorrowForm.note,
+        fromCampus: toolReviewBorrowForm.sourceCampus,
+        receivedBy: toolReviewBorrowForm.receivedBy,
+      });
+      if (!saved.ok) return;
+    }
+    setToolReviewModalOpen(false);
+    setToolReviewControlMode("verify");
+  }
+
   async function createInventoryItem() {
     if (!requireAdminAction()) return;
     const itemCode = (inventoryItemForm.itemCode.trim().toUpperCase() || autoInventoryItemCode);
@@ -29137,6 +29475,84 @@ export default function App() {
     setQuickOutEcoPickerOpen(false);
     setInventoryQuickReasonTipsOpen(false);
     setInventoryQuickOutFileKey((k) => k + 1);
+  }
+  function openReportInventoryBorrowModal(row: (typeof reportInventoryComparisonRows)[number]) {
+    const recorder = authUser?.displayName || authUser?.username || "";
+    const today = toYmd(new Date());
+    const availableCampuses = row.campusStocks.filter((entry) => entry.itemId > 0);
+    const sourceEntry = availableCampuses.find((entry) => entry.stock > 0) || availableCampuses[0] || null;
+    const destinationEntry =
+      availableCampuses.find((entry) => entry.campusName !== sourceEntry?.campusName) || availableCampuses[0] || null;
+    setReportInventoryBorrowModal({
+      itemKey: row.itemKey,
+      itemName: row.itemName,
+      photo: row.photo || "",
+      action: "BORROW_OUT",
+      date: today,
+      qty: "",
+      sourceCampus: sourceEntry?.campusName || "",
+      destinationCampus: destinationEntry?.campusName || "",
+      requestedBy: recorder,
+      approvedBy: recorder,
+      receivedBy: recorder,
+      expectedReturnDate: today,
+      note: "",
+    });
+  }
+  function closeReportInventoryBorrowModal() {
+    setReportInventoryBorrowModal(null);
+  }
+  async function saveReportInventoryBorrowModal() {
+    if (!reportInventoryBorrowModal) return;
+    const modal = reportInventoryBorrowModal;
+    const normalizedDate = normalizeYmdInput(modal.date) || toYmd(new Date());
+    if (modal.action === "BORROW_OUT") {
+      const sourceEntry = reportInventoryBorrowCampuses.find((entry) => entry.campusName === modal.sourceCampus) || null;
+      if (!sourceEntry?.itemId) {
+        setError(lang === "km" ? "សូមជ្រើសសាខាដែលចេញឧបករណ៍។" : "Please choose the campus to borrow from.");
+        return;
+      }
+      if (!modal.destinationCampus || modal.destinationCampus === modal.sourceCampus) {
+        setError(lang === "km" ? "សូមជ្រើសសាខាទទួលខុសពីសាខាដើម។" : "Please choose a different destination campus.");
+        return;
+      }
+      const saved = await saveInventoryTxnEntry({
+        itemId: String(sourceEntry.itemId),
+        date: normalizedDate,
+        type: "BORROW_OUT",
+        qty: modal.qty,
+        by: authUser?.displayName || authUser?.username || modal.requestedBy,
+        note: modal.note,
+        toCampus: modal.destinationCampus,
+        expectedReturnDate: normalizeYmdInput(modal.expectedReturnDate) || "",
+        requestedBy: modal.requestedBy,
+        approvedBy: modal.approvedBy,
+      });
+      if (!saved.ok) return;
+      closeReportInventoryBorrowModal();
+      return;
+    }
+    const destinationEntry = reportInventoryBorrowCampuses.find((entry) => entry.campusName === modal.destinationCampus) || null;
+    if (!destinationEntry?.itemId) {
+      setError(lang === "km" ? "សូមជ្រើសសាខាទទួលត្រឡប់។" : "Please choose the return campus.");
+      return;
+    }
+    if (!modal.sourceCampus || modal.sourceCampus === modal.destinationCampus) {
+      setError(lang === "km" ? "សូមជ្រើសសាខាដែលបានខ្ចីខុសពីសាខាទទួល។" : "Please choose a different borrowed-from campus.");
+      return;
+    }
+    const saved = await saveInventoryTxnEntry({
+      itemId: String(destinationEntry.itemId),
+      date: normalizedDate,
+      type: "BORROW_IN",
+      qty: modal.qty,
+      by: authUser?.displayName || authUser?.username || modal.receivedBy,
+      note: modal.note,
+      fromCampus: modal.sourceCampus,
+      receivedBy: modal.receivedBy,
+    });
+    if (!saved.ok) return;
+    closeReportInventoryBorrowModal();
   }
   function openQuickOutEcoPicker() {
     if (maintenanceQuickMode && !isSuperAdmin) return;
@@ -42640,6 +43056,7 @@ export default function App() {
     if (reportType === "inventory_balance") {
       setReportAssetIdFilter("");
       setReportInventoryMode("all");
+      setReportInventoryViewMode("list");
       setReportInventoryGroupFilter("CLEAN_TOOL");
       setReportInventoryCampusFilter("ALL");
       setReportInventoryPropertyFilter("AUTO");
@@ -44111,29 +44528,53 @@ export default function App() {
         row.notes || "-",
       ]);
     } else if (reportType === "inventory_balance") {
-      title = reportInventoryIsToolGroup
-        ? (
-            lang === "km"
-              ? `របាយការណ៍${(
-                  reportInventoryGroupFilter !== "ALL" &&
-                  reportInventoryGroupFilterLabel
-                )
-                  ? reportInventoryGroupFilterLabel
-                  : "សមតុល្យឧបករណ៍ស្តុក"}_${reportInventoryCampusFilterLabel || t.allCampuses}`
-              : `${
-                  (
+      if (reportInventoryViewMode === "campus_compare") {
+        title =
+          lang === "km"
+            ? "របាយការណ៍ប្រៀបធៀបទំនិញតាមសាខា"
+            : "Campus Item Comparison Report";
+        columns = [
+          lang === "km" ? "រូប" : "Photo",
+          lang === "km" ? "ទំនិញ" : "Item",
+          ...(reportInventoryComparisonCampuses.map((campus) => inventoryCampusLabel(campus))),
+          lang === "km" ? "ស្តុកសរុប" : "Total Stock",
+          lang === "km" ? "ឯកតា" : "Unit",
+        ];
+        rows = reportInventoryComparisonRows.map((row) => [
+          toPrintablePhotoUrl(row.photo || ""),
+          row.itemName,
+          ...reportInventoryComparisonCampuses.map((campus) => {
+            const match = row.campusStocks.find((entry) => entry.campusName === campus);
+            return String(match?.stock || 0);
+          }),
+          String(row.totalStock),
+          row.unit,
+        ]);
+      } else {
+        title = reportInventoryIsToolGroup
+          ? (
+              lang === "km"
+                ? `របាយការណ៍${(
                     reportInventoryGroupFilter !== "ALL" &&
                     reportInventoryGroupFilterLabel
                   )
                     ? reportInventoryGroupFilterLabel
-                    : "Inventory Tool Balance"
-                } Report_${reportInventoryCampusFilterLabel || "All Campuses"}`
-          )
-        : (lang === "km" ? "របាយការណ៍សមតុល្យស្តុក" : "Inventory Stock Balance Report");
-      columns = visibleInventoryReportColumnDefs.map((column) => column.label);
-      rows = reportInventoryRows.map((row) => [
-        ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
-      ]);
+                    : "សមតុល្យឧបករណ៍ស្តុក"}_${reportInventoryCampusFilterLabel || t.allCampuses}`
+                : `${
+                    (
+                      reportInventoryGroupFilter !== "ALL" &&
+                      reportInventoryGroupFilterLabel
+                    )
+                      ? reportInventoryGroupFilterLabel
+                      : "Inventory Tool Balance"
+                  } Report_${reportInventoryCampusFilterLabel || "All Campuses"}`
+            )
+          : (lang === "km" ? "របាយការណ៍សមតុល្យស្តុក" : "Inventory Stock Balance Report");
+        columns = visibleInventoryReportColumnDefs.map((column) => column.label);
+        rows = reportInventoryRows.map((row) => [
+          ...visibleInventoryReportColumnDefs.map((column) => inventoryReportCellText(row, column.key)),
+        ]);
+      }
     } else if (reportType === "schedule_calendar") {
       title = lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar";
       columns = [];
@@ -44328,6 +44769,18 @@ export default function App() {
         return [3, ...base];
       }
       if (reportType === "inventory_balance") {
+        if (reportInventoryViewMode === "campus_compare") {
+          const weights = [
+            3,
+            7,
+            16,
+            ...reportInventoryComparisonCampuses.map(() => 8),
+            8,
+            6,
+          ];
+          const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+          return weights.map((value) => (value / total) * 100);
+        }
         const inventoryWidthMap: Record<InventoryReportColumnKey, number> = {
           code: 10,
           photo: 7,
@@ -44452,9 +44905,17 @@ export default function App() {
         )
         .join("")}</tr></thead>`;
 
-    const tableHtml =
+  const tableHtml =
       reportType === "inventory_balance"
         ? (() => {
+            if (reportInventoryViewMode === "campus_compare") {
+              if (!reportInventoryComparisonRows.length) {
+                return `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
+              }
+              return rows
+                .map((row) => `<tr>${row.map((cell) => printableCellHtml(cell)).join("")}</tr>`)
+                .join("");
+            }
             if (!reportInventoryGroupedRows.length) {
               return `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
             }
@@ -44564,7 +45025,13 @@ export default function App() {
             { label: lang === "km" ? "ទីតាំង" : "Locations", value: furnitureControlGapSummary.rooms },
           ])
         : reportType === "inventory_balance"
-        ? reportInventoryIsToolGroup
+        ? reportInventoryViewMode === "campus_compare"
+          ? buildPrintSummaryGrid([
+            { label: lang === "km" ? "ទំនិញសរុប" : "Total Items", value: reportInventoryComparisonSummary.itemCount },
+            { label: lang === "km" ? "សាខាសរុប" : "Total Campuses", value: reportInventoryComparisonSummary.campusCount },
+            { label: lang === "km" ? "ស្តុកសរុប" : "Total Stock", value: reportInventoryComparisonSummary.totalStock },
+          ])
+          : reportInventoryIsToolGroup
           ? `<section class="report-summary-grid report-summary-grid-tools">
               <div class="report-summary-card">
                 <div class="report-summary-card-label">${escapeHtml(lang === "km" ? "ខែ" : "Month")}</div>
@@ -44847,7 +45314,15 @@ export default function App() {
             lang === "km" ? "ទំហំ QR" : "QR Size"
           )}: ${escapeHtml(qrLabelSizeLabel)}</p>`
         : reportType === "inventory_balance"
-        ? reportInventoryIsToolGroup
+        ? reportInventoryViewMode === "campus_compare"
+          ? `<p class="meta">${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទបោះពុម្ព" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
+              lang === "km" ? "ទិដ្ឋភាព" : "View"
+            )}: ${escapeHtml(reportInventoryViewModeLabel)} | ${escapeHtml(
+              lang === "km" ? "ទំនិញសរុប" : "Total Items"
+            )}: ${escapeHtml(String(reportInventoryComparisonSummary.itemCount))} | ${escapeHtml(
+              lang === "km" ? "សាខាសរុប" : "Total Campuses"
+            )}: ${escapeHtml(String(reportInventoryComparisonSummary.campusCount))}</p>`
+          : reportInventoryIsToolGroup
           ? `<p class="meta">${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទបោះពុម្ព" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
               lang === "km" ? "កម្មសិទ្ធិ" : "Property Type"
             )}: ${escapeHtml(inventoryToolPropertyLabel || reportInventoryPropertyFilterLabel)}</p>`
@@ -58503,9 +58978,11 @@ function formatTicketRequestSource(value?: string) {
               <section className="panel">
                 <div className="panel-row">
                   <div>
-                    <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} Monthly Verification</h2>
+                    <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "Monthly Controller" : "Monthly Controller"}</h2>
                     <p className="tiny">
-                      Phone-friendly monthly checking for staff. Tap one tool card, confirm the amount, and save the condition.
+                      {lang === "km"
+                        ? "Phone-friendly monthly controller for staff. ចុចកាតមួយ ដើម្បី Verify, Borrow, ឬ Return."
+                        : "Phone-friendly monthly controller for staff. Tap one tool card to verify, borrow, or return."}
                     </p>
                   </div>
                   {!maintenanceQuickMode ? <div className="detail-value">{toolReviewMonth}</div> : null}
@@ -58595,9 +59072,11 @@ function formatTicketRequestSource(value?: string) {
 
                 <article className="panel inventory-daily-gallery-panel tool-review-gallery-panel">
                   <div className="panel-row">
-                    <h3 className="section-title">Monthly Verification Gallery</h3>
+                    <h3 className="section-title">{lang === "km" ? "Monthly Controller Gallery" : "Monthly Controller Gallery"}</h3>
                     <div className="tiny">
-                      Tap a card to verify it. Reviewed this month: {toolReviewSummary.reviewed} / {toolReviewSummary.totalTools}
+                      {lang === "km"
+                        ? `ចុចកាតមួយ ដើម្បីគ្រប់គ្រងវា។ Reviewed this month: ${toolReviewSummary.reviewed} / ${toolReviewSummary.totalTools}`
+                        : `Tap a card to control it. Reviewed this month: ${toolReviewSummary.reviewed} / ${toolReviewSummary.totalTools}`}
                     </div>
                   </div>
 
@@ -58648,7 +59127,16 @@ function formatTicketRequestSource(value?: string) {
                       </div>
                     </div>
                     <div className="tool-review-decision-grid">
-                      <button type="button" className="tool-review-decision-card" onClick={() => toolReviewSelectedItem && setToolReviewModalOpen(true)} disabled={!toolReviewSelectedItem}>
+                      <button
+                        type="button"
+                        className="tool-review-decision-card"
+                        onClick={() => {
+                          if (!toolReviewSelectedItem) return;
+                          setToolReviewControlMode("verify");
+                          setToolReviewModalOpen(true);
+                        }}
+                        disabled={!toolReviewSelectedItem}
+                      >
                         <strong>1. Tap Tool Card</strong>
                         <span>Open one popup for that tool only.</span>
                       </button>
@@ -58666,7 +59154,13 @@ function formatTicketRequestSource(value?: string) {
                         <div className="tiny">
                           Selected: {inventoryDisplayName(toolReviewSelectedItem.itemName, lang)} • {toolReviewSelectedItem.itemCode}
                         </div>
-                        <button className="btn-primary" onClick={() => setToolReviewModalOpen(true)}>
+                        <button
+                          className="btn-primary"
+                          onClick={() => {
+                            setToolReviewControlMode("verify");
+                            setToolReviewModalOpen(true);
+                          }}
+                        >
                           Open Selected Tool Popup
                         </button>
                       </div>
@@ -69522,25 +70016,38 @@ function formatTicketRequestSource(value?: string) {
                     searchPlaceholder={lang === "km" ? "ស្វែងរករបៀប..." : "Search mode..."}
                     emptyText={lang === "km" ? "មិនមានជម្រើស" : "No mode found."}
                   />
-                  <SearchableMultiSelectPicker
-                    className="report-campus-picker"
-                    summary={
-                      reportInventoryCampusFilter === "ALL"
-                        ? t.allCampuses
-                        : inventoryCampusLabel(reportInventoryCampusFilter)
-                    }
-                    options={reportInventoryCampusOptions.map((campus) => ({
-                      value: campus,
-                      label: inventoryCampusLabel(campus),
-                    }))}
-                    selectedValues={reportInventoryCampusFilter === "ALL" ? ["ALL"] : [reportInventoryCampusFilter]}
-                    allOptionLabel={t.allCampuses}
-                    allOptionChecked={reportInventoryCampusFilter === "ALL"}
-                    onToggleAllOption={() => setReportInventoryCampusFilter("ALL")}
-                    onToggleValue={(value, checked) => setReportInventoryCampusFilter(checked ? value : "ALL")}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  <LocationPicker
+                    value={reportInventoryViewMode}
+                    onChange={(value) => setReportInventoryViewMode(value as "list" | "campus_compare")}
+                    options={[
+                      { value: "list", label: lang === "km" ? "បញ្ជីស្តុក" : "Stock List" },
+                      { value: "campus_compare", label: lang === "km" ? "ប្រៀបធៀបតាមសាខា" : "Compare by Campus" },
+                    ]}
+                    placeholder={lang === "km" ? "ជ្រើសទិដ្ឋភាព" : "Select view"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទិដ្ឋភាព..." : "Search view..."}
+                    emptyText={lang === "km" ? "មិនមានទិដ្ឋភាព" : "No view found."}
                   />
+                  {reportInventoryViewMode === "list" ? (
+                    <SearchableMultiSelectPicker
+                      className="report-campus-picker"
+                      summary={
+                        reportInventoryCampusFilter === "ALL"
+                          ? t.allCampuses
+                          : inventoryCampusLabel(reportInventoryCampusFilter)
+                      }
+                      options={reportInventoryCampusOptions.map((campus) => ({
+                        value: campus,
+                        label: inventoryCampusLabel(campus),
+                      }))}
+                      selectedValues={reportInventoryCampusFilter === "ALL" ? ["ALL"] : [reportInventoryCampusFilter]}
+                      allOptionLabel={t.allCampuses}
+                      allOptionChecked={reportInventoryCampusFilter === "ALL"}
+                      onToggleAllOption={() => setReportInventoryCampusFilter("ALL")}
+                      onToggleValue={(value, checked) => setReportInventoryCampusFilter(checked ? value : "ALL")}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                      emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                    />
+                  ) : null}
                   {reportInventoryIsToolGroup ? (
                     <LocationPicker
                       value={reportInventoryPropertyFilter}
@@ -69554,24 +70061,26 @@ function formatTicketRequestSource(value?: string) {
                       emptyText={lang === "km" ? "មិនមានកម្មសិទ្ធិ" : "No property type found."}
                     />
                   ) : null}
-                  <SearchableMultiSelectPicker
-                    summary={columnFilterSummary}
-                    options={inventoryReportColumnDefs.map((column) => ({
-                      value: column.key,
-                      label: column.label,
-                    }))}
-                    selectedValues={inventoryReportVisibleColumns}
-                    onToggleValue={(value) => updateInventoryReportColumnSelection(value as InventoryReportColumnKey)}
-                    allOptionLabel={lang === "km" ? "ជ្រើសទាំងអស់" : "All Columns"}
-                    allOptionChecked={inventoryReportVisibleColumns.length === inventoryReportColumnDefs.length}
-                    onToggleAllOption={(checked) =>
-                      setInventoryReportVisibleColumns(
-                        checked ? inventoryReportColumnDefs.map((column) => column.key) : inventoryReportVisibleColumns
-                      )
-                    }
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកជួរឈរ..." : "Search columns..."}
-                    emptyText={lang === "km" ? "មិនមានជួរឈរ" : "No columns found."}
-                  />
+                  {reportInventoryViewMode === "list" ? (
+                    <SearchableMultiSelectPicker
+                      summary={columnFilterSummary}
+                      options={inventoryReportColumnDefs.map((column) => ({
+                        value: column.key,
+                        label: column.label,
+                      }))}
+                      selectedValues={inventoryReportVisibleColumns}
+                      onToggleValue={(value) => updateInventoryReportColumnSelection(value as InventoryReportColumnKey)}
+                      allOptionLabel={lang === "km" ? "ជ្រើសទាំងអស់" : "All Columns"}
+                      allOptionChecked={inventoryReportVisibleColumns.length === inventoryReportColumnDefs.length}
+                      onToggleAllOption={(checked) =>
+                        setInventoryReportVisibleColumns(
+                          checked ? inventoryReportColumnDefs.map((column) => column.key) : inventoryReportVisibleColumns
+                        )
+                      }
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកជួរឈរ..." : "Search columns..."}
+                      emptyText={lang === "km" ? "មិនមានជួរឈរ" : "No columns found."}
+                    />
+                  ) : null}
                   {!isPhoneView ? (
                     <button
                       type="button"
@@ -71278,7 +71787,103 @@ function formatTicketRequestSource(value?: string) {
 
             {reportType === "inventory_balance" && (
               <>
-                {isPhoneView ? (
+                {reportInventoryViewMode === "campus_compare" ? (
+                  <>
+                    {isPhoneView ? (
+                      <div className="report-card-list" style={{ marginTop: 12 }}>
+                        {reportInventoryComparisonRows.length ? (
+                          reportInventoryComparisonRows.map((row) => (
+                            <article key={`report-inventory-compare-mobile-${row.itemKey}`} className="report-card report-inventory-mobile-card">
+                              <div className="report-card-head report-inventory-mobile-head">
+                                <div className="report-card-photo">
+                                  {renderAssetPhoto(row.photo || "", row.itemCodes[0] || row.itemName)}
+                                </div>
+                                <div className="report-card-title">
+                                  <strong className="report-inventory-mobile-name">{row.itemName}</strong>
+                                  <p className="report-card-sub">{row.itemCodes.join(", ") || "-"}</p>
+                                </div>
+                              </div>
+                              <div className="report-inventory-mobile-metrics">
+                                <div>
+                                  <span>{lang === "km" ? "សាខា" : "Campuses"}</span>
+                                  <strong>{row.campusCount}</strong>
+                                </div>
+                                <div>
+                                  <span>{lang === "km" ? "ស្តុកសរុប" : "Total Stock"}</span>
+                                  <strong>{row.totalStock}</strong>
+                                </div>
+                                <div>
+                                  <span>{lang === "km" ? "ឯកតា" : "Unit"}</span>
+                                  <strong>{row.unit}</strong>
+                                </div>
+                                <div>
+                                  <span>{lang === "km" ? "ស្តុកទាប" : "Low Campus"}</span>
+                                  <strong>{row.lowCampusCount}</strong>
+                                </div>
+                              </div>
+                              <div className="report-card-meta">
+                                <div><strong>{lang === "km" ? "តាមសាខា" : "By Campus"}:</strong> {row.campusSummary.join(" | ") || "-"}</div>
+                              </div>
+                              <div className="asset-actions" style={{ marginTop: 10 }}>
+                                <button className="btn-primary btn-small" type="button" onClick={() => openReportInventoryBorrowModal(row)}>
+                                  {lang === "km" ? "ខ្ចី / ត្រឡប់" : "Borrow / Return"}
+                                </button>
+                              </div>
+                            </article>
+                          ))
+                        ) : (
+                          <div className="panel-note">{lang === "km" ? "មិនមានទិន្នន័យប្រៀបធៀបទេ។" : "No campus comparison data."}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="table-wrap report-table-wrap report-table-wrap-inventory" style={{ marginTop: 12 }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>{lang === "km" ? "រូប" : "Photo"}</th>
+                              <th>{lang === "km" ? "ទំនិញ" : "Item"}</th>
+                              {reportInventoryComparisonCampuses.map((campus) => (
+                                <th key={`report-compare-campus-col-${campus}`}>{inventoryCampusLabel(campus)}</th>
+                              ))}
+                              <th>{lang === "km" ? "ស្តុកសរុប" : "Total Stock"}</th>
+                              <th>{lang === "km" ? "ឯកតា" : "Unit"}</th>
+                              <th>{lang === "km" ? "សកម្មភាព" : "Actions"}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reportInventoryComparisonRows.length ? (
+                              reportInventoryComparisonRows.map((row) => (
+                                <tr key={`report-inventory-compare-${row.itemKey}`}>
+                                  <td>{renderAssetPhoto(row.photo || "", row.itemCodes[0] || row.itemName)}</td>
+                                  <td><strong>{row.itemName}</strong></td>
+                                  {reportInventoryComparisonCampuses.map((campus) => {
+                                    const match = row.campusStocks.find((entry) => entry.campusName === campus);
+                                    return (
+                                      <td key={`report-inventory-compare-${row.itemKey}-${campus}`}>
+                                        <strong>{match?.stock || 0}</strong>
+                                      </td>
+                                    );
+                                  })}
+                                  <td><strong>{row.totalStock}</strong></td>
+                                  <td>{row.unit}</td>
+                                  <td>
+                                    <button className="btn-primary btn-small" type="button" onClick={() => openReportInventoryBorrowModal(row)}>
+                                      {lang === "km" ? "ខ្ចី / ត្រឡប់" : "Borrow / Return"}
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={reportInventoryComparisonCampuses.length + 5}>{lang === "km" ? "មិនមានទិន្នន័យប្រៀបធៀបទេ។" : "No campus comparison data."}</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                ) : isPhoneView ? (
                 <div className="report-inventory-mobile-list">
                   {reportInventoryGroupedRows.length ? (
                     reportInventoryGroupedRows.map((section) => (
@@ -77122,6 +77727,204 @@ function formatTicketRequestSource(value?: string) {
             </section>
           </div>
         ) : null}
+        {reportInventoryBorrowModal ? (
+          <div className="modal-backdrop" onClick={closeReportInventoryBorrowModal}>
+            <section className="panel modal-panel inventory-quickout-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="panel-row">
+                <h2>{lang === "km" ? "ខ្ចី / ត្រឡប់ឧបករណ៍" : "Borrow / Return Tool"}</h2>
+                <button className="tab" onClick={closeReportInventoryBorrowModal}>{t.close}</button>
+              </div>
+              <div className="inventory-quickout-hero-icon-wrap" aria-hidden={true}>
+                {reportInventoryBorrowModal.photo ? (
+                  <img
+                    loading="lazy"
+                    decoding="async"
+                    src={reportInventoryBorrowModal.photo}
+                    alt={reportInventoryBorrowModal.itemName}
+                    className="inventory-quickout-hero-photo"
+                  />
+                ) : (
+                  <span className="inventory-quickout-hero-icon">
+                    {inventorySupplyIcon(reportInventoryBorrowModal.itemName)}
+                  </span>
+                )}
+              </div>
+              <div className="inventory-daily-stock-note inventory-quickout-stock-note-grid">
+                <div className="inventory-quickout-item-col">
+                  <div className="inventory-quickout-item-line">
+                    <strong>{reportInventoryBorrowModal.itemName}</strong>
+                  </div>
+                  <div className="inventory-quickout-location-line">
+                    <span>{lang === "km" ? "សាខាមានក្នុងរបាយការណ៍" : "Campuses in report"}:</span>{" "}
+                    <strong>{reportInventoryBorrowCampuses.map((entry) => `${entry.campusLabel}: ${entry.stock}`).join(" | ") || "-"}</strong>
+                  </div>
+                </div>
+              </div>
+              <div className="form-grid inventory-quickout-form-grid" style={{ marginTop: 10 }}>
+                <div className="field field-wide">
+                  <span>{lang === "km" ? "ប្រភេទសកម្មភាព" : "Action Type"}</span>
+                  <div className="inventory-quickout-mode-switch">
+                    <button
+                      type="button"
+                      className={`tab ${reportInventoryBorrowModal.action === "BORROW_OUT" ? "active" : ""}`}
+                      onClick={() =>
+                        setReportInventoryBorrowModal((prev) =>
+                          prev ? { ...prev, action: "BORROW_OUT" } : prev
+                        )
+                      }
+                    >
+                      {lang === "km" ? "ខ្ចីចេញ" : "Borrow"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`tab ${reportInventoryBorrowModal.action === "BORROW_IN" ? "active" : ""}`}
+                      onClick={() =>
+                        setReportInventoryBorrowModal((prev) =>
+                          prev ? { ...prev, action: "BORROW_IN" } : prev
+                        )
+                      }
+                    >
+                      {lang === "km" ? "ត្រឡប់ចូល" : "Return"}
+                    </button>
+                  </div>
+                </div>
+                <label className="field">
+                  <span>{t.date}</span>
+                  <input
+                    className="input"
+                    type="date"
+                    value={reportInventoryBorrowModal.date}
+                    onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, date: e.target.value } : prev))}
+                  />
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "បរិមាណ" : "Qty"}</span>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    value={reportInventoryBorrowModal.qty}
+                    onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, qty: e.target.value } : prev))}
+                  />
+                </label>
+                <label className="field">
+                  <span>
+                    {reportInventoryBorrowModal.action === "BORROW_OUT"
+                      ? (lang === "km" ? "ខ្ចីពីសាខា" : "Borrow From Campus")
+                      : (lang === "km" ? "ត្រឡប់ពីសាខា" : "Return From Campus")}
+                  </span>
+                  <select
+                    className="input"
+                    value={reportInventoryBorrowModal.sourceCampus}
+                    onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, sourceCampus: e.target.value } : prev))}
+                  >
+                    <option value="">{lang === "km" ? "ជ្រើសសាខា" : "Select campus"}</option>
+                    {reportInventoryBorrowCampuses.map((entry) => (
+                      <option key={`report-borrow-source-${entry.itemId}`} value={entry.campusName}>
+                        {entry.campusLabel} ({entry.stock})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>
+                    {reportInventoryBorrowModal.action === "BORROW_OUT"
+                      ? (lang === "km" ? "ទៅសាខា" : "To Campus")
+                      : (lang === "km" ? "ត្រឡប់ចូលសាខា" : "Return To Campus")}
+                  </span>
+                  <select
+                    className="input"
+                    value={reportInventoryBorrowModal.destinationCampus}
+                    onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, destinationCampus: e.target.value } : prev))}
+                  >
+                    <option value="">{lang === "km" ? "ជ្រើសសាខា" : "Select campus"}</option>
+                    {reportInventoryBorrowCampuses.map((entry) => (
+                      <option key={`report-borrow-dest-${entry.itemId}`} value={entry.campusName}>
+                        {entry.campusLabel} ({entry.stock})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {reportInventoryBorrowModal.action === "BORROW_OUT" ? (
+                  <>
+                    <label className="field">
+                      <span>{lang === "km" ? "ស្នើដោយ" : "Requested By"}</span>
+                      <input
+                        className="input"
+                        value={reportInventoryBorrowModal.requestedBy}
+                        onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, requestedBy: e.target.value } : prev))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "អនុម័តដោយ" : "Approved By"}</span>
+                      <input
+                        className="input"
+                        value={reportInventoryBorrowModal.approvedBy}
+                        onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, approvedBy: e.target.value } : prev))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ថ្ងៃត្រឡប់រំពឹង" : "Expected Return"}</span>
+                      <input
+                        className="input"
+                        type="date"
+                        value={reportInventoryBorrowModal.expectedReturnDate}
+                        onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, expectedReturnDate: e.target.value } : prev))}
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <label className="field">
+                    <span>{lang === "km" ? "ទទួលត្រឡប់ដោយ" : "Received By"}</span>
+                    <input
+                      className="input"
+                      value={reportInventoryBorrowModal.receivedBy}
+                      onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, receivedBy: e.target.value } : prev))}
+                    />
+                  </label>
+                )}
+                <label className="field field-wide">
+                  <span>{t.notes}</span>
+                  <input
+                    className="input"
+                    value={reportInventoryBorrowModal.note}
+                    onChange={(e) => setReportInventoryBorrowModal((prev) => (prev ? { ...prev, note: e.target.value } : prev))}
+                    placeholder={
+                      reportInventoryBorrowModal.action === "BORROW_OUT"
+                        ? (lang === "km" ? "មូលហេតុខ្ចីឧបករណ៍" : "Reason for borrowing")
+                        : (lang === "km" ? "កំណត់ចំណាំត្រឡប់ឧបករណ៍" : "Return note")
+                    }
+                  />
+                </label>
+              </div>
+              <div className="asset-actions">
+                <div className="tiny">
+                  {reportInventoryBorrowSourceEntry
+                    ? `${lang === "km" ? "ទីតាំងសាខាជ្រើស" : "Selected campus location"}: ${reportInventoryBorrowSourceEntry.location || "-"}`
+                    : ""}
+                </div>
+                <button
+                  className="btn-primary"
+                  type="button"
+                  onClick={() => void saveReportInventoryBorrowModal()}
+                  disabled={
+                    inventoryTxnSaveBusy ||
+                    !reportInventoryBorrowModal.qty ||
+                    !reportInventoryBorrowModal.sourceCampus ||
+                    !reportInventoryBorrowModal.destinationCampus ||
+                    (reportInventoryBorrowModal.action === "BORROW_OUT"
+                      ? (!reportInventoryBorrowModal.requestedBy || !reportInventoryBorrowModal.approvedBy)
+                      : !reportInventoryBorrowModal.receivedBy)
+                  }
+                >
+                  {reportInventoryBorrowModal.action === "BORROW_OUT"
+                    ? (lang === "km" ? "រក្សាទុកការខ្ចី" : "Save Borrow")
+                    : (lang === "km" ? "រក្សាទុកការត្រឡប់" : "Save Return")}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
         {scheduleMaintenanceRecordModalOpen && typeof document !== "undefined"
           ? createPortal(
               <div
@@ -79035,22 +79838,31 @@ function formatTicketRequestSource(value?: string) {
         )}
 
         {toolReviewModalOpen && toolReviewSelectedItem ? (
-          <div className="modal-backdrop tool-review-modal-backdrop" onClick={() => setToolReviewModalOpen(false)}>
+          <div
+            className="modal-backdrop tool-review-modal-backdrop"
+            onClick={() => {
+              setToolReviewModalOpen(false);
+              setToolReviewControlMode("verify");
+            }}
+          >
             <section className="panel modal-panel tool-review-modal-panel" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
                 <div>
-                  <h2>{lang === "km" ? "ផ្ទៀងផ្ទាត់ឧបករណ៍" : "Verify Tool"}</h2>
+                  <h2>{lang === "km" ? "គ្រប់គ្រងឧបករណ៍" : "Item Controller"}</h2>
                   <div className="tiny">
                     {lang === "km"
-                      ? "ពិនិត្យចំនួនពិត ថតរូបថ្មីបំផុត ហើយដាក់ស្នើ។"
-                      : "Check real amount, take latest photo, then submit."}
+                      ? "ពិនិត្យប្រចាំខែ ឬ កត់ត្រាការខ្ចី និង ការត្រឡប់ ពីកន្លែងតែមួយ។"
+                      : "Verify monthly status, or record borrow and return from one place."}
                   </div>
                 </div>
                 <button
                   type="button"
                   className="tool-review-modal-close"
                   aria-label={t.close}
-                  onClick={() => setToolReviewModalOpen(false)}
+                  onClick={() => {
+                    setToolReviewModalOpen(false);
+                    setToolReviewControlMode("verify");
+                  }}
                 >
                   ×
                 </button>
@@ -79104,6 +79916,35 @@ function formatTicketRequestSource(value?: string) {
                 </div>
               </div>
 
+              <div className="inventory-quickout-mode-switch tool-review-controller-switch" style={{ marginBottom: 14 }}>
+                <button
+                  type="button"
+                  className={`tab tool-review-controller-tab tool-review-controller-tab-verify ${toolReviewControlMode === "verify" ? "active" : ""}`}
+                  onClick={() => setToolReviewControlMode("verify")}
+                >
+                  <CheckCircle2 size={18} aria-hidden={true} />
+                  <span>{lang === "km" ? "ផ្ទៀងផ្ទាត់" : "Verify"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`tab tool-review-controller-tab tool-review-controller-tab-borrow ${toolReviewControlMode === "borrow" ? "active" : ""}`}
+                  onClick={() => setToolReviewControlMode("borrow")}
+                >
+                  <ArrowLeftRight size={18} aria-hidden={true} />
+                  <span>{lang === "km" ? "ខ្ចី" : "Borrow"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`tab tool-review-controller-tab tool-review-controller-tab-return ${toolReviewControlMode === "return" ? "active" : ""}`}
+                  onClick={() => setToolReviewControlMode("return")}
+                >
+                  <RotateCcw size={18} aria-hidden={true} />
+                  <span>{lang === "km" ? "ត្រឡប់" : "Return"}</span>
+                </button>
+              </div>
+
+              {toolReviewControlMode === "verify" ? (
+                <>
               <div className="tool-review-modal-workspace">
                 <div className="tool-review-modal-main">
                   <div className="tool-review-quick-actions">
@@ -79152,7 +79993,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                   </div>
 
-                  <div className="form-grid tool-review-form-grid">
+                  <div className="form-grid tool-review-form-grid tool-review-borrow-grid">
                     <div className={`tool-review-compact-row ${toolReviewQuickAction !== "good" ? "tool-review-compact-row-triple" : ""}`}>
                       <label className="field tool-review-field-centered">
                         <span>
@@ -79300,6 +80141,163 @@ function formatTicketRequestSource(value?: string) {
               <div className="tiny tool-review-submit-helper">
                 {lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់ប្រចាំខែ សម្រាប់ឧបករណ៍ដែលបានជ្រើស។" : "Submit this month verification for the selected tool."}
               </div>
+                </>
+              ) : (
+                <>
+                  <div className="form-grid tool-review-form-grid tool-review-borrow-grid">
+                    <label className="field">
+                      <span>{t.date}</span>
+                      <input
+                        className="input"
+                        type="date"
+                        value={toolReviewBorrowForm.date}
+                        onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, date: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "បរិមាណ" : "Qty"}</span>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        value={toolReviewBorrowForm.qty}
+                        onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, qty: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>{lang === "km" ? "ថ្ងៃត្រឡប់រំពឹង" : "Expected Return"}</span>
+                      <input
+                        className="input"
+                        type="date"
+                        value={toolReviewControlMode === "borrow" ? toolReviewBorrowForm.expectedReturnDate : toolReviewBorrowForm.date}
+                        onChange={(e) =>
+                          setToolReviewBorrowForm((prev) => ({
+                            ...prev,
+                            expectedReturnDate: e.target.value,
+                          }))
+                        }
+                        disabled={toolReviewControlMode !== "borrow"}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>
+                        {toolReviewControlMode === "borrow"
+                          ? (lang === "km" ? "ខ្ចីពីសាខា" : "Borrow From Campus")
+                          : (lang === "km" ? "ត្រឡប់ពីសាខា" : "Return From Campus")}
+                      </span>
+                      <select
+                        className="input"
+                        value={toolReviewBorrowForm.sourceCampus}
+                        onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, sourceCampus: e.target.value }))}
+                      >
+                        <option value="">{lang === "km" ? "ជ្រើសសាខា" : "Select campus"}</option>
+                        {toolReviewCampusItemOptions.map((entry) => (
+                          <option key={`tool-review-source-${entry.itemId}`} value={entry.campusName}>
+                            {entry.campusLabel} ({entry.stock})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>
+                        {toolReviewControlMode === "borrow"
+                          ? (lang === "km" ? "ទៅសាខា" : "To Campus")
+                          : (lang === "km" ? "ត្រឡប់ចូលសាខា" : "Return To Campus")}
+                      </span>
+                      <select
+                        className="input"
+                        value={toolReviewBorrowForm.destinationCampus}
+                        onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, destinationCampus: e.target.value }))}
+                      >
+                        <option value="">{lang === "km" ? "ជ្រើសសាខា" : "Select campus"}</option>
+                        {toolReviewCampusItemOptions.map((entry) => (
+                          <option key={`tool-review-destination-${entry.itemId}`} value={entry.campusName}>
+                            {entry.campusLabel} ({entry.stock})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {toolReviewControlMode === "borrow" ? (
+                      <>
+                        <label className="field">
+                          <span>{lang === "km" ? "ស្នើដោយ" : "Requested By"}</span>
+                          <input
+                            className="input"
+                            value={toolReviewBorrowForm.requestedBy}
+                            onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: e.target.value }))}
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      <div />
+                    )}
+                    <div className="tool-review-borrow-action-row field-wide">
+                      <label className="field">
+                        <span>{toolReviewControlMode === "borrow" ? (lang === "km" ? "អនុម័តដោយ" : "Approved By") : (lang === "km" ? "ទទួលត្រឡប់ដោយ" : "Received By")}</span>
+                        <input
+                          className="input"
+                          value={toolReviewControlMode === "borrow" ? toolReviewBorrowForm.approvedBy : toolReviewBorrowForm.receivedBy}
+                          onChange={(e) =>
+                            setToolReviewBorrowForm((prev) => ({
+                              ...prev,
+                              [toolReviewControlMode === "borrow" ? "approvedBy" : "receivedBy"]: e.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="field tool-review-borrow-note-field">
+                        <span>{t.notes}</span>
+                        <textarea
+                          className="textarea tool-review-borrow-note-textarea"
+                          rows={1}
+                          value={toolReviewBorrowForm.note}
+                          onChange={(e) => {
+                            e.target.style.height = "46px";
+                            e.target.style.height = `${Math.max(46, e.target.scrollHeight)}px`;
+                            setToolReviewBorrowForm((prev) => ({ ...prev, note: e.target.value }));
+                          }}
+                          placeholder={
+                            toolReviewControlMode === "borrow"
+                              ? (lang === "km" ? "មូលហេតុខ្ចីឧបករណ៍ទៅសាខាផ្សេង ឬ បុគ្គលិកផ្សេង" : "Reason for borrowing to another campus or staff")
+                              : (lang === "km" ? "កំណត់ចំណាំពេលត្រឡប់ឧបករណ៍" : "Return note")
+                          }
+                        />
+                      </label>
+                      <div className="tool-review-borrow-save-box">
+                        <div className="tiny">
+                          {toolReviewCampusItemOptions.length
+                            ? toolReviewCampusItemOptions.map((entry) => `${entry.campusLabel}: ${entry.stock}`).join(" | ")
+                            : "-"}
+                        </div>
+                        <button
+                          className="btn-primary"
+                          disabled={
+                            !isAdmin ||
+                            busy ||
+                            !toolReviewForm.itemId ||
+                            !toolReviewBorrowForm.qty ||
+                            !toolReviewBorrowForm.sourceCampus ||
+                            !toolReviewBorrowForm.destinationCampus ||
+                            (toolReviewControlMode === "borrow"
+                              ? (!toolReviewBorrowForm.requestedBy || !toolReviewBorrowForm.approvedBy)
+                              : !toolReviewBorrowForm.receivedBy)
+                          }
+                          onClick={() => void saveToolReviewBorrowAction()}
+                        >
+                          {toolReviewControlMode === "borrow"
+                            ? (lang === "km" ? "រក្សាទុកការខ្ចី" : "Save Borrow")
+                            : (lang === "km" ? "រក្សាទុកការត្រឡប់" : "Save Return")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="tiny tool-review-submit-helper">
+                    {toolReviewControlMode === "borrow"
+                      ? (lang === "km" ? "ប្រើសម្រាប់ការខ្ចីឧបករណ៍ឆ្លងសាខា ឬ ឲ្យបុគ្គលិកប្រើបណ្តោះអាសន្ន។" : "Use this for cross-campus borrowing or temporary staff use.")
+                      : (lang === "km" ? "ប្រើសម្រាប់កត់ត្រាឧបករណ៍ត្រឡប់ចូលវិញ។" : "Use this to record returned tools.")}
+                  </div>
+                </>
+              )}
             </section>
           </div>
         ) : null}
