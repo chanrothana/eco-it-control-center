@@ -46263,19 +46263,24 @@ export default function App() {
             grid-template-columns: 1fr;
             justify-items: center;
             text-align: center;
-            align-items: center;
+            align-items: start;
             margin-bottom: 12px;
-            min-height: 88px;
+            min-height: 124px;
+            padding-top: 18px;
           }
           .report-head-left {
-            width: 100%;
+            width: calc(100% - 240px);
+            max-width: 1100px;
+            margin: 0 auto;
+            padding-right: 0;
+            box-sizing: border-box;
           }
           .report-head-logo {
             position: absolute;
             right: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 190px;
+            top: -8px;
+            transform: none;
+            width: 200px;
             max-width: 28vw;
           }
           .report-head h1 {
