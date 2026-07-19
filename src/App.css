@@ -24398,6 +24398,32 @@ tr.row-maint-maintenance:hover td {
   word-break: break-word;
 }
 
+.report-compare-stock-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.report-compare-stock-cell strong {
+  min-width: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.report-compare-stock-cell.is-zero strong {
+  background: rgba(226, 92, 92, 0.16);
+  color: #d95b5b;
+  box-shadow: inset 0 0 0 1px rgba(217, 91, 91, 0.22);
+}
+
+.report-compare-stock-total strong {
+  background: rgba(77, 132, 217, 0.12);
+  color: #2b5394;
+  box-shadow: inset 0 0 0 1px rgba(77, 132, 217, 0.18);
+}
+
 .report-table-wrap td strong {
   display: inline-block;
 }

@@ -44536,19 +44536,18 @@ export default function App() {
         columns = [
           lang === "km" ? "រូប" : "Photo",
           lang === "km" ? "ទំនិញ" : "Item",
-          ...(reportInventoryComparisonCampuses.map((campus) => inventoryCampusLabel(campus))),
+          ...(reportInventoryComparisonCampuses.map((campus) => rentalPrinterCampusLabel(campus))),
           lang === "km" ? "ស្តុកសរុប" : "Total Stock",
-          lang === "km" ? "ឯកតា" : "Unit",
         ];
         rows = reportInventoryComparisonRows.map((row) => [
           toPrintablePhotoUrl(row.photo || ""),
           row.itemName,
           ...reportInventoryComparisonCampuses.map((campus) => {
             const match = row.campusStocks.find((entry) => entry.campusName === campus);
-            return String(match?.stock || 0);
+            const stock = Number(match?.stock || 0);
+            return `<div class="compare-stock-pill${stock <= 0 ? " is-zero" : ""}">${escapeHtml(String(stock))}</div>`;
           }),
-          String(row.totalStock),
-          row.unit,
+          `<div class="compare-stock-pill compare-stock-pill-total">${escapeHtml(String(row.totalStock))}</div>`,
         ]);
       } else {
         title = reportInventoryIsToolGroup
@@ -44774,9 +44773,8 @@ export default function App() {
             3,
             7,
             16,
-            ...reportInventoryComparisonCampuses.map(() => 8),
+            ...reportInventoryComparisonCampuses.map(() => 9),
             8,
-            6,
           ];
           const total = weights.reduce((sum, value) => sum + value, 0) || 1;
           return weights.map((value) => (value / total) * 100);
@@ -46523,6 +46521,27 @@ export default function App() {
           .preview-report-table-inventory td:first-child {
             white-space: nowrap;
             text-align: center;
+          }
+          .compare-stock-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 34px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-weight: 800;
+            color: #27405e;
+            background: rgba(77, 132, 217, 0.08);
+            box-shadow: inset 0 0 0 1px rgba(77, 132, 217, 0.12);
+          }
+          .compare-stock-pill.is-zero {
+            color: #bf4444;
+            background: rgba(226, 92, 92, 0.12);
+            box-shadow: inset 0 0 0 1px rgba(191, 68, 68, 0.18);
+          }
+          .compare-stock-pill-total {
+            background: rgba(77, 132, 217, 0.14);
+            color: #21457f;
           }
           .preview-report-table-staff-borrowing th:nth-child(2),
           .preview-report-table-staff-borrowing td:nth-child(2) {
@@ -71843,10 +71862,9 @@ function formatTicketRequestSource(value?: string) {
                               <th>{lang === "km" ? "រូប" : "Photo"}</th>
                               <th>{lang === "km" ? "ទំនិញ" : "Item"}</th>
                               {reportInventoryComparisonCampuses.map((campus) => (
-                                <th key={`report-compare-campus-col-${campus}`}>{inventoryCampusLabel(campus)}</th>
+                                <th key={`report-compare-campus-col-${campus}`}>{rentalPrinterCampusLabel(campus)}</th>
                               ))}
                               <th>{lang === "km" ? "ស្តុកសរុប" : "Total Stock"}</th>
-                              <th>{lang === "km" ? "ឯកតា" : "Unit"}</th>
                               <th>{lang === "km" ? "សកម្មភាព" : "Actions"}</th>
                             </tr>
                           </thead>
@@ -71858,14 +71876,17 @@ function formatTicketRequestSource(value?: string) {
                                   <td><strong>{row.itemName}</strong></td>
                                   {reportInventoryComparisonCampuses.map((campus) => {
                                     const match = row.campusStocks.find((entry) => entry.campusName === campus);
+                                    const stock = Number(match?.stock || 0);
                                     return (
-                                      <td key={`report-inventory-compare-${row.itemKey}-${campus}`}>
-                                        <strong>{match?.stock || 0}</strong>
+                                      <td
+                                        key={`report-inventory-compare-${row.itemKey}-${campus}`}
+                                        className={`report-compare-stock-cell ${stock <= 0 ? "is-zero" : ""}`}
+                                      >
+                                        <strong>{stock}</strong>
                                       </td>
                                     );
                                   })}
-                                  <td><strong>{row.totalStock}</strong></td>
-                                  <td>{row.unit}</td>
+                                  <td className="report-compare-stock-cell report-compare-stock-total"><strong>{row.totalStock}</strong></td>
                                   <td>
                                     <button className="btn-primary btn-small" type="button" onClick={() => openReportInventoryBorrowModal(row)}>
                                       {lang === "km" ? "ខ្ចី / ត្រឡប់" : "Borrow / Return"}
@@ -71875,7 +71896,7 @@ function formatTicketRequestSource(value?: string) {
                               ))
                             ) : (
                               <tr>
-                                <td colSpan={reportInventoryComparisonCampuses.length + 5}>{lang === "km" ? "មិនមានទិន្នន័យប្រៀបធៀបទេ។" : "No campus comparison data."}</td>
+                                <td colSpan={reportInventoryComparisonCampuses.length + 4}>{lang === "km" ? "មិនមានទិន្នន័យប្រៀបធៀបទេ។" : "No campus comparison data."}</td>
                               </tr>
                             )}
                           </tbody>
