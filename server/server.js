@@ -54,18 +54,27 @@ try {
   DatabaseSync = null;
 }
 
-let Tesseract;
-try {
-  Tesseract = require("tesseract.js");
-} catch {
-  Tesseract = null;
+let Tesseract = undefined;
+let sharp = undefined;
+
+function getTesseract() {
+  if (Tesseract !== undefined) return Tesseract;
+  try {
+    Tesseract = require("tesseract.js");
+  } catch {
+    Tesseract = null;
+  }
+  return Tesseract;
 }
 
-let sharp;
-try {
-  sharp = require("sharp");
-} catch {
-  sharp = null;
+function getSharp() {
+  if (sharp !== undefined) return sharp;
+  try {
+    sharp = require("sharp");
+  } catch {
+    sharp = null;
+  }
+  return sharp;
 }
 
 function readPackageVersion() {
@@ -4914,11 +4923,12 @@ function isCompressibleImageExtension(ext) {
 }
 
 async function optimizeImageBuffer(buffer, format) {
-  if (!sharp || !Buffer.isBuffer(buffer) || buffer.length === 0) return buffer;
+  const sharpLib = getSharp();
+  if (!sharpLib || !Buffer.isBuffer(buffer) || buffer.length === 0) return buffer;
   const normalizedFormat = toText(format).replace(/^\./, "").toLowerCase();
   if (!isCompressibleImageExtension(normalizedFormat)) return buffer;
   try {
-    let pipeline = sharp(buffer, { failOn: "none", animated: false })
+    let pipeline = sharpLib(buffer, { failOn: "none", animated: false })
       .rotate()
       .resize({
         width: IMAGE_UPLOAD_MAX_DIMENSION,
@@ -6773,11 +6783,12 @@ async function runUtilityInvoiceOcr(imagePath) {
     };
   }
 
-  if (!Tesseract || typeof Tesseract.recognize !== "function") {
+  const tesseractLib = getTesseract();
+  if (!tesseractLib || typeof tesseractLib.recognize !== "function") {
     throw new Error("Invoice OCR helper is not available on this server.");
   }
 
-  const result = await Tesseract.recognize(imagePath, "eng");
+  const result = await tesseractLib.recognize(imagePath, "eng");
   const data = result && result.data && typeof result.data === "object" ? result.data : {};
   return {
     text: toText(data.text),
@@ -6805,11 +6816,12 @@ async function runPrinterCounterOcr(imagePath) {
     };
   }
 
-  if (!Tesseract || typeof Tesseract.recognize !== "function") {
+  const tesseractLib = getTesseract();
+  if (!tesseractLib || typeof tesseractLib.recognize !== "function") {
     throw new Error("Printer counter OCR helper is not available on this server.");
   }
 
-  const result = await Tesseract.recognize(imagePath, "eng");
+  const result = await tesseractLib.recognize(imagePath, "eng");
   const data = result && result.data && typeof result.data === "object" ? result.data : {};
   return {
     text: toText(data.text),
