@@ -16864,9 +16864,6 @@ export default function App() {
       ),
     [allowedCampusOptions, inventoryCloneForm.sourceCampus]
   );
-  const inventoryCloneAllTargetsSelected =
-    inventoryCloneTargetCampusOptions.length > 0 &&
-    inventoryCloneTargetCampusOptions.every((campus) => inventoryCloneForm.targetCampuses.includes(campus));
   const inventoryCloneSourceRows = useMemo(() => {
     if (!isInventoryToolCategory(inventoryItemForm.category)) return [];
     const selectedSourceCampus = String(inventoryCloneForm.sourceCampus || "").trim();
@@ -17206,7 +17203,7 @@ export default function App() {
                     className={`th-sort-btn ${inventoryItemSort.key === "openingQty" ? "is-active" : ""}`}
                     onClick={() => toggleInventoryItemSort("openingQty")}
                   >
-                    <span className="inventory-item-th-label">Open<br />Qty {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    <span className="inventory-item-th-label">Qty {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
                   </button>
                 </th>
                 {inventoryDashboardGroup === "SUPPLY" ? (
@@ -17242,7 +17239,7 @@ export default function App() {
                     <td data-label={t.campus}>{inventoryCampusLabel(row.campus)}</td>
                     <td data-label={t.location}>{row.location}</td>
                     {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Unit">{row.unit}</td> : null}
-                    <td data-label="Opening">{row.openingQty}</td>
+                    <td data-label="Qty">{row.openingQty}</td>
                     {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Min">{row.minStock}</td> : null}
                     <td data-label="Actions" className="vault-table-action-cell">
                       <div className="asset-row-actions">
@@ -28488,7 +28485,9 @@ export default function App() {
     const location = inventoryItemForm.location.trim();
     const unit = inventoryItemForm.unit.trim() || "pcs";
     const openingQty = Number(inventoryItemForm.openingQty || 0);
-    const minStock = Number(inventoryItemForm.minStock || 0);
+    const minStock = isInventoryToolCategory(inventoryItemForm.category)
+      ? 0
+      : Number(inventoryItemForm.minStock || 0);
     if (!itemCode || !itemName || !location) {
       setError("Item code, item name, and location are required.");
       return;
@@ -28968,7 +28967,9 @@ export default function App() {
     const itemCode = (inventoryItemForm.itemCode.trim().toUpperCase() || current.itemCode);
     const location = inventoryItemForm.location.trim();
     const openingQty = Number(inventoryItemForm.openingQty || 0);
-    const minStock = Number(inventoryItemForm.minStock || 0);
+    const minStock = isInventoryToolCategory(inventoryItemForm.category)
+      ? 0
+      : Number(inventoryItemForm.minStock || 0);
     if (!itemCode || !itemName || !location) {
       setError("Item code, item name, and location are required.");
       return;
@@ -58732,7 +58733,7 @@ function formatTicketRequestSource(value?: string) {
                 {inventoryDashboardGroup !== "TONER" ? (
                 <>
                 <div className="form-grid inventory-item-create-grid">
-                  <label className="field">
+                  <label className="field field-campus-main">
                     <span>Campus</span>
                     <LocationPicker
                       value={inventoryItemForm.campus}
@@ -58742,18 +58743,6 @@ function formatTicketRequestSource(value?: string) {
                       searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                       emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                     />
-                  </label>
-                  <label className="field">
-                    <span>Inventory Group</span>
-                    <select
-                      className="input"
-                      value={inventoryItemForm.category}
-                      onChange={(e) => setInventoryItemForm((f) => ({ ...f, category: e.target.value as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL" }))}
-                    >
-                      {INVENTORY_CATEGORY_OPTIONS.map((opt) => (
-                        <option key={`inv-cat-${opt.value}`} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
                   </label>
                   <label className="field field-code-compact">
                     <span>Item Code</span>
@@ -58766,7 +58755,7 @@ function formatTicketRequestSource(value?: string) {
                       }}
                     />
                   </label>
-                  <label className="field">
+                  <label className="field field-name-wide">
                     <span>Item Name</span>
                     <input
                       className="input"
@@ -58798,15 +58787,7 @@ function formatTicketRequestSource(value?: string) {
                       </div>
                     ) : null}
                   </label>
-                  <label className="field">
-                    <span>Unit</span>
-                    <input
-                      className="input"
-                      value={inventoryItemForm.unit}
-                      onChange={(e) => setInventoryItemForm((f) => ({ ...f, unit: e.target.value }))}
-                    />
-                  </label>
-                  <label className="field">
+                  <label className="field field-location-main">
                     <span>Location</span>
                     <select className="input" value={inventoryItemForm.location} onChange={(e) => setInventoryItemForm((f) => ({ ...f, location: e.target.value }))}>
                       {inventoryLocations.map((loc) => (
@@ -58814,7 +58795,7 @@ function formatTicketRequestSource(value?: string) {
                       ))}
                     </select>
                   </label>
-                  <label className="field">
+                  <label className="field field-opening-qty">
                     <span>Opening Qty</span>
                     <input
                       className="input"
@@ -58825,12 +58806,22 @@ function formatTicketRequestSource(value?: string) {
                     />
                     <small className="tiny">Set starting balance for this item.</small>
                   </label>
-                  <label className="field">
-                    <span>Min Stock Alert</span>
-                    <input className="input" type="number" min="0" value={inventoryItemForm.minStock} onChange={(e) => setInventoryItemForm((f) => ({ ...f, minStock: e.target.value }))} />
+                  <label className="field field-unit-compact">
+                    <span>Unit</span>
+                    <input
+                      className="input"
+                      value={inventoryItemForm.unit}
+                      onChange={(e) => setInventoryItemForm((f) => ({ ...f, unit: e.target.value }))}
+                    />
                   </label>
+                  {!isInventoryToolCategory(inventoryItemForm.category) ? (
+                    <label className="field field-property-main">
+                      <span>Min Stock Alert</span>
+                      <input className="input" type="number" min="0" value={inventoryItemForm.minStock} onChange={(e) => setInventoryItemForm((f) => ({ ...f, minStock: e.target.value }))} />
+                    </label>
+                  ) : null}
                   {isInventoryToolCategory(inventoryItemForm.category) ? (
-                    <label className="field">
+                    <label className="field field-property-main">
                       <span>Property Type</span>
                       <select
                         className="input"
@@ -58845,11 +58836,11 @@ function formatTicketRequestSource(value?: string) {
                       </select>
                     </label>
                   ) : null}
-                  <label className="field">
+                  <label className="field field-vendor-main">
                     <span>Vendor</span>
                     <input className="input" value={inventoryItemForm.vendor} onChange={(e) => setInventoryItemForm((f) => ({ ...f, vendor: e.target.value }))} />
                   </label>
-                  <label className="field">
+                  <label className="field field-responsible-main">
                     <span>{isProviderToolOwnerType(inventoryItemForm.ownerType) ? "Provider Company" : "Responsible Team"}</span>
                     <input
                       className="input"
@@ -58858,13 +58849,22 @@ function formatTicketRequestSource(value?: string) {
                       placeholder={isProviderToolOwnerType(inventoryItemForm.ownerType) ? "PCS, Dynamic, Vendor..." : "Maintenance, Cleaning, Garden..."}
                     />
                   </label>
-                  <label className="field field-wide">
+                  <label className="field field-notes-shared">
                     <span>Notes</span>
-                    <textarea className="textarea" value={inventoryItemForm.notes} onChange={(e) => setInventoryItemForm((f) => ({ ...f, notes: e.target.value }))} />
+                    <input className="input" value={inventoryItemForm.notes} onChange={(e) => setInventoryItemForm((f) => ({ ...f, notes: e.target.value }))} />
                   </label>
-                  <label className="field field-wide">
+                  <label className="field field-photo-shared">
                     <span>{t.photo}</span>
-                    <input key={`inventory-photo-${inventoryItemFileKey}`} type="file" accept="image/*" className="input" onChange={onInventoryPhotoFile} />
+                    <div className="inventory-photo-shared-row">
+                      <input key={`inventory-photo-${inventoryItemFileKey}`} type="file" accept="image/*" className="input inventory-photo-shared-input" onChange={onInventoryPhotoFile} />
+                      {inventoryItemForm.photo ? (
+                        <img loading="lazy" decoding="async" src={inventoryItemForm.photo} alt={inventoryItemForm.itemCode || "inventory item"} className="inventory-photo-shared-preview" />
+                      ) : (
+                        <div className="inventory-photo-shared-preview inventory-photo-shared-preview-empty">
+                          {lang === "km" ? "គ្មានរូប" : "No Photo"}
+                        </div>
+                      )}
+                    </div>
                   </label>
                 </div>
                 <div className="asset-actions">
@@ -58894,7 +58894,7 @@ function formatTicketRequestSource(value?: string) {
                   <div className="inventory-tool-clone-panel">
                     <div className="panel-row">
                       <div>
-                        <strong>Copy Tool Set To Campuses</strong>
+                        <strong>Clone Tool Set</strong>
                         <div className="tiny">
                           Clone this tool group from one campus to other campuses. Existing item codes in the target campus will be skipped.
                         </div>
@@ -58903,91 +58903,81 @@ function formatTicketRequestSource(value?: string) {
                         {inventoryCloneRowsToCopy.length} item{inventoryCloneRowsToCopy.length === 1 ? "" : "s"} selected
                       </div>
                     </div>
-                    <div className="form-grid inventory-item-create-grid">
-                      <label className="field">
-                        <span>Source Campus</span>
-                        <select
-                          className="input"
-                          value={inventoryCloneForm.sourceCampus}
-                          onChange={(e) =>
-                            setInventoryCloneForm((prev) => ({
-                              ...prev,
-                              sourceCampus: e.target.value,
-                              sourceItemId: "ALL",
-                              targetCampuses: prev.targetCampuses.filter((campus) => campus !== e.target.value),
-                            }))
-                          }
-                        >
-                          {inventoryCloneSourceCampusOptions.length ? (
-                            inventoryCloneSourceCampusOptions.map((campus) => (
-                              <option key={`inventory-clone-source-${campus}`} value={campus}>
-                                {campus === "ALL" ? "All Campuses" : inventoryCampusLabel(campus)}
-                              </option>
-                            ))
-                          ) : (
-                            <option value="">No source campus yet</option>
-                          )}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>Tool</span>
-                        <LocationPicker
-                          value={inventoryCloneForm.sourceItemId}
-                          options={inventoryCloneItemOptions}
-                          onChange={(value) =>
-                            setInventoryCloneForm((prev) => ({
-                              ...prev,
-                              sourceItemId: value,
-                            }))
-                          }
-                          placeholder="All tools"
-                          searchPlaceholder={lang === "km" ? "ស្វែងរកឧបករណ៍..." : "Search tool..."}
-                          emptyText={lang === "km" ? "រកមិនឃើញឧបករណ៍" : "No tool found."}
-                        />
-                      </label>
-                      <label className="field field-wide">
-                        <span>Target Campuses</span>
-                        <div className="inventory-tool-clone-targets">
-                          {inventoryCloneTargetCampusOptions.length ? (
-                            <label className="inventory-tool-clone-option inventory-tool-clone-option-all">
-                              <input
-                                type="checkbox"
-                                checked={inventoryCloneAllTargetsSelected}
-                                onChange={(e) =>
-                                  setInventoryCloneForm((prev) => ({
-                                    ...prev,
-                                    targetCampuses: e.target.checked ? [...inventoryCloneTargetCampusOptions] : [],
-                                  }))
-                                }
-                              />
-                              <span>All Campuses</span>
-                            </label>
-                          ) : null}
-                          {inventoryCloneTargetCampusOptions.map((campus) => {
-                            const checked = inventoryCloneForm.targetCampuses.includes(campus);
-                            return (
-                              <label key={`inventory-clone-target-${campus}`} className="inventory-tool-clone-option">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={(e) =>
-                                    setInventoryCloneForm((prev) => ({
-                                      ...prev,
-                                      targetCampuses: e.target.checked
-                                        ? [...prev.targetCampuses, campus]
-                                        : prev.targetCampuses.filter((entry) => entry !== campus),
-                                    }))
-                                  }
-                                />
-                                <span>{inventoryCampusLabel(campus)}</span>
-                              </label>
-                            );
-                          })}
-                          {!inventoryCloneTargetCampusOptions.length ? (
-                            <div className="panel-note">No other campus available to receive this tool set.</div>
-                          ) : null}
-                        </div>
-                      </label>
+                    <div className="inventory-tool-clone-flow">
+                      <div className="inventory-tool-clone-flow-card">
+                        <div className="inventory-tool-clone-flow-kicker">Clone From</div>
+                        <label className="field inventory-tool-clone-field">
+                          <span>Source Campus</span>
+                          <LocationPicker
+                            value={inventoryCloneForm.sourceCampus}
+                            options={inventoryCloneSourceCampusOptions.map((campus) => ({
+                              value: campus,
+                              label: campus === "ALL" ? "All Campuses" : inventoryCampusLabel(campus),
+                            }))}
+                            onChange={(value) =>
+                              setInventoryCloneForm((prev) => ({
+                                ...prev,
+                                sourceCampus: value,
+                                sourceItemId: "ALL",
+                                targetCampuses: prev.targetCampuses.filter((campus) => (value === "ALL" ? true : campus !== value)),
+                              }))
+                            }
+                            placeholder="Select source campus"
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកសាខាដើម..." : "Search source campus..."}
+                            emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                          />
+                        </label>
+                        <label className="field inventory-tool-clone-field">
+                          <span>Tool</span>
+                          <LocationPicker
+                            value={inventoryCloneForm.sourceItemId}
+                            options={inventoryCloneItemOptions}
+                            onChange={(value) =>
+                              setInventoryCloneForm((prev) => ({
+                                ...prev,
+                                sourceItemId: value,
+                              }))
+                            }
+                            placeholder="All tools"
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកឧបករណ៍..." : "Search tool..."}
+                            emptyText={lang === "km" ? "រកមិនឃើញឧបករណ៍" : "No tool found."}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="inventory-tool-clone-flow-arrow" aria-hidden="true">→</div>
+
+                      <div className="inventory-tool-clone-flow-card inventory-tool-clone-flow-card-target">
+                        <div className="inventory-tool-clone-flow-kicker">Apply To</div>
+                        <label className="field field-wide inventory-tool-clone-field">
+                          <span>Target Campuses</span>
+                          <div className="inventory-tool-clone-targets">
+                            {inventoryCloneTargetCampusOptions.map((campus) => {
+                              const checked = inventoryCloneForm.targetCampuses.includes(campus);
+                              return (
+                                <label key={`inventory-clone-target-${campus}`} className="inventory-tool-clone-option">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) =>
+                                      setInventoryCloneForm((prev) => ({
+                                        ...prev,
+                                        targetCampuses: e.target.checked
+                                          ? [...prev.targetCampuses, campus]
+                                          : prev.targetCampuses.filter((entry) => entry !== campus),
+                                      }))
+                                    }
+                                  />
+                                  <span>{inventoryCampusLabel(campus)}</span>
+                                </label>
+                              );
+                            })}
+                            {!inventoryCloneTargetCampusOptions.length ? (
+                              <div className="panel-note">No other campus available to receive this tool set.</div>
+                            ) : null}
+                          </div>
+                        </label>
+                      </div>
                     </div>
                     <div className="asset-actions">
                       <div className="tiny">
@@ -58999,7 +58989,7 @@ function formatTicketRequestSource(value?: string) {
                         onClick={() => void cloneInventoryToolSetToCampuses()}
                         type="button"
                       >
-                        {inventoryCloneForm.sourceItemId === "ALL" ? "Clone Tool Set" : "Clone Selected Tool"}
+                        Clone Tool Set
                       </button>
                     </div>
                   </div>
@@ -69677,7 +69667,7 @@ function formatTicketRequestSource(value?: string) {
                 <button className="tab" type="button" onClick={cancelInventoryItemEdit}>Close</button>
               </div>
               <div className="form-grid inventory-item-create-grid">
-                <label className="field">
+                <label className="field field-campus-main">
                   <span>Campus</span>
                   <LocationPicker
                     value={inventoryItemForm.campus}
@@ -69688,19 +69678,7 @@ function formatTicketRequestSource(value?: string) {
                     emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                   />
                 </label>
-                <label className="field">
-                  <span>Inventory Group</span>
-                  <select
-                    className="input"
-                    value={inventoryItemForm.category}
-                    onChange={(e) => setInventoryItemForm((f) => ({ ...f, category: e.target.value as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL" }))}
-                  >
-                    {INVENTORY_CATEGORY_OPTIONS.map((opt) => (
-                      <option key={`inventory-edit-category-${opt.value}`} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
+                <label className="field field-code-compact">
                   <span>Item Code</span>
                   <input
                     className="input"
@@ -69711,15 +69689,11 @@ function formatTicketRequestSource(value?: string) {
                     }}
                   />
                 </label>
-                <label className="field">
+                <label className="field field-name-wide">
                   <span>Item Name</span>
                   <input className="input" value={inventoryItemForm.itemName} onChange={(e) => setInventoryItemForm((f) => ({ ...f, itemName: e.target.value }))} />
                 </label>
-                <label className="field">
-                  <span>Unit</span>
-                  <input className="input" value={inventoryItemForm.unit} onChange={(e) => setInventoryItemForm((f) => ({ ...f, unit: e.target.value }))} />
-                </label>
-                <label className="field">
+                <label className="field field-location-main">
                   <span>Location</span>
                   <select className="input" value={inventoryItemForm.location} onChange={(e) => setInventoryItemForm((f) => ({ ...f, location: e.target.value }))}>
                     {inventoryLocations.map((loc) => (
@@ -69727,7 +69701,7 @@ function formatTicketRequestSource(value?: string) {
                     ))}
                   </select>
                 </label>
-                <label className="field">
+                <label className="field field-opening-qty">
                   <span>Opening Qty</span>
                   <input
                     className="input"
@@ -69739,12 +69713,18 @@ function formatTicketRequestSource(value?: string) {
                   />
                   {!isSuperAdmin ? <small className="tiny">Only Super Admin can change opening qty on existing items.</small> : null}
                 </label>
-                <label className="field">
-                  <span>Min Stock Alert</span>
-                  <input className="input" type="number" min="0" value={inventoryItemForm.minStock} onChange={(e) => setInventoryItemForm((f) => ({ ...f, minStock: e.target.value }))} />
+                <label className="field field-unit-compact">
+                  <span>Unit</span>
+                  <input className="input" value={inventoryItemForm.unit} onChange={(e) => setInventoryItemForm((f) => ({ ...f, unit: e.target.value }))} />
                 </label>
+                {!isInventoryToolCategory(inventoryItemForm.category) ? (
+                  <label className="field field-property-main">
+                    <span>Min Stock Alert</span>
+                    <input className="input" type="number" min="0" value={inventoryItemForm.minStock} onChange={(e) => setInventoryItemForm((f) => ({ ...f, minStock: e.target.value }))} />
+                  </label>
+                ) : null}
                 {isInventoryToolCategory(inventoryItemForm.category) ? (
-                  <label className="field">
+                  <label className="field field-property-main">
                     <span>Property Type</span>
                     <select
                       className="input"
@@ -69759,11 +69739,11 @@ function formatTicketRequestSource(value?: string) {
                     </select>
                   </label>
                 ) : null}
-                <label className="field">
+                <label className="field field-vendor-main">
                   <span>Vendor</span>
                   <input className="input" value={inventoryItemForm.vendor} onChange={(e) => setInventoryItemForm((f) => ({ ...f, vendor: e.target.value }))} />
                 </label>
-                <label className="field">
+                <label className="field field-responsible-main">
                   <span>{isProviderToolOwnerType(inventoryItemForm.ownerType) ? "Provider Company" : "Responsible Team"}</span>
                   <input
                     className="input"
@@ -69772,16 +69752,22 @@ function formatTicketRequestSource(value?: string) {
                     placeholder={isProviderToolOwnerType(inventoryItemForm.ownerType) ? "PCS, Dynamic, Vendor..." : "Maintenance, Cleaning, Garden..."}
                   />
                 </label>
-                <label className="field field-wide">
+                <label className="field field-notes-shared">
                   <span>Notes</span>
-                  <textarea className="textarea" value={inventoryItemForm.notes} onChange={(e) => setInventoryItemForm((f) => ({ ...f, notes: e.target.value }))} />
+                  <input className="input" value={inventoryItemForm.notes} onChange={(e) => setInventoryItemForm((f) => ({ ...f, notes: e.target.value }))} />
                 </label>
-                <label className="field field-wide">
+                <label className="field field-photo-shared">
                   <span>{t.photo}</span>
-                  <input key={`inventory-edit-photo-${inventoryItemFileKey}`} type="file" accept="image/*" className="input" onChange={onInventoryPhotoFile} />
-                  {inventoryItemForm.photo ? (
-                    <img loading="lazy" decoding="async" src={inventoryItemForm.photo} alt={inventoryItemForm.itemCode || "inventory item"} className="photo-preview" />
-                  ) : null}
+                  <div className="inventory-photo-shared-row">
+                    <input key={`inventory-edit-photo-${inventoryItemFileKey}`} type="file" accept="image/*" className="input inventory-photo-shared-input" onChange={onInventoryPhotoFile} />
+                    {inventoryItemForm.photo ? (
+                      <img loading="lazy" decoding="async" src={inventoryItemForm.photo} alt={inventoryItemForm.itemCode || "inventory item"} className="inventory-photo-shared-preview" />
+                    ) : (
+                      <div className="inventory-photo-shared-preview inventory-photo-shared-preview-empty">
+                        {lang === "km" ? "គ្មានរូប" : "No Photo"}
+                      </div>
+                    )}
+                  </div>
                 </label>
               </div>
               <div className="row-actions" style={{ justifyContent: "flex-end", marginTop: 16, gap: 10, flexWrap: "wrap" }}>
