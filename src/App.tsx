@@ -12115,6 +12115,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [successToast, setSuccessToast] = useState<null | { id: number; title: string; message: string }>(null);
   const [appVersionBadge, setAppVersionBadge] = useState(APP_VERSION);
   const [assetDataLoaded, setAssetDataLoaded] = useState(false);
   const [assetDataDetailLevel, setAssetDataDetailLevel] = useState<"summary" | "full">("summary");
@@ -12194,6 +12195,12 @@ export default function App() {
     photos: [] as string[],
     status: "Active",
   });
+
+  useEffect(() => {
+    if (!successToast) return;
+    const timer = window.setTimeout(() => setSuccessToast(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [successToast]);
   const [setPackDraft, setSetPackDraft] = useState<Record<SetPackChildType, SetPackChildDraft>>(
     () => defaultSetPackDraft()
   );
@@ -28567,6 +28574,14 @@ export default function App() {
     setInventoryItemFileKey((k) => k + 1);
     setBusy(false);
     setError("");
+    setSuccessToast({
+      id: Date.now(),
+      title: lang === "km" ? "បានបង្កើតរួចរាល់" : "Item Created",
+      message:
+        lang === "km"
+          ? `${inventoryCampusLabel(row.campus)} • ${row.itemCode}`
+          : `${inventoryCampusLabel(row.campus)} • ${row.itemCode} • ${inventoryDisplayName(row.itemName, lang)}`,
+    });
   }
 
   async function cloneInventoryToolSetToCampuses() {
@@ -28669,9 +28684,14 @@ export default function App() {
         `${inventoryItemForm.category}-CAMPUS-CLONE`,
         `${sourceCampus} -> ${targetCampuses.join(", ")} | ${createdCount} cloned`
       );
-      window.alert(
-        `Cloned ${createdCount} tool item(s) from ${inventoryCampusLabel(sourceCampus)}.${skippedCount ? ` Skipped ${skippedCount} existing item(s).` : ""}`
-      );
+      setSuccessToast({
+        id: Date.now(),
+        title: lang === "km" ? "បានចម្លងរួចរាល់" : "Tool Set Cloned",
+        message:
+          lang === "km"
+            ? `បានចម្លង ${createdCount} ឧបករណ៍ ទៅ ${targetCampuses.length} សាខា${skippedCount ? ` • រំលង ${skippedCount}` : ""}`
+            : `Cloned ${createdCount} item(s) to ${targetCampuses.length} campus(es)${skippedCount ? ` • Skipped ${skippedCount}` : ""}`,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to clone tool set");
     } finally {
@@ -80068,6 +80088,26 @@ function formatTicketRequestSource(value?: string) {
             </section>
           </div>
         )}
+
+        {successToast ? (
+          <div className="success-toast" role="status" aria-live="polite">
+            <div className="success-toast-icon">
+              <CheckCircle2 size={20} />
+            </div>
+            <div className="success-toast-copy">
+              <strong>{successToast.title}</strong>
+              <span>{successToast.message}</span>
+            </div>
+            <button
+              type="button"
+              className="success-toast-close"
+              aria-label={t.close}
+              onClick={() => setSuccessToast(null)}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : null}
 
         {updateNotesOpen && (
           <div className="modal-backdrop" onClick={() => setUpdateNotesOpen(false)}>
