@@ -29007,6 +29007,14 @@ export default function App() {
       appendUiAudit("UPDATE", "inventory_item", res.item.itemCode, `${res.item.campus} | ${res.item.itemName}`);
       cancelInventoryItemEdit();
       setError("");
+      setSuccessToast({
+        id: Date.now(),
+        title: lang === "km" ? "បានអាប់ដេតរួចរាល់" : "Item Updated",
+        message:
+          lang === "km"
+            ? `${inventoryCampusLabel(res.item.campus)} • ${res.item.itemCode}`
+            : `${inventoryCampusLabel(res.item.campus)} • ${res.item.itemCode} • ${inventoryDisplayName(res.item.itemName, lang)}`,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update inventory item");
     } finally {
