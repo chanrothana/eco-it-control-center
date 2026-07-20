@@ -123,10 +123,14 @@ const DB_MIRROR_PATH = process.env.DB_MIRROR_PATH ? resolveStoragePath(process.e
 const BACKUP_MIRROR_DIR = process.env.BACKUP_MIRROR_DIR ? resolveStoragePath(process.env.BACKUP_MIRROR_DIR, "backup-mirror") : "";
 const BACKUP_COMPRESS = String(process.env.BACKUP_COMPRESS || "true").toLowerCase() !== "false";
 const AUTO_BACKUP_ENABLED = String(process.env.AUTO_BACKUP_ENABLED || "true").toLowerCase() !== "false";
+const AUTO_BACKUP_RUN_ON_STARTUP =
+  String(process.env.AUTO_BACKUP_RUN_ON_STARTUP || (!IS_PROD ? "true" : "false")).toLowerCase() === "true";
 const AUTO_BACKUP_INTERVAL_HOURS = Math.max(1, Number(process.env.AUTO_BACKUP_INTERVAL_HOURS || 24));
 const AUTO_BACKUP_INTERVAL_MS = AUTO_BACKUP_INTERVAL_HOURS * 60 * 60 * 1000;
 const AUTO_BACKUP_RETENTION_DAYS = Math.max(1, Number(process.env.AUTO_BACKUP_RETENTION_DAYS || 30));
 const AUTO_BACKUP_RETENTION_MS = AUTO_BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+const STARTUP_BACKUP_RECOVERY_ENABLED =
+  String(process.env.STARTUP_BACKUP_RECOVERY_ENABLED || (!IS_PROD ? "true" : "false")).toLowerCase() === "true";
 const MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES = Math.max(
   15,
   Number(process.env.MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES || 60)
@@ -1142,7 +1146,7 @@ function initStorageSync() {
     if (bundled) {
       candidates.push({ label: "bundled snapshot", db: normalizeImportedDb(bundled) });
     }
-    const backup = readLatestBackupDbSync();
+    const backup = STARTUP_BACKUP_RECOVERY_ENABLED ? readLatestBackupDbSync() : null;
     if (backup && backup.db) {
       candidates.push({ label: `backup ${backup.source}`, db: backup.db });
     }
@@ -11875,8 +11879,10 @@ async function startServer() {
   }
 
   if (AUTO_BACKUP_ENABLED) {
-    // Run once at startup, then on interval.
-    await maybeRunAutoBackup();
+    // In production, defer the first backup so boot uses less memory.
+    if (AUTO_BACKUP_RUN_ON_STARTUP) {
+      await maybeRunAutoBackup();
+    }
     autoBackupTimer = setInterval(() => {
       void maybeRunAutoBackup();
     }, AUTO_BACKUP_INTERVAL_MS);
@@ -11908,6 +11914,7 @@ async function startServer() {
       console.log(
         `Auto backup enabled: every ${AUTO_BACKUP_INTERVAL_HOURS}h, retention ${AUTO_BACKUP_RETENTION_DAYS} days`
       );
+      console.log(`Auto backup on startup: ${AUTO_BACKUP_RUN_ON_STARTUP ? "enabled" : "disabled"}`);
     } else {
       console.log("Auto backup disabled");
     }

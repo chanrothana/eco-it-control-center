@@ -8775,6 +8775,47 @@ h2 {
   min-width: 0;
 }
 
+.inventory-item-name-suggest {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(130, 168, 220, 0.28);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.inventory-item-name-suggest-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ab3d8;
+  margin-bottom: 8px;
+}
+
+.inventory-item-name-suggest-list {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-item-name-suggest-card {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(16, 30, 52, 0.34);
+}
+
+.inventory-item-name-suggest-card strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.inventory-item-name-suggest-card span {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #aebed8;
+}
+
 .inventory-tool-clone-panel {
   margin-top: 12px;
   padding: 14px;
@@ -12895,7 +12936,7 @@ label.backup-action-btn {
 
 .inventory-item-filter-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   align-items: flex-end;
 }
@@ -12924,6 +12965,221 @@ label.backup-action-btn {
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.inventory-item-table-wrap {
+  max-width: 100%;
+  max-height: min(62vh, 720px);
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.vault-shell .inventory-item-table-wrap {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.inventory-item-list-table {
+  min-width: 0;
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.inventory-item-list-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  white-space: normal;
+  vertical-align: middle;
+  background: #e6eef9;
+  text-align: center;
+}
+
+.inventory-item-list-table thead th .th-sort-btn {
+  width: 100%;
+  justify-content: center;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.inventory-item-list-table-supply th:nth-child(1),
+.inventory-item-list-table-supply td:nth-child(1),
+.inventory-item-list-table-tools th:nth-child(1),
+.inventory-item-list-table-tools td:nth-child(1) {
+  width: 12%;
+}
+
+.inventory-item-list-table-supply th:nth-child(2),
+.inventory-item-list-table-supply td:nth-child(2),
+.inventory-item-list-table-tools th:nth-child(2),
+.inventory-item-list-table-tools td:nth-child(2) {
+  width: 8%;
+  text-align: center;
+}
+
+.inventory-item-list-table-supply th:nth-child(3),
+.inventory-item-list-table-supply td:nth-child(3),
+.inventory-item-list-table-tools th:nth-child(3),
+.inventory-item-list-table-tools td:nth-child(3) {
+  width: 18%;
+}
+
+.inventory-item-list-table-supply th:nth-child(4),
+.inventory-item-list-table-supply td:nth-child(4),
+.inventory-item-list-table-tools th:nth-child(4),
+.inventory-item-list-table-tools td:nth-child(4) {
+  width: 14%;
+}
+
+.inventory-item-list-table-supply th:nth-child(5),
+.inventory-item-list-table-supply td:nth-child(5) {
+  width: 10%;
+}
+
+.inventory-item-list-table-supply th:nth-child(6),
+.inventory-item-list-table-supply td:nth-child(6) {
+  width: 14%;
+}
+
+.inventory-item-list-table-supply th:nth-child(7),
+.inventory-item-list-table-supply td:nth-child(7) {
+  width: 12%;
+}
+
+.inventory-item-list-table-supply th:nth-child(8),
+.inventory-item-list-table-supply td:nth-child(8) {
+  width: 4%;
+  text-align: center;
+}
+
+.inventory-item-list-table-supply th:nth-child(9),
+.inventory-item-list-table-supply td:nth-child(9),
+.inventory-item-list-table-supply th:nth-child(10),
+.inventory-item-list-table-supply td:nth-child(10) {
+  width: 4%;
+  text-align: center;
+}
+
+.inventory-item-list-table-supply th:nth-child(11),
+.inventory-item-list-table-supply td:nth-child(11) {
+  width: 4%;
+}
+
+.inventory-item-list-table-tools th:nth-child(5),
+.inventory-item-list-table-tools td:nth-child(5) {
+  width: 20%;
+}
+
+.inventory-item-list-table-tools th:nth-child(6),
+.inventory-item-list-table-tools td:nth-child(6) {
+  width: 18%;
+}
+
+.inventory-item-list-table-tools th:nth-child(7),
+.inventory-item-list-table-tools td:nth-child(7) {
+  width: 6%;
+  text-align: center;
+}
+
+.inventory-item-list-table-tools th:nth-child(8),
+.inventory-item-list-table-tools td:nth-child(8) {
+  width: 8%;
+}
+
+.inventory-item-list-table-tools th:nth-child(1),
+.inventory-item-list-table-tools td:nth-child(1) {
+  width: 11%;
+}
+
+.inventory-item-list-table-tools th:nth-child(2),
+.inventory-item-list-table-tools td:nth-child(2) {
+  width: 7%;
+}
+
+.inventory-item-list-table-tools th:nth-child(3),
+.inventory-item-list-table-tools td:nth-child(3) {
+  width: 18%;
+}
+
+.inventory-item-list-table-tools th:nth-child(4),
+.inventory-item-list-table-tools td:nth-child(4) {
+  width: 12%;
+}
+
+.inventory-item-th-label {
+  display: inline-block;
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.inventory-item-list-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inventory-item-list-table td:nth-child(1) strong,
+.inventory-item-list-table td:nth-child(3),
+.inventory-item-list-table td:nth-child(4),
+.inventory-item-list-table td:nth-child(5),
+.inventory-item-list-table td:nth-child(6),
+.inventory-item-list-table td:nth-child(7) {
+  line-height: 1.3;
+}
+
+.inventory-item-list-table td:nth-child(6),
+.inventory-item-list-table td:nth-child(7) {
+  font-size: 15px;
+}
+
+.inventory-item-list-table-tools .vault-table-action-cell {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.inventory-item-list-table-tools .asset-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.inventory-item-list-table-tools .btn-icon-edit,
+.inventory-item-list-table-tools .btn-danger {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.inventory-item-list-table td:nth-child(2) .table-photo,
+.inventory-item-list-table td:nth-child(2) img {
+  width: 48px;
+  height: 48px;
+}
+
+@media (max-width: 1500px) {
+  .inventory-item-table-wrap,
+  .vault-shell .inventory-item-table-wrap {
+    overflow-x: auto !important;
+  }
+
+  .inventory-item-list-table {
+    min-width: 1180px;
+  }
+
+  .inventory-item-list-table-tools {
+    min-width: 0 !important;
+  }
 }
 
 .inventory-daily-gallery-panel {

@@ -25,10 +25,14 @@ services:
         value: /var/data/backups
       - key: AUTO_BACKUP_ENABLED
         value: "true"
+      - key: AUTO_BACKUP_RUN_ON_STARTUP
+        value: "false"
       - key: AUTO_BACKUP_INTERVAL_HOURS
         value: "24"
       - key: AUTO_BACKUP_RETENTION_DAYS
         value: "30"
+      - key: STARTUP_BACKUP_RECOVERY_ENABLED
+        value: "false"
       - key: TELEGRAM_ALERT_ENABLED
         value: "true"
       - key: TELEGRAM_BOT_TOKEN

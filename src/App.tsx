@@ -6421,6 +6421,36 @@ function inventoryLocationLabel(location: string, lang: Lang) {
 function normalizeInventoryCompareText(value: string) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
+function normalizeInventoryCompareCompact(value: string) {
+  return normalizeInventoryCompareText(value).replace(/[^a-z0-9\u1780-\u17ff]+/g, "");
+}
+function calcInventoryNameSimilarity(a: string, b: string) {
+  const left = normalizeInventoryCompareCompact(a);
+  const right = normalizeInventoryCompareCompact(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  if (left.includes(right) || right.includes(left)) return 0.92;
+  const leftTokens = new Set(normalizeInventoryCompareText(a).split(" ").filter(Boolean));
+  const rightTokens = new Set(normalizeInventoryCompareText(b).split(" ").filter(Boolean));
+  const sharedTokens = Array.from(leftTokens).filter((token) => rightTokens.has(token)).length;
+  const tokenScore = sharedTokens / Math.max(leftTokens.size, rightTokens.size, 1);
+  const maxLen = Math.max(left.length, right.length);
+  let prev = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        prev[j] + 1,
+        prev[j - 1] + cost
+      );
+    }
+    prev = current;
+  }
+  const distanceScore = maxLen > 0 ? 1 - prev[right.length] / maxLen : 0;
+  return Math.max(distanceScore, tokenScore);
+}
 function inventoryMasterDisplayName(master: {
   nameEn: string;
   nameKm?: string;
@@ -16902,6 +16932,49 @@ export default function App() {
     }
     return Array.from(values).sort((a, b) => ownerTypeLabel(a).localeCompare(ownerTypeLabel(b)));
   }, [inventoryBalanceRows, inventoryDashboardGroup, inventoryItemFilterCampus, ownerTypeLabel]);
+  const inventoryItemNameSuggestions = useMemo(() => {
+    const typedName = inventoryItemForm.itemName.trim();
+    if (!typedName) return [];
+    const typedNormalized = normalizeInventoryCompareText(typedName);
+    const grouped = new Map<
+      string,
+      {
+        itemName: string;
+        itemCode: string;
+        campuses: Set<string>;
+        locations: Set<string>;
+        count: number;
+        score: number;
+      }
+    >();
+    for (const item of inventoryItems) {
+      if (item.category !== inventoryItemForm.category) continue;
+      if (editingInventoryItemId !== null && item.id === editingInventoryItemId) continue;
+      const name = String(item.itemName || "").trim();
+      if (!name) continue;
+      const normalizedName = normalizeInventoryCompareText(name);
+      const score = calcInventoryNameSimilarity(typedName, name);
+      const isExact = normalizedName === typedNormalized;
+      if (!isExact && score < 0.62) continue;
+      const current = grouped.get(normalizedName) || {
+        itemName: name,
+        itemCode: String(item.itemCode || "").trim(),
+        campuses: new Set<string>(),
+        locations: new Set<string>(),
+        count: 0,
+        score,
+      };
+      current.count += 1;
+      current.score = Math.max(current.score, score);
+      if (item.campus) current.campuses.add(String(item.campus));
+      if (item.location) current.locations.add(String(item.location));
+      if (!current.itemCode && item.itemCode) current.itemCode = String(item.itemCode);
+      grouped.set(normalizedName, current);
+    }
+    return Array.from(grouped.values())
+      .sort((a, b) => b.score - a.score || b.count - a.count || a.itemName.localeCompare(b.itemName))
+      .slice(0, 5);
+  }, [editingInventoryItemId, inventoryItemForm.category, inventoryItemForm.itemName, inventoryItems]);
   const inventoryItemRows = useMemo(() => {
     const query = inventoryItemFilterQuery.trim().toLowerCase();
     const rows = inventoryBalanceRows.filter((row) => {
@@ -58414,6 +58487,30 @@ function formatTicketRequestSource(value?: string) {
                       value={inventoryItemForm.itemName}
                       onChange={(e) => setInventoryItemForm((f) => ({ ...f, itemName: e.target.value }))}
                     />
+                    {inventoryItemNameSuggestions.length ? (
+                      <div className="inventory-item-name-suggest">
+                        <div className="inventory-item-name-suggest-title">
+                          Similar registered items
+                          {inventoryItemNameSuggestions[0]?.score === 1 ? " found" : " sample"}
+                        </div>
+                        <div className="inventory-item-name-suggest-list">
+                          {inventoryItemNameSuggestions.map((row) => (
+                            <div key={`inventory-name-suggest-${row.itemName}`} className="inventory-item-name-suggest-card">
+                              <strong>
+                                {inventoryDisplayName(row.itemName, lang)}
+                                {row.score === 1 ? " (same name)" : ""}
+                              </strong>
+                              <span>
+                                {row.itemCode || "-"} • {row.count} record{row.count > 1 ? "s" : ""} • {row.campuses.size} campus{row.campuses.size > 1 ? "es" : ""}
+                              </span>
+                              <span>
+                                {Array.from(row.locations).slice(0, 2).join(" / ") || "No location"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </label>
                   <label className="field">
                     <span>Unit</span>
@@ -58593,7 +58690,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                     <div className="asset-actions">
                       <div className="tiny">
-                        Copies code, name, unit, opening qty, min stock, location, owner, responsible team, notes, and photo.
+                        Copies code, name, unit, opening qty, location, owner, responsible team, notes, and photo.
                       </div>
                       <button
                         className="btn-primary"
@@ -58643,10 +58740,23 @@ function formatTicketRequestSource(value?: string) {
                       ))}
                     </select>
                   </label>
+                  <label className="field">
+                    <span>Search</span>
+                    <input
+                      className="input"
+                      placeholder={
+                        inventoryDashboardGroup === "SUPPLY"
+                          ? "Search code, item name, location..."
+                          : "Search code, tool name, location..."
+                      }
+                      value={inventoryItemFilterQuery}
+                      onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
+                    />
+                  </label>
                 </div>
 
-                <div className="table-wrap vault-table-wrap" style={{ marginTop: 12 }}>
-                  <table className="vault-responsive-table">
+                <div className="table-wrap vault-table-wrap inventory-item-table-wrap" style={{ marginTop: 12 }}>
+                  <table className={`vault-responsive-table inventory-item-list-table ${inventoryDashboardGroup === "SUPPLY" ? "inventory-item-list-table-supply" : "inventory-item-list-table-tools"}`}>
                     <thead>
                       <tr>
                         <th>
@@ -58654,7 +58764,7 @@ function formatTicketRequestSource(value?: string) {
                             className={`th-sort-btn ${inventoryItemSort.key === "itemCode" ? "is-active" : ""}`}
                             onClick={() => toggleInventoryItemSort("itemCode")}
                           >
-                            Code {inventoryItemSort.key === "itemCode" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                            <span className="inventory-item-th-label">Code {inventoryItemSort.key === "itemCode" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
                           </button>
                         </th>
                         <th>
@@ -58662,7 +58772,7 @@ function formatTicketRequestSource(value?: string) {
                             className={`th-sort-btn ${inventoryItemSort.key === "photo" ? "is-active" : ""}`}
                             onClick={() => toggleInventoryItemSort("photo")}
                           >
-                            {t.photo} {inventoryItemSort.key === "photo" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                            <span className="inventory-item-th-label">{t.photo} {inventoryItemSort.key === "photo" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
                           </button>
                         </th>
                         <th>
@@ -58670,24 +58780,32 @@ function formatTicketRequestSource(value?: string) {
                             className={`th-sort-btn ${inventoryItemSort.key === "itemName" ? "is-active" : ""}`}
                             onClick={() => toggleInventoryItemSort("itemName")}
                           >
-                            Name {inventoryItemSort.key === "itemName" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                            <span className="inventory-item-th-label">Name {inventoryItemSort.key === "itemName" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
                           </button>
                         </th>
-                        <th>{inventoryDashboardGroup === "SUPPLY" ? "Responsible" : "Owner / Team"}</th>
                         <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "group" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("group")}
-                          >
-                            {inventoryDashboardGroup === "SUPPLY" ? "Group" : "Property Type"} {inventoryItemSort.key === "group" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
-                          </button>
+                          <span className="inventory-item-th-label">
+                            {inventoryDashboardGroup === "SUPPLY" ? "Responsible" : <>Owner /<br />Team</>}
+                          </span>
                         </th>
+                        {inventoryDashboardGroup === "SUPPLY" ? (
+                          <th>
+                            <button
+                              className={`th-sort-btn ${inventoryItemSort.key === "group" ? "is-active" : ""}`}
+                              onClick={() => toggleInventoryItemSort("group")}
+                            >
+                              <span className="inventory-item-th-label">
+                                Group {inventoryItemSort.key === "group" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                              </span>
+                            </button>
+                          </th>
+                        ) : null}
                         <th>
                           <button
                             className={`th-sort-btn ${inventoryItemSort.key === "campus" ? "is-active" : ""}`}
                             onClick={() => toggleInventoryItemSort("campus")}
                           >
-                            {t.campus} {inventoryItemSort.key === "campus" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                            <span className="inventory-item-th-label">{t.campus} {inventoryItemSort.key === "campus" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
                           </button>
                         </th>
                         <th>
@@ -58695,34 +58813,38 @@ function formatTicketRequestSource(value?: string) {
                             className={`th-sort-btn ${inventoryItemSort.key === "location" ? "is-active" : ""}`}
                             onClick={() => toggleInventoryItemSort("location")}
                           >
-                            {t.location} {inventoryItemSort.key === "location" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                            <span className="inventory-item-th-label">{t.location} {inventoryItemSort.key === "location" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
                           </button>
                         </th>
-                        <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "unit" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("unit")}
-                          >
-                            Unit {inventoryItemSort.key === "unit" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
-                          </button>
-                        </th>
+                        {inventoryDashboardGroup === "SUPPLY" ? (
+                          <th>
+                            <button
+                              className={`th-sort-btn ${inventoryItemSort.key === "unit" ? "is-active" : ""}`}
+                              onClick={() => toggleInventoryItemSort("unit")}
+                            >
+                              <span className="inventory-item-th-label">Unit {inventoryItemSort.key === "unit" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                            </button>
+                          </th>
+                        ) : null}
                         <th>
                           <button
                             className={`th-sort-btn ${inventoryItemSort.key === "openingQty" ? "is-active" : ""}`}
                             onClick={() => toggleInventoryItemSort("openingQty")}
                           >
-                            Opening {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                            <span className="inventory-item-th-label">Open<br />Qty {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
                           </button>
                         </th>
-                        <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "minStock" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("minStock")}
-                          >
-                            Min {inventoryItemSort.key === "minStock" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
-                          </button>
-                        </th>
-                        <th>Actions</th>
+                        {inventoryDashboardGroup === "SUPPLY" ? (
+                          <th>
+                            <button
+                              className={`th-sort-btn ${inventoryItemSort.key === "minStock" ? "is-active" : ""}`}
+                              onClick={() => toggleInventoryItemSort("minStock")}
+                            >
+                              <span className="inventory-item-th-label">Min<br />Qty {inventoryItemSort.key === "minStock" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                            </button>
+                          </th>
+                        ) : null}
+                        <th><span className="inventory-item-th-label">Actions</span></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -58737,16 +58859,16 @@ function formatTicketRequestSource(value?: string) {
                                 ? row.responsibleParty || "-"
                                 : `${ownerTypeLabel(row.ownerType)}${row.responsibleParty ? ` • ${row.responsibleParty}` : ""}`}
                             </td>
-                            <td data-label={inventoryDashboardGroup === "SUPPLY" ? "Group" : "Property Type"}>
-                              {inventoryDashboardGroup === "SUPPLY"
-                                ? inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))
-                                : ownerTypeLabel(row.ownerType)}
-                            </td>
+                            {inventoryDashboardGroup === "SUPPLY" ? (
+                              <td data-label="Group">
+                                {inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}
+                              </td>
+                            ) : null}
                             <td data-label={t.campus}>{inventoryCampusLabel(row.campus)}</td>
                             <td data-label={t.location}>{row.location}</td>
-                            <td data-label="Unit">{row.unit}</td>
+                            {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Unit">{row.unit}</td> : null}
                             <td data-label="Opening">{row.openingQty}</td>
-                            <td data-label="Min">{row.minStock}</td>
+                            {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Min">{row.minStock}</td> : null}
                             <td data-label="Actions" className="vault-table-action-cell">
                               <div className="asset-row-actions">
                                 <button
@@ -58771,7 +58893,7 @@ function formatTicketRequestSource(value?: string) {
                         ))
                       ) : (
                         <tr className="vault-table-empty-row">
-                          <td colSpan={11}>
+                          <td colSpan={inventoryDashboardGroup === "SUPPLY" ? 11 : 8}>
                             {inventoryBalanceRows.length ? "No inventory items match the current filters." : "No inventory items yet."}
                           </td>
                         </tr>
