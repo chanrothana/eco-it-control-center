@@ -8841,6 +8841,11 @@ h2 {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.inventory-tool-clone-option-all {
+  border-style: dashed;
+  background: rgba(62, 124, 244, 0.08);
+}
+
 .inventory-tool-clone-option input {
   margin: 0;
 }

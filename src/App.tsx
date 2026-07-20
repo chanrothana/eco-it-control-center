@@ -14490,6 +14490,7 @@ export default function App() {
     sourceItemId: "ALL",
     targetCampuses: [] as string[],
   });
+  const deferredInventoryItemName = useDeferredValue(inventoryItemForm.itemName);
   const [inventoryTxnForm, setInventoryTxnForm] = useState({
     itemId: "",
     date: toYmd(new Date()),
@@ -15683,8 +15684,11 @@ export default function App() {
     (campus: string) => {
       const raw = String(campus || "").trim();
       if (!raw) return "-";
-      if (raw === "C2" || raw === "C2.1") return campusLabel("Chaktomuk Campus");
-      if (raw === "C2.2") return campusLabel("Chaktomuk Campus (C2.2)");
+      if (raw === "Samdach Pan Campus" || raw === "C1") return "Campus 1 | Samdach Pan";
+      if (raw === "Chaktomuk Campus" || raw === "C2" || raw === "C2.1") return "Campus 2.1 | Chaktomuk";
+      if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") return "Campus 2.2 | Chaktomuk";
+      if (raw === "Boeung Snor Campus" || raw === "C3") return "Campus 3 | Boeung Snor";
+      if (raw === "Veng Sreng Campus" || raw === "C4") return "Campus 4 | Veng Sreng";
       if (CODE_TO_CAMPUS[raw]) return campusLabel(CODE_TO_CAMPUS[raw]);
       return campusLabel(raw);
     },
@@ -15696,7 +15700,7 @@ export default function App() {
       if (!raw) return "-";
       if (raw === "Samdach Pan Campus" || raw === "C1") return "Campus 1 | Samdach Pan";
       if (raw === "Chaktomuk Campus" || raw === "C2" || raw === "C2.1") return "Campus 2.1 | Chaktomuk";
-      if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") return "Campus 2.2 | Chaktomuk (C2.2)";
+      if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") return "Campus 2.2 | Chaktomuk";
       if (raw === "Boeung Snor Campus" || raw === "C3") return "Campus 3 | Boeung Snor";
       if (raw === "Veng Sreng Campus" || raw === "C4") return "Campus 4 | Veng Sreng";
       return campusLabel(raw);
@@ -16814,7 +16818,14 @@ export default function App() {
       const campus = String(row.campus || "").trim();
       if (campus) campuses.add(campus);
     }
-    return Array.from(campuses).sort((a, b) => inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b)));
+    return Array.from(campuses).sort((a, b) => {
+      const indexA = CAMPUS_LIST.indexOf(a);
+      const indexB = CAMPUS_LIST.indexOf(b);
+      if (indexA >= 0 && indexB >= 0) return indexA - indexB;
+      if (indexA >= 0) return -1;
+      if (indexB >= 0) return 1;
+      return inventoryCampusLabel(a).localeCompare(inventoryCampusLabel(b));
+    });
   }, [inventoryBalanceRows, inventoryCampusLabel]);
   const toolReviewCampusPickerOptions = useMemo(() => {
     const campusList = canViewAllInventoryCampuses ? campusOptions : allowedCampusOptions;
@@ -16843,6 +16854,9 @@ export default function App() {
       ),
     [allowedCampusOptions, inventoryCloneForm.sourceCampus]
   );
+  const inventoryCloneAllTargetsSelected =
+    inventoryCloneTargetCampusOptions.length > 0 &&
+    inventoryCloneTargetCampusOptions.every((campus) => inventoryCloneForm.targetCampuses.includes(campus));
   const inventoryCloneSourceRows = useMemo(() => {
     if (!isInventoryToolCategory(inventoryItemForm.category)) return [];
     return inventoryItems
@@ -16933,7 +16947,7 @@ export default function App() {
     return Array.from(values).sort((a, b) => ownerTypeLabel(a).localeCompare(ownerTypeLabel(b)));
   }, [inventoryBalanceRows, inventoryDashboardGroup, inventoryItemFilterCampus, ownerTypeLabel]);
   const inventoryItemNameSuggestions = useMemo(() => {
-    const typedName = inventoryItemForm.itemName.trim();
+    const typedName = deferredInventoryItemName.trim();
     if (!typedName) return [];
     const typedNormalized = normalizeInventoryCompareText(typedName);
     const grouped = new Map<
@@ -16974,7 +16988,7 @@ export default function App() {
     return Array.from(grouped.values())
       .sort((a, b) => b.score - a.score || b.count - a.count || a.itemName.localeCompare(b.itemName))
       .slice(0, 5);
-  }, [editingInventoryItemId, inventoryItemForm.category, inventoryItemForm.itemName, inventoryItems]);
+  }, [deferredInventoryItemName, editingInventoryItemId, inventoryItemForm.category, inventoryItems]);
   const inventoryItemRows = useMemo(() => {
     const query = inventoryItemFilterQuery.trim().toLowerCase();
     const rows = inventoryBalanceRows.filter((row) => {
@@ -17046,6 +17060,238 @@ export default function App() {
     lang,
     ownerTypeLabel,
   ]);
+  const inventoryItemsTableSection = useMemo(
+    () => (
+      <>
+        <div className="panel-filters inventory-item-filter-bar" style={{ marginTop: 12 }}>
+          <label className="field">
+            <span>{t.campus}</span>
+            <LocationPicker
+              value={inventoryItemFilterCampus}
+              onChange={setInventoryItemFilterCampus}
+              options={[
+                { value: "ALL", label: lang === "km" ? "គ្រប់សាខា" : "All Campuses" },
+                ...inventoryItemCampusOptions.map((campus) => ({
+                  value: campus,
+                  label: inventoryCampusLabel(campus),
+                })),
+              ]}
+              placeholder={lang === "km" ? "គ្រប់សាខា" : "All Campuses"}
+              searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+              emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
+            />
+          </label>
+          <label className="field">
+            <span>Group</span>
+            <div className="detail-value">{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</div>
+          </label>
+          <label className="field">
+            <span>{inventoryDashboardGroup === "SUPPLY" ? "Responsible Type" : "Property Type"}</span>
+            <select
+              className="input"
+              value={inventoryItemFilterOwnerType}
+              onChange={(e) => setInventoryItemFilterOwnerType(e.target.value)}
+            >
+              <option value="ALL">{inventoryDashboardGroup === "SUPPLY" ? "All Responsible Types" : "All Property Types"}</option>
+              {inventoryItemOwnerTypeOptions.map((ownerType) => (
+                <option key={`inventory-item-owner-type-${ownerType}`} value={ownerType}>
+                  {ownerTypeLabel(ownerType)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Search</span>
+            <input
+              className="input"
+              placeholder={
+                inventoryDashboardGroup === "SUPPLY"
+                  ? "Search code, item name, location..."
+                  : "Search code, tool name, location..."
+              }
+              value={inventoryItemFilterQuery}
+              onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="table-wrap vault-table-wrap inventory-item-table-wrap" style={{ marginTop: 12 }}>
+          <table className={`vault-responsive-table inventory-item-list-table ${inventoryDashboardGroup === "SUPPLY" ? "inventory-item-list-table-supply" : "inventory-item-list-table-tools"}`}>
+            <thead>
+              <tr>
+                <th>
+                  <button
+                    className={`th-sort-btn ${inventoryItemSort.key === "itemCode" ? "is-active" : ""}`}
+                    onClick={() => toggleInventoryItemSort("itemCode")}
+                  >
+                    <span className="inventory-item-th-label">Code {inventoryItemSort.key === "itemCode" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                  </button>
+                </th>
+                <th>
+                  <button
+                    className={`th-sort-btn ${inventoryItemSort.key === "photo" ? "is-active" : ""}`}
+                    onClick={() => toggleInventoryItemSort("photo")}
+                  >
+                    <span className="inventory-item-th-label">{t.photo} {inventoryItemSort.key === "photo" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                  </button>
+                </th>
+                <th>
+                  <button
+                    className={`th-sort-btn ${inventoryItemSort.key === "itemName" ? "is-active" : ""}`}
+                    onClick={() => toggleInventoryItemSort("itemName")}
+                  >
+                    <span className="inventory-item-th-label">Name {inventoryItemSort.key === "itemName" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                  </button>
+                </th>
+                <th>
+                  <span className="inventory-item-th-label">
+                    {inventoryDashboardGroup === "SUPPLY" ? "Responsible" : <>Owner /<br />Team</>}
+                  </span>
+                </th>
+                {inventoryDashboardGroup === "SUPPLY" ? (
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "group" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("group")}
+                    >
+                      <span className="inventory-item-th-label">
+                        Group {inventoryItemSort.key === "group" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                      </span>
+                    </button>
+                  </th>
+                ) : null}
+                <th>
+                  <button
+                    className={`th-sort-btn ${inventoryItemSort.key === "campus" ? "is-active" : ""}`}
+                    onClick={() => toggleInventoryItemSort("campus")}
+                  >
+                    <span className="inventory-item-th-label">{t.campus} {inventoryItemSort.key === "campus" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                  </button>
+                </th>
+                <th>
+                  <button
+                    className={`th-sort-btn ${inventoryItemSort.key === "location" ? "is-active" : ""}`}
+                    onClick={() => toggleInventoryItemSort("location")}
+                  >
+                    <span className="inventory-item-th-label">{t.location} {inventoryItemSort.key === "location" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                  </button>
+                </th>
+                {inventoryDashboardGroup === "SUPPLY" ? (
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "unit" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("unit")}
+                    >
+                      <span className="inventory-item-th-label">Unit {inventoryItemSort.key === "unit" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  </th>
+                ) : null}
+                <th>
+                  <button
+                    className={`th-sort-btn ${inventoryItemSort.key === "openingQty" ? "is-active" : ""}`}
+                    onClick={() => toggleInventoryItemSort("openingQty")}
+                  >
+                    <span className="inventory-item-th-label">Open<br />Qty {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                  </button>
+                </th>
+                {inventoryDashboardGroup === "SUPPLY" ? (
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "minStock" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("minStock")}
+                    >
+                      <span className="inventory-item-th-label">Min<br />Qty {inventoryItemSort.key === "minStock" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  </th>
+                ) : null}
+                <th><span className="inventory-item-th-label">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {inventoryItemRows.length ? (
+                inventoryItemRows.map((row) => (
+                  <tr key={`inv-item-row-${row.id}`}>
+                    <td data-label="Code"><strong>{row.itemCode}</strong></td>
+                    <td data-label={t.photo}>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
+                    <td data-label="Name">{inventoryDisplayName(row.itemName, lang)}</td>
+                    <td data-label={inventoryDashboardGroup === "SUPPLY" ? "Responsible" : "Owner / Team"}>
+                      {inventoryDashboardGroup === "SUPPLY"
+                        ? row.responsibleParty || "-"
+                        : `${ownerTypeLabel(row.ownerType)}${row.responsibleParty ? ` • ${row.responsibleParty}` : ""}`}
+                    </td>
+                    {inventoryDashboardGroup === "SUPPLY" ? (
+                      <td data-label="Group">
+                        {inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}
+                      </td>
+                    ) : null}
+                    <td data-label={t.campus}>{inventoryCampusLabel(row.campus)}</td>
+                    <td data-label={t.location}>{row.location}</td>
+                    {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Unit">{row.unit}</td> : null}
+                    <td data-label="Opening">{row.openingQty}</td>
+                    {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Min">{row.minStock}</td> : null}
+                    <td data-label="Actions" className="vault-table-action-cell">
+                      <div className="asset-row-actions">
+                        <button
+                          className="btn-icon-edit"
+                          disabled={!isAdmin}
+                          onClick={() => startEditInventoryItem(row)}
+                          title="Edit"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="btn-danger"
+                          disabled={!isAdmin}
+                          onClick={() => deleteInventoryItem(row)}
+                          title={t.delete}
+                        >
+                          X
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr className="vault-table-empty-row">
+                  <td colSpan={inventoryDashboardGroup === "SUPPLY" ? 11 : 8}>
+                    {inventoryBalanceRows.length ? "No inventory items match the current filters." : "No inventory items yet."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
+    ),
+    [
+      deleteInventoryItem,
+      inventoryBalanceRows.length,
+      inventoryBusinessGroupLabel,
+      inventoryDashboardGroup,
+      inventoryDisplayName,
+      inventoryItemCampusOptions,
+      inventoryItemFilterCampus,
+      inventoryItemFilterOwnerType,
+      inventoryItemFilterQuery,
+      inventoryItemOwnerTypeOptions,
+      inventoryItemRows,
+      inventoryItemSort.direction,
+      inventoryItemSort.key,
+      inventoryCampusLabel,
+      isAdmin,
+      lang,
+      ownerTypeLabel,
+      renderAssetPhoto,
+      setInventoryItemFilterCampus,
+      startEditInventoryItem,
+      t.allCampuses,
+      t.campus,
+      t.delete,
+      t.location,
+      t.photo,
+      toggleInventoryItemSort,
+    ]
+  );
   const editingInventoryItemRow = useMemo(
     () => inventoryItems.find((item) => item.id === editingInventoryItemId) || null,
     [inventoryItems, editingInventoryItemId]
@@ -42574,7 +42820,7 @@ export default function App() {
         if (raw === "Samdach Pan Campus" || raw === "C1") return `សាខា 1 | ${campusLabel("Samdach Pan Campus")}`;
         if (raw === "Chaktomuk Campus" || raw === "C2" || raw === "C2.1") return `សាខា 2.1 | ${campusLabel("Chaktomuk Campus")}`;
         if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") {
-          return `សាខា 2.2 | ${campusLabel("Chaktomuk Campus (C2.2)")}`;
+          return `សាខា 2.2 | ${campusLabel("Chaktomuk Campus")}`;
         }
         if (raw === "Boeung Snor Campus" || raw === "C3") return `សាខា 3 | ${campusLabel("Boeung Snor Campus")}`;
         if (raw === "Veng Sreng Campus" || raw === "C4") return `សាខា 4 | ${campusLabel("Veng Sreng Campus")}`;
@@ -58662,6 +58908,21 @@ function formatTicketRequestSource(value?: string) {
                       <label className="field field-wide">
                         <span>Target Campuses</span>
                         <div className="inventory-tool-clone-targets">
+                          {inventoryCloneTargetCampusOptions.length ? (
+                            <label className="inventory-tool-clone-option inventory-tool-clone-option-all">
+                              <input
+                                type="checkbox"
+                                checked={inventoryCloneAllTargetsSelected}
+                                onChange={(e) =>
+                                  setInventoryCloneForm((prev) => ({
+                                    ...prev,
+                                    targetCampuses: e.target.checked ? [...inventoryCloneTargetCampusOptions] : [],
+                                  }))
+                                }
+                              />
+                              <span>All Campuses</span>
+                            </label>
+                          ) : null}
                           {inventoryCloneTargetCampusOptions.map((campus) => {
                             const checked = inventoryCloneForm.targetCampuses.includes(campus);
                             return (
@@ -58703,204 +58964,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                   </div>
                 ) : null}
-                <div className="panel-filters inventory-item-filter-bar" style={{ marginTop: 12 }}>
-                  <label className="field">
-                    <span>{t.campus}</span>
-                    <LocationPicker
-                      value={inventoryItemFilterCampus}
-                      onChange={setInventoryItemFilterCampus}
-                      options={[
-                        { value: "ALL", label: lang === "km" ? "គ្រប់សាខា" : "All Campuses" },
-                        ...inventoryItemCampusOptions.map((campus) => ({
-                          value: campus,
-                          label: inventoryCampusLabel(campus),
-                        })),
-                      ]}
-                      placeholder={lang === "km" ? "គ្រប់សាខា" : "All Campuses"}
-                      searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                      emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Group</span>
-                    <div className="detail-value">{inventoryBusinessGroupLabel(inventoryDashboardGroup)}</div>
-                  </label>
-                  <label className="field">
-                    <span>{inventoryDashboardGroup === "SUPPLY" ? "Responsible Type" : "Property Type"}</span>
-                    <select
-                      className="input"
-                      value={inventoryItemFilterOwnerType}
-                      onChange={(e) => setInventoryItemFilterOwnerType(e.target.value)}
-                    >
-                      <option value="ALL">{inventoryDashboardGroup === "SUPPLY" ? "All Responsible Types" : "All Property Types"}</option>
-                      {inventoryItemOwnerTypeOptions.map((ownerType) => (
-                        <option key={`inventory-item-owner-type-${ownerType}`} value={ownerType}>
-                          {ownerTypeLabel(ownerType)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Search</span>
-                    <input
-                      className="input"
-                      placeholder={
-                        inventoryDashboardGroup === "SUPPLY"
-                          ? "Search code, item name, location..."
-                          : "Search code, tool name, location..."
-                      }
-                      value={inventoryItemFilterQuery}
-                      onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
-                    />
-                  </label>
-                </div>
-
-                <div className="table-wrap vault-table-wrap inventory-item-table-wrap" style={{ marginTop: 12 }}>
-                  <table className={`vault-responsive-table inventory-item-list-table ${inventoryDashboardGroup === "SUPPLY" ? "inventory-item-list-table-supply" : "inventory-item-list-table-tools"}`}>
-                    <thead>
-                      <tr>
-                        <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "itemCode" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("itemCode")}
-                          >
-                            <span className="inventory-item-th-label">Code {inventoryItemSort.key === "itemCode" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                          </button>
-                        </th>
-                        <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "photo" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("photo")}
-                          >
-                            <span className="inventory-item-th-label">{t.photo} {inventoryItemSort.key === "photo" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                          </button>
-                        </th>
-                        <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "itemName" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("itemName")}
-                          >
-                            <span className="inventory-item-th-label">Name {inventoryItemSort.key === "itemName" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                          </button>
-                        </th>
-                        <th>
-                          <span className="inventory-item-th-label">
-                            {inventoryDashboardGroup === "SUPPLY" ? "Responsible" : <>Owner /<br />Team</>}
-                          </span>
-                        </th>
-                        {inventoryDashboardGroup === "SUPPLY" ? (
-                          <th>
-                            <button
-                              className={`th-sort-btn ${inventoryItemSort.key === "group" ? "is-active" : ""}`}
-                              onClick={() => toggleInventoryItemSort("group")}
-                            >
-                              <span className="inventory-item-th-label">
-                                Group {inventoryItemSort.key === "group" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
-                              </span>
-                            </button>
-                          </th>
-                        ) : null}
-                        <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "campus" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("campus")}
-                          >
-                            <span className="inventory-item-th-label">{t.campus} {inventoryItemSort.key === "campus" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                          </button>
-                        </th>
-                        <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "location" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("location")}
-                          >
-                            <span className="inventory-item-th-label">{t.location} {inventoryItemSort.key === "location" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                          </button>
-                        </th>
-                        {inventoryDashboardGroup === "SUPPLY" ? (
-                          <th>
-                            <button
-                              className={`th-sort-btn ${inventoryItemSort.key === "unit" ? "is-active" : ""}`}
-                              onClick={() => toggleInventoryItemSort("unit")}
-                            >
-                              <span className="inventory-item-th-label">Unit {inventoryItemSort.key === "unit" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                            </button>
-                          </th>
-                        ) : null}
-                        <th>
-                          <button
-                            className={`th-sort-btn ${inventoryItemSort.key === "openingQty" ? "is-active" : ""}`}
-                            onClick={() => toggleInventoryItemSort("openingQty")}
-                          >
-                            <span className="inventory-item-th-label">Open<br />Qty {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                          </button>
-                        </th>
-                        {inventoryDashboardGroup === "SUPPLY" ? (
-                          <th>
-                            <button
-                              className={`th-sort-btn ${inventoryItemSort.key === "minStock" ? "is-active" : ""}`}
-                              onClick={() => toggleInventoryItemSort("minStock")}
-                            >
-                              <span className="inventory-item-th-label">Min<br />Qty {inventoryItemSort.key === "minStock" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                            </button>
-                          </th>
-                        ) : null}
-                        <th><span className="inventory-item-th-label">Actions</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventoryItemRows.length ? (
-                        inventoryItemRows.map((row) => (
-                          <tr key={`inv-item-row-${row.id}`}>
-                            <td data-label="Code"><strong>{row.itemCode}</strong></td>
-                            <td data-label={t.photo}>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
-                            <td data-label="Name">{inventoryDisplayName(row.itemName, lang)}</td>
-                            <td data-label={inventoryDashboardGroup === "SUPPLY" ? "Responsible" : "Owner / Team"}>
-                              {inventoryDashboardGroup === "SUPPLY"
-                                ? row.responsibleParty || "-"
-                                : `${ownerTypeLabel(row.ownerType)}${row.responsibleParty ? ` • ${row.responsibleParty}` : ""}`}
-                            </td>
-                            {inventoryDashboardGroup === "SUPPLY" ? (
-                              <td data-label="Group">
-                                {inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}
-                              </td>
-                            ) : null}
-                            <td data-label={t.campus}>{inventoryCampusLabel(row.campus)}</td>
-                            <td data-label={t.location}>{row.location}</td>
-                            {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Unit">{row.unit}</td> : null}
-                            <td data-label="Opening">{row.openingQty}</td>
-                            {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Min">{row.minStock}</td> : null}
-                            <td data-label="Actions" className="vault-table-action-cell">
-                              <div className="asset-row-actions">
-                                <button
-                                  className="btn-icon-edit"
-                                  disabled={!isAdmin}
-                                  onClick={() => startEditInventoryItem(row)}
-                                  title="Edit"
-                                >
-                                  ✎
-                                </button>
-                                <button
-                                  className="btn-danger"
-                                  disabled={!isAdmin}
-                                  onClick={() => deleteInventoryItem(row)}
-                                  title={t.delete}
-                                >
-                                  X
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr className="vault-table-empty-row">
-                          <td colSpan={inventoryDashboardGroup === "SUPPLY" ? 11 : 8}>
-                            {inventoryBalanceRows.length ? "No inventory items match the current filters." : "No inventory items yet."}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                {inventoryItemsTableSection}
                 </>
                 ) : null}
 
