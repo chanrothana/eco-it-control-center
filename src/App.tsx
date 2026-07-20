@@ -2143,7 +2143,6 @@ const DOCUMENT_USER_SUPPORT_FAQS = [
   },
 ] as const;
 
-const IMPORTED_C1_MAINT_NOTE_PREFIX = "Imported from Campus 1 maintenance tools report dated 2025-11-25.";
 const INVENTORY_BULK_TEMPLATE_HEADERS = [
   "campus",
   "category",
@@ -2977,7 +2976,6 @@ const INVENTORY_REPORT_TOOL_GROUPS: InventoryBusinessGroup[] = [
 ];
 const DEFAULT_TOOL_OWNER_TYPE_OPTIONS: ToolOwnerTypeOption[] = [
   { value: "SCHOOL", label: "School" },
-  { value: "COMPUTER_PROVIDER", label: "Computer Provider" },
   { value: "CLEANING_PROVIDER", label: "Cleaning Provider" },
   { value: "GARDEN_PROVIDER", label: "Garden Provider" },
   { value: "OTHER_PROVIDER", label: "Other Provider" },
@@ -28756,32 +28754,6 @@ export default function App() {
     if (text === "GARDEN TOOLS") return "GARDEN_TOOL";
     if (text === "SERVICE PROVIDER TOOLS" || text === "SERVICE TOOLS") return "SERVICE_TOOL";
     return inventoryItemForm.category;
-  }
-
-  async function clearImportedCampus1MaintenanceToolRows() {
-    if (!requireAdminAction()) return;
-    const importedRows = inventoryItems.filter(
-      (item) =>
-        item.category === "MAINT_TOOL" &&
-        inventoryRecordCampusCode(item.campus) === "C1" &&
-        String(item.notes || "").startsWith(IMPORTED_C1_MAINT_NOTE_PREFIX)
-    );
-    if (!importedRows.length) {
-      window.alert("No old imported Campus 1 maintenance-tool rows were found.");
-      return;
-    }
-    const blockedRows = importedRows.filter((item) => inventoryTxns.some((tx) => Number(tx.itemId) === Number(item.id)));
-    if (blockedRows.length) {
-      setError("Some imported rows already have transaction history, so they were not removed.");
-      return;
-    }
-    if (!window.confirm(`Delete ${importedRows.length} imported Campus 1 maintenance-tool rows?`)) return;
-    const removeIds = new Set(importedRows.map((item) => Number(item.id)));
-    const nextItems = inventoryItems.filter((item) => !removeIds.has(Number(item.id)));
-    setInventoryItems(nextItems);
-    await persistInventorySettings(nextItems, inventoryTxns);
-    appendUiAudit("DELETE", "inventory_item", "C1-MT-IMPORTED", `Removed ${importedRows.length} imported rows`);
-    window.alert(`Removed ${importedRows.length} imported Campus 1 maintenance-tool rows.`);
   }
 
   async function importInventoryItemsFromTemplateFile(file: File) {
@@ -58870,17 +58842,6 @@ function formatTicketRequestSource(value?: string) {
                 <div className="asset-actions">
                   <div className="tiny">Add operational supplies and tool master records with owner/team responsibility.</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {inventoryItemForm.category === "MAINT_TOOL" &&
-                    inventoryRecordCampusCode(inventoryItemForm.campus) === "C1" ? (
-                      <button
-                        className="tab"
-                        disabled={!isAdmin || busy}
-                        onClick={clearImportedCampus1MaintenanceToolRows}
-                        type="button"
-                      >
-                        Clear Imported C1 Rows
-                      </button>
-                    ) : null}
                     <button
                       className="btn-primary"
                       disabled={!isAdmin}
