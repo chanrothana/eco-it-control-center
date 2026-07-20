@@ -16846,18 +16846,21 @@ export default function App() {
   }, [allowedCampusOptions, campusOptions, canViewAllInventoryCampuses, rentalPrinterCampusLabel, t.allCampuses]);
   const inventoryCloneSourceCampusOptions = useMemo(() => {
     if (!isInventoryToolCategory(inventoryItemForm.category)) return [];
-    return allowedCampusOptions.filter((campus) =>
+    const campusesWithItems = allowedCampusOptions.filter((campus) =>
       inventoryItems.some(
         (item) =>
           item.category === inventoryItemForm.category &&
           String(item.campus || "").trim() === campus
       )
     );
+    return campusesWithItems.length > 1 ? ["ALL", ...campusesWithItems] : campusesWithItems;
   }, [allowedCampusOptions, inventoryItemForm.category, inventoryItems]);
   const inventoryCloneTargetCampusOptions = useMemo(
     () =>
-      allowedCampusOptions.filter(
-        (campus) => campus !== String(inventoryCloneForm.sourceCampus || "").trim()
+      allowedCampusOptions.filter((campus) =>
+        String(inventoryCloneForm.sourceCampus || "").trim() === "ALL"
+          ? true
+          : campus !== String(inventoryCloneForm.sourceCampus || "").trim()
       ),
     [allowedCampusOptions, inventoryCloneForm.sourceCampus]
   );
@@ -16866,15 +16869,20 @@ export default function App() {
     inventoryCloneTargetCampusOptions.every((campus) => inventoryCloneForm.targetCampuses.includes(campus));
   const inventoryCloneSourceRows = useMemo(() => {
     if (!isInventoryToolCategory(inventoryItemForm.category)) return [];
+    const selectedSourceCampus = String(inventoryCloneForm.sourceCampus || "").trim();
     return inventoryItems
       .filter(
         (item) =>
           item.category === inventoryItemForm.category &&
-          String(item.campus || "").trim() === String(inventoryCloneForm.sourceCampus || "").trim()
+          (selectedSourceCampus === "ALL" || String(item.campus || "").trim() === selectedSourceCampus)
       )
       .slice()
-      .sort((a, b) => String(a.itemCode || "").localeCompare(String(b.itemCode || "")));
-  }, [inventoryCloneForm.sourceCampus, inventoryItemForm.category, inventoryItems]);
+      .sort(
+        (a, b) =>
+          inventoryCampusLabel(String(a.campus || "")).localeCompare(inventoryCampusLabel(String(b.campus || ""))) ||
+          String(a.itemCode || "").localeCompare(String(b.itemCode || ""))
+      );
+  }, [inventoryCloneForm.sourceCampus, inventoryItemForm.category, inventoryItems, inventoryCampusLabel]);
   const inventoryCloneRowsToCopy = useMemo(() => {
     if (String(inventoryCloneForm.sourceItemId || "ALL") === "ALL") return inventoryCloneSourceRows;
     return inventoryCloneSourceRows.filter(
@@ -16914,7 +16922,7 @@ export default function App() {
         ? prev.sourceCampus
         : inventoryCloneSourceCampusOptions[0];
       const nextTargets = prev.targetCampuses.filter(
-        (campus) => campus !== nextSource && allowedCampusOptions.includes(campus)
+        (campus) => (nextSource === "ALL" || campus !== nextSource) && allowedCampusOptions.includes(campus)
       );
       const nextItemId =
         prev.sourceItemId === "ALL" || inventoryCloneSourceRows.some((item) => String(item.id) === String(prev.sourceItemId))
@@ -28622,6 +28630,10 @@ export default function App() {
     try {
       for (const targetCampus of targetCampuses) {
         for (const sourceRow of inventoryCloneRowsToCopy) {
+          if (inventoryRecordCampusCode(sourceRow.campus) === inventoryRecordCampusCode(targetCampus)) {
+            skippedCount += 1;
+            continue;
+          }
           const nextItemCode = buildClonedInventoryItemCode(
             nextItems,
             sourceRow.itemCode,
@@ -58901,7 +58913,7 @@ function formatTicketRequestSource(value?: string) {
                           {inventoryCloneSourceCampusOptions.length ? (
                             inventoryCloneSourceCampusOptions.map((campus) => (
                               <option key={`inventory-clone-source-${campus}`} value={campus}>
-                                {inventoryCampusLabel(campus)}
+                                {campus === "ALL" ? "All Campuses" : inventoryCampusLabel(campus)}
                               </option>
                             ))
                           ) : (
@@ -80089,25 +80101,28 @@ function formatTicketRequestSource(value?: string) {
           </div>
         )}
 
-        {successToast ? (
-          <div className="success-toast" role="status" aria-live="polite">
-            <div className="success-toast-icon">
-              <CheckCircle2 size={20} />
-            </div>
-            <div className="success-toast-copy">
-              <strong>{successToast.title}</strong>
-              <span>{successToast.message}</span>
-            </div>
-            <button
-              type="button"
-              className="success-toast-close"
-              aria-label={t.close}
-              onClick={() => setSuccessToast(null)}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        ) : null}
+        {successToast && typeof document !== "undefined"
+          ? createPortal(
+              <div className="success-toast" role="status" aria-live="polite">
+                <div className="success-toast-icon">
+                  <CheckCircle2 size={20} />
+                </div>
+                <div className="success-toast-copy">
+                  <strong>{successToast.title}</strong>
+                  <span>{successToast.message}</span>
+                </div>
+                <button
+                  type="button"
+                  className="success-toast-close"
+                  aria-label={t.close}
+                  onClick={() => setSuccessToast(null)}
+                >
+                  <X size={16} />
+                </button>
+              </div>,
+              document.body
+            )
+          : null}
 
         {updateNotesOpen && (
           <div className="modal-backdrop" onClick={() => setUpdateNotesOpen(false)}>
