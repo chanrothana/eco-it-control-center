@@ -24480,6 +24480,13 @@ tr.row-maint-maintenance:hover td {
   color: #7a8796;
 }
 
+.report-compare-stock-empty-label {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #c05b5b;
+}
+
 .report-compare-stock-cell.is-zero {
   background: rgba(226, 92, 92, 0.14);
   color: #d95b5b;

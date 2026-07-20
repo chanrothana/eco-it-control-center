@@ -17617,6 +17617,7 @@ export default function App() {
           sortCode: row.sortCode,
         };
       })
+      .filter((row) => row.totalStock > 0)
       .sort(
         (a, b) =>
           a.sortCode.localeCompare(b.sortCode, undefined, { numeric: true, sensitivity: "base" }) ||
@@ -44927,14 +44928,18 @@ export default function App() {
                       return `<td class="compare-stock-print-cell${stock <= 0 ? " is-zero" : ""}">
                         <div class="compare-stock-print-card">
                           ${
-                            photo
+                            stock > 0 && photo
                               ? `<img loading="lazy" decoding="async" src="${escapeHtml(photo)}" alt="${escapeHtml(`${row.itemName}-${campus}`)}" class="compare-stock-print-photo" />`
-                              : `<span class="compare-stock-print-photo compare-stock-print-photo-empty">No Photo</span>`
+                              : ""
                           }
-                          <span class="compare-stock-print-divider" aria-hidden="true"></span>
+                          ${stock > 0 ? `<span class="compare-stock-print-divider" aria-hidden="true"></span>` : ""}
                           <div class="compare-stock-print-amount">
-                            <span class="compare-stock-print-amount-label">${escapeHtml(lang === "km" ? "ចំនួន" : "Amount")}</span>
-                            <strong>${escapeHtml(String(stock))}</strong>
+                            ${
+                              stock > 0
+                                ? `<span class="compare-stock-print-amount-label">${escapeHtml(lang === "km" ? "ចំនួន" : "Amount")}</span>
+                            <strong>${escapeHtml(String(stock))}</strong>`
+                                : `<span class="compare-stock-print-empty-label">${escapeHtml(lang === "km" ? "គ្មាន" : "None")}</span>`
+                            }
                           </div>
                         </div>
                       </td>`;
@@ -46645,6 +46650,12 @@ export default function App() {
             letter-spacing: 0.04em;
             text-transform: uppercase;
             color: #6b7c91;
+          }
+          .compare-stock-print-empty-label {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            color: #b85a5a;
           }
           .compare-stock-print-cell.is-zero {
             background: rgba(226, 92, 92, 0.12);
@@ -71998,13 +72009,19 @@ function formatTicketRequestSource(value?: string) {
                                         className={`report-compare-stock-cell ${stock <= 0 ? "is-zero" : ""}`}
                                       >
                                         <div className="report-compare-stock-card">
-                                          {match?.photo
+                                          {stock > 0 && match?.photo
                                             ? <div className="report-compare-stock-photo">{renderAssetPhoto(match.photo, `${row.itemName}-${campus}`)}</div>
-                                            : <span className="report-compare-stock-photo report-compare-stock-photo-empty">No Photo</span>}
-                                          <span className="report-compare-stock-divider" aria-hidden="true"></span>
+                                            : null}
+                                          {stock > 0 ? <span className="report-compare-stock-divider" aria-hidden="true"></span> : null}
                                           <div className="report-compare-stock-amount">
-                                            <span className="report-compare-stock-amount-label">{lang === "km" ? "ចំនួន" : "Amount"}</span>
-                                            <strong>{stock}</strong>
+                                            {stock > 0 ? (
+                                              <>
+                                                <span className="report-compare-stock-amount-label">{lang === "km" ? "ចំនួន" : "Amount"}</span>
+                                                <strong>{stock}</strong>
+                                              </>
+                                            ) : (
+                                              <span className="report-compare-stock-empty-label">{lang === "km" ? "គ្មាន" : "None"}</span>
+                                            )}
                                           </div>
                                         </div>
                                       </td>
