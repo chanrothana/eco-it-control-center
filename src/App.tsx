@@ -17514,7 +17514,7 @@ export default function App() {
         totalRows: number;
         lowCampusCount: number;
         sortCode: string;
-        campusItemDetails: Map<string, { itemId: number; location: string; campusLabel: string }>;
+        campusItemDetails: Map<string, { itemId: number; location: string; campusLabel: string; photo: string }>;
       }
     >();
     for (const row of reportInventoryComparisonSourceRows) {
@@ -17535,7 +17535,7 @@ export default function App() {
         totalRows: 0,
         lowCampusCount: 0,
         sortCode: String(row.itemCode || "").trim(),
-        campusItemDetails: new Map<string, { itemId: number; location: string; campusLabel: string }>(),
+        campusItemDetails: new Map<string, { itemId: number; location: string; campusLabel: string; photo: string }>(),
       };
       current.totalStock += Number(row.currentStock || 0);
       if (!current.photo && row.photo) current.photo = String(row.photo || "").trim();
@@ -17551,6 +17551,7 @@ export default function App() {
           itemId: Number(row.id || 0),
           location: String(row.location || "").trim(),
           campusLabel: inventoryCampusLabel(campus),
+          photo: String(row.photo || "").trim(),
         });
       }
       if (row.ownerType) current.ownerTypes.add(ownerTypeLabel(row.ownerType));
@@ -17572,6 +17573,7 @@ export default function App() {
             low: Boolean(detail?.low),
             itemId: itemDetail?.itemId || 0,
             location: itemDetail?.location || "",
+            photo: itemDetail?.photo || "",
           };
         });
         const campusSummary = campusStocks.map((entry) => `${entry.campusLabel}: ${entry.stock}`);
@@ -44538,17 +44540,20 @@ export default function App() {
             ? `របាយការណ៍ប្រៀបធៀប${campusCompareTitleLabel}តាមសាខា`
             : `${campusCompareTitleLabel} Campus Comparison Report`;
         columns = [
-          lang === "km" ? "រូប" : "Photo",
           lang === "km" ? "ទំនិញ" : "Item",
           ...(reportInventoryComparisonCampuses.map((campus) => rentalPrinterCampusLabel(campus))),
           lang === "km" ? "ស្តុកសរុប" : "Total Stock",
         ];
         rows = reportInventoryComparisonRows.map((row) => [
-          toPrintablePhotoUrl(row.photo || ""),
           row.itemName,
           ...reportInventoryComparisonCampuses.map((campus) => {
             const match = row.campusStocks.find((entry) => entry.campusName === campus);
-            return String(Number(match?.stock || 0));
+            const stock = String(Number(match?.stock || 0));
+            const photo = toPrintablePhotoUrl(String(match?.photo || ""));
+            if (photo) {
+              return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><strong>${escapeHtml(stock)}</strong><img loading="lazy" decoding="async" src="${escapeHtml(photo)}" alt="${escapeHtml(`${row.itemName}-${campus}`)}" style="width:42px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #cfded0;" /></div>`;
+            }
+            return stock;
           }),
           String(row.totalStock),
         ]);
@@ -44772,13 +44777,12 @@ export default function App() {
       }
       if (reportType === "inventory_balance") {
         if (reportInventoryViewMode === "campus_compare") {
-          const weights = [
-            3,
-            7,
-            16,
-            ...reportInventoryComparisonCampuses.map(() => 9),
-            8,
-          ];
+        const weights = [
+          3,
+          18,
+          ...reportInventoryComparisonCampuses.map(() => 13),
+          8,
+        ];
           const total = weights.reduce((sum, value) => sum + value, 0) || 1;
           return weights.map((value) => (value / total) * 100);
         }
@@ -44919,12 +44923,25 @@ export default function App() {
                     .map((campus) => {
                       const match = row.campusStocks.find((entry) => entry.campusName === campus);
                       const stock = Number(match?.stock || 0);
-                      return `<td class="compare-stock-print-cell${stock <= 0 ? " is-zero" : ""}">${escapeHtml(String(stock))}</td>`;
+                      const photo = toPrintablePhotoUrl(String(match?.photo || ""));
+                      return `<td class="compare-stock-print-cell${stock <= 0 ? " is-zero" : ""}">
+                        <div class="compare-stock-print-card">
+                          ${
+                            photo
+                              ? `<img loading="lazy" decoding="async" src="${escapeHtml(photo)}" alt="${escapeHtml(`${row.itemName}-${campus}`)}" class="compare-stock-print-photo" />`
+                              : `<span class="compare-stock-print-photo compare-stock-print-photo-empty">No Photo</span>`
+                          }
+                          <span class="compare-stock-print-divider" aria-hidden="true"></span>
+                          <div class="compare-stock-print-amount">
+                            <span class="compare-stock-print-amount-label">${escapeHtml(lang === "km" ? "ចំនួន" : "Amount")}</span>
+                            <strong>${escapeHtml(String(stock))}</strong>
+                          </div>
+                        </div>
+                      </td>`;
                     })
                     .join("");
                   return `<tr>
                     <td>${index + 1}</td>
-                    ${printableCellHtml(toPrintablePhotoUrl(row.photo || ""))}
                     <td><strong>${escapeHtml(row.itemName)}</strong></td>
                     ${campusCells}
                     <td class="compare-stock-print-cell compare-stock-print-total">${escapeHtml(String(row.totalStock))}</td>
@@ -44984,6 +45001,10 @@ export default function App() {
       : "";
     const inventoryToolCheckedCount = reportInventoryRows.filter((row) => latestToolReviewByItemId.has(Number(row.id || 0))).length;
     const inventoryToolNotCheckedCount = reportInventoryRows.filter((row) => !latestToolReviewByItemId.has(Number(row.id || 0))).length;
+    const inventoryComparisonZeroStockCount = reportInventoryComparisonRows.reduce(
+      (sum, row) => sum + row.campusStocks.filter((entry) => Number(entry.stock || 0) <= 0).length,
+      0
+    );
     const buildPrintSummaryGrid = (
       items: Array<{ label: string; value: string | number }>,
       className = "",
@@ -45046,7 +45067,8 @@ export default function App() {
             { label: lang === "km" ? "ទំនិញសរុប" : "Total Items", value: reportInventoryComparisonSummary.itemCount },
             { label: lang === "km" ? "សាខាសរុប" : "Total Campuses", value: reportInventoryComparisonSummary.campusCount },
             { label: lang === "km" ? "ស្តុកសរុប" : "Total Stock", value: reportInventoryComparisonSummary.totalStock },
-          ])
+            { label: lang === "km" ? "ស្តុកសូន្យ" : "Zero Stock", value: inventoryComparisonZeroStockCount },
+          ], "report-summary-grid-centered")
           : reportInventoryIsToolGroup
           ? `<section class="report-summary-grid report-summary-grid-tools">
               <div class="report-summary-card">
@@ -45386,6 +45408,10 @@ export default function App() {
         : reportType === "schedule_calendar"
           ? (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar")
         : title;
+    const reportHeadingTitleHtml =
+      reportType === "inventory_balance" && reportInventoryViewMode === "campus_compare"
+        ? escapeHtml(reportHeadingTitle).replace(" Campus Comparison Report", "<br />Campus Comparison Report")
+        : escapeHtml(reportHeadingTitle).replace(/\n/g, "<br />");
     const reportHeadingSubtitle =
       reportType === "maintenance_completion"
         ? maintenanceCompletionRangeLabel
@@ -46309,9 +46335,13 @@ export default function App() {
           }
           .report-summary-grid {
             display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 260px));
             gap: 10px;
             margin: 0 0 14px;
+            justify-content: center;
+          }
+          .report-summary-grid-centered {
+            justify-content: center;
           }
           .report-summary-grid-tools {
             grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -46328,6 +46358,7 @@ export default function App() {
             border-radius: 12px;
             background: #fffdf8;
             padding: 10px 12px;
+            text-align: center;
           }
           .report-summary-card-label {
             font-size: 10px;
@@ -46336,12 +46367,14 @@ export default function App() {
             text-transform: uppercase;
             color: #8a6f47;
             margin-bottom: 4px;
+            text-align: center;
           }
           .report-summary-card-value {
             font-size: 13px;
             font-weight: 700;
             color: #294036;
             line-height: 1.35;
+            text-align: center;
           }
           .report-two-column-summary {
             display: grid;
@@ -46540,19 +46573,88 @@ export default function App() {
           .preview-report-table-inventory col:first-child {
             width: 3% !important;
           }
+          .preview-report-table-inventory th {
+            text-align: center;
+            vertical-align: middle;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.03em;
+          }
+          .preview-report-table-inventory td {
+            vertical-align: middle;
+          }
           .preview-report-table-inventory th:first-child,
           .preview-report-table-inventory td:first-child {
             white-space: nowrap;
             text-align: center;
           }
+          .preview-report-table-inventory td:nth-child(2) {
+            vertical-align: middle;
+          }
+          .preview-report-table-inventory td:last-child {
+            text-align: center;
+            vertical-align: middle;
+          }
           .compare-stock-print-cell {
             text-align: center;
             font-weight: 800;
             color: #27405e;
+            padding: 10px 6px;
+          }
+          .compare-stock-print-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+          }
+          .compare-stock-print-photo {
+            display: inline-grid;
+            place-items: center;
+            width: 54px;
+            height: 54px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #cfded0;
+            overflow: hidden;
+            background: rgba(255,255,255,0.7);
+            font-size: 9px;
+            line-height: 1.15;
+            color: #6f7286;
+            text-align: center;
+            padding: 4px;
+          }
+          .compare-stock-print-photo-empty {
+            border-style: dashed;
+          }
+          .compare-stock-print-divider {
+            width: 100%;
+            max-width: 62px;
+            height: 1px;
+            background: rgba(120, 140, 166, 0.42);
+          }
+          .compare-stock-print-amount {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+          }
+          .compare-stock-print-amount-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #6b7c91;
           }
           .compare-stock-print-cell.is-zero {
             background: rgba(226, 92, 92, 0.12);
             color: #bf4444;
+          }
+          .compare-stock-print-cell.is-zero .compare-stock-print-divider {
+            background: rgba(191, 68, 68, 0.34);
+          }
+          .compare-stock-print-cell.is-zero .compare-stock-print-amount-label {
+            color: #b85a5a;
           }
           .compare-stock-print-total {
             background: rgba(77, 132, 217, 0.14);
@@ -46953,7 +47055,7 @@ export default function App() {
             <div class="report-head${reportType === "inventory_balance" && reportInventoryIsToolGroup ? " report-head-centered" : ""}">
               <div class="report-head-left">
                 <h1>${escapeHtml(lang === "km" ? "សាលា អេកូ អន្តរជាតិ" : "Eco International School")}</h1>
-                <h2>${escapeHtml(reportHeadingTitle)}</h2>
+                <h2>${reportHeadingTitleHtml}</h2>
                 ${reportHeadingSubtitle
                   ? `<div class="report-head-subtitle">${reportHeadingSubtitle
                       .split("\n")
@@ -71874,7 +71976,6 @@ function formatTicketRequestSource(value?: string) {
                         <table>
                           <thead>
                             <tr>
-                              <th>{lang === "km" ? "រូប" : "Photo"}</th>
                               <th>{lang === "km" ? "ទំនិញ" : "Item"}</th>
                               {reportInventoryComparisonCampuses.map((campus) => (
                                 <th key={`report-compare-campus-col-${campus}`}>{rentalPrinterCampusLabel(campus)}</th>
@@ -71887,7 +71988,6 @@ function formatTicketRequestSource(value?: string) {
                             {reportInventoryComparisonRows.length ? (
                               reportInventoryComparisonRows.map((row) => (
                                 <tr key={`report-inventory-compare-${row.itemKey}`}>
-                                  <td>{renderAssetPhoto(row.photo || "", row.itemCodes[0] || row.itemName)}</td>
                                   <td><strong>{row.itemName}</strong></td>
                                   {reportInventoryComparisonCampuses.map((campus) => {
                                     const match = row.campusStocks.find((entry) => entry.campusName === campus);
@@ -71897,7 +71997,16 @@ function formatTicketRequestSource(value?: string) {
                                         key={`report-inventory-compare-${row.itemKey}-${campus}`}
                                         className={`report-compare-stock-cell ${stock <= 0 ? "is-zero" : ""}`}
                                       >
-                                        <strong>{stock}</strong>
+                                        <div className="report-compare-stock-card">
+                                          {match?.photo
+                                            ? <div className="report-compare-stock-photo">{renderAssetPhoto(match.photo, `${row.itemName}-${campus}`)}</div>
+                                            : <span className="report-compare-stock-photo report-compare-stock-photo-empty">No Photo</span>}
+                                          <span className="report-compare-stock-divider" aria-hidden="true"></span>
+                                          <div className="report-compare-stock-amount">
+                                            <span className="report-compare-stock-amount-label">{lang === "km" ? "ចំនួន" : "Amount"}</span>
+                                            <strong>{stock}</strong>
+                                          </div>
+                                        </div>
                                       </td>
                                     );
                                   })}
@@ -71911,7 +72020,7 @@ function formatTicketRequestSource(value?: string) {
                               ))
                             ) : (
                               <tr>
-                                <td colSpan={reportInventoryComparisonCampuses.length + 4}>{lang === "km" ? "មិនមានទិន្នន័យប្រៀបធៀបទេ។" : "No campus comparison data."}</td>
+                                <td colSpan={reportInventoryComparisonCampuses.length + 3}>{lang === "km" ? "មិនមានទិន្នន័យប្រៀបធៀបទេ។" : "No campus comparison data."}</td>
                               </tr>
                             )}
                           </tbody>
