@@ -80982,204 +80982,225 @@ function formatTicketRequestSource(value?: string) {
                 </>
               ) : (
                 <>
-                  <div className="form-grid tool-review-form-grid tool-review-borrow-grid">
-                    <label className="field">
-                      <span>{t.date}</span>
-                      <EcoDateInput
-                        value={toolReviewBorrowForm.date}
-                        onChange={(value) => setToolReviewBorrowForm((prev) => ({ ...prev, date: value }))}
-                        ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
-                        className="picker-template-list-asset-light-input tool-review-borrow-date-input"
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "បរិមាណ" : "QTY"}</span>
-                      <input
-                        className="input"
-                        type="number"
-                        min="1"
-                        value={toolReviewBorrowForm.qty}
-                        onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, qty: e.target.value }))}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>{lang === "km" ? "ថ្ងៃត្រឡប់រំពឹង" : "Expected Return"}</span>
-                      <EcoDateInput
-                        value={toolReviewControlMode === "borrow" ? toolReviewBorrowForm.expectedReturnDate : toolReviewBorrowForm.date}
-                        onChange={(value) =>
-                          setToolReviewBorrowForm((prev) => ({
-                            ...prev,
-                            expectedReturnDate: value,
-                          }))
-                        }
-                        ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
-                        className="picker-template-list-asset-light-input tool-review-borrow-date-input"
-                        disabled={toolReviewControlMode !== "borrow"}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>
-                        {toolReviewControlMode === "borrow"
-                          ? (lang === "km" ? "ខ្ចីពីសាខា" : "Borrow From Campus")
-                          : (lang === "km" ? "ត្រឡប់ពីសាខា" : "Return From Campus")}
-                      </span>
-                      {toolReviewControlMode === "borrow" ? (
-                        <input
-                          className="input"
-                          value={
-                            toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.sourceCampus)?.campusLabel ||
-                            inventoryCampusLabel(toolReviewBorrowForm.sourceCampus) ||
-                            ""
-                          }
-                          readOnly
-                        />
-                      ) : (
-                        <select
-                          className="input"
-                          value={toolReviewBorrowForm.sourceCampus}
-                          onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, sourceCampus: e.target.value }))}
-                        >
-                          <option value="">{lang === "km" ? "ជ្រើសសាខា" : "Select campus"}</option>
-                          {toolReviewCampusItemOptions.map((entry) => (
-                            <option key={`tool-review-source-${entry.itemId}`} value={entry.campusName}>
-                              {entry.campusLabel} ({entry.stock})
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </label>
-                    <label className="field">
-                      <span>
-                        {toolReviewControlMode === "borrow"
-                          ? (lang === "km" ? "ទៅសាខា" : "To Campus")
-                          : (lang === "km" ? "ត្រឡប់ចូលសាខា" : "Return To Campus")}
-                      </span>
-                      <LocationPicker
-                        value={toolReviewBorrowForm.destinationCampus}
-                        onChange={(value) =>
-                          setToolReviewBorrowForm((prev) => ({
-                            ...prev,
-                            destinationCampus: value,
-                            requestedBy: "",
-                          }))
-                        }
-                        options={toolReviewDestinationCampusPickerOptions}
-                        placeholder={lang === "km" ? "ជ្រើសសាខា" : "Select campus"}
-                        searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
-                        emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
-                      />
-                    </label>
-                    {toolReviewControlMode === "borrow" ? (
-                      <>
+                  <div className="tool-review-borrow-sections">
+                    <section className="tool-review-borrow-section">
+                      <div className="tool-review-borrow-section-head">
+                        <strong>{lang === "km" ? "ព័ត៌មានមូលដ្ឋាន" : "Basic"}</strong>
+                        <span>{lang === "km" ? "កាលបរិច្ឆេទ បរិមាណ និងថ្ងៃត្រឡប់" : "Date, quantity, and return timing."}</span>
+                      </div>
+                      <div className="form-grid tool-review-form-grid tool-review-borrow-grid tool-review-borrow-grid-basic">
                         <label className="field">
-                          <span>{lang === "km" ? "ស្នើដោយ" : "Requested By"}</span>
-                          {toolReviewBorrowRequesterOptions.length ? (
+                          <span>{t.date}</span>
+                          <EcoDateInput
+                            value={toolReviewBorrowForm.date}
+                            onChange={(value) => setToolReviewBorrowForm((prev) => ({ ...prev, date: value }))}
+                            ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
+                            className="picker-template-list-asset-light-input tool-review-borrow-date-input"
+                          />
+                        </label>
+                        <label className="field">
+                          <span>{lang === "km" ? "បរិមាណ" : "QTY"}</span>
+                          <input
+                            className="input"
+                            type="number"
+                            min="1"
+                            value={toolReviewBorrowForm.qty}
+                            onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, qty: e.target.value }))}
+                          />
+                        </label>
+                        {toolReviewControlMode === "borrow" ? (
+                          <label className="field">
+                            <span>{lang === "km" ? "ថ្ងៃត្រឡប់រំពឹង" : "Expected Return"}</span>
+                            <EcoDateInput
+                              value={toolReviewBorrowForm.expectedReturnDate}
+                              onChange={(value) =>
+                                setToolReviewBorrowForm((prev) => ({
+                                  ...prev,
+                                  expectedReturnDate: value,
+                                }))
+                              }
+                              ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
+                              className="picker-template-list-asset-light-input tool-review-borrow-date-input"
+                            />
+                          </label>
+                        ) : null}
+                      </div>
+                    </section>
+                    <section className="tool-review-borrow-section">
+                      <div className="tool-review-borrow-section-head">
+                        <strong>{lang === "km" ? "ផ្លាស់ទីសាខា" : "Campus Move"}</strong>
+                        <span>{lang === "km" ? "ជ្រើសពីសាខាដើម ទៅសាខាទទួល" : "Choose source and destination campuses."}</span>
+                      </div>
+                      <div className="form-grid tool-review-form-grid tool-review-borrow-grid tool-review-borrow-grid-campus">
+                        <label className="field">
+                          <span>
+                            {toolReviewControlMode === "borrow"
+                              ? (lang === "km" ? "ខ្ចីពីសាខា" : "Borrow From Campus")
+                              : (lang === "km" ? "ត្រឡប់ពីសាខា" : "Return From Campus")}
+                          </span>
+                          {toolReviewControlMode === "borrow" ? (
+                            <input
+                              className="input"
+                              value={
+                                toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.sourceCampus)?.campusLabel ||
+                                inventoryCampusLabel(toolReviewBorrowForm.sourceCampus) ||
+                                ""
+                              }
+                              readOnly
+                            />
+                          ) : (
                             <select
                               className="input"
-                              value={toolReviewBorrowForm.requestedBy}
-                              onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: e.target.value }))}
+                              value={toolReviewBorrowForm.sourceCampus}
+                              onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, sourceCampus: e.target.value }))}
                             >
-                              <option value="">{lang === "km" ? "ជ្រើសបុគ្គលិក" : "Select user"}</option>
-                              {toolReviewBorrowRequesterOptions.map((user) => (
-                                <option key={`tool-borrow-request-${user.id}`} value={user.fullName}>
-                                  {user.fullName}
+                              <option value="">{lang === "km" ? "ជ្រើសសាខា" : "Select campus"}</option>
+                              {toolReviewCampusItemOptions.map((entry) => (
+                                <option key={`tool-review-source-${entry.itemId}`} value={entry.campusName}>
+                                  {entry.campusLabel} ({entry.stock})
                                 </option>
                               ))}
                             </select>
-                          ) : (
-                            <input
-                              className="input"
-                              value={toolReviewBorrowForm.requestedBy}
-                              onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: e.target.value }))}
-                              placeholder={lang === "km" ? "បញ្ចូលឈ្មោះអ្នកស្នើ" : "Enter requester name"}
-                            />
                           )}
                         </label>
-                      </>
-                    ) : (
-                      <div />
-                    )}
-                    <div className="tool-review-borrow-action-row field-wide">
-                      <label className="field">
-                        <span>{toolReviewControlMode === "borrow" ? (lang === "km" ? "អនុម័ត / ទទួលស្គាល់ដោយ" : "Approved / Acknowledged By") : (lang === "km" ? "ទទួលត្រឡប់ដោយ" : "Received By")}</span>
-                        <input
-                          className="input"
-                          value={toolReviewControlMode === "borrow" ? toolReviewBorrowForm.approvedBy : toolReviewBorrowForm.receivedBy}
-                          onChange={(e) =>
-                            setToolReviewBorrowForm((prev) => ({
-                              ...prev,
-                              [toolReviewControlMode === "borrow" ? "approvedBy" : "receivedBy"]: e.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                      {toolReviewControlMode === "borrow" ? (
-                        <label className="field tool-review-borrow-photo-field tool-review-borrow-photo-field-row">
-                          <span>{lang === "km" ? "រូបឧបករណ៍ពេលខ្ចី" : "Borrow Tool Photo"}</span>
-                          <div className="tool-review-borrow-photo-inline">
-                            <input
-                              key={`tool-review-borrow-photo-row-${toolReviewBorrowPhotoFileKey}`}
-                              className="input"
-                              type="file"
-                              accept="image/*"
-                              onChange={onToolReviewBorrowPhotoFile}
-                            />
-                            {toolReviewBorrowForm.photo ? (
-                              <img
-                                loading="lazy"
-                                decoding="async"
-                                src={toolReviewBorrowForm.photo}
-                                alt="Borrow tool preview"
-                                className="table-photo"
-                              />
-                            ) : null}
-                          </div>
+                        <label className="field">
+                          <span>
+                            {toolReviewControlMode === "borrow"
+                              ? (lang === "km" ? "ទៅសាខា" : "To Campus")
+                              : (lang === "km" ? "ត្រឡប់ចូលសាខា" : "Return To Campus")}
+                          </span>
+                          <LocationPicker
+                            value={toolReviewBorrowForm.destinationCampus}
+                            onChange={(value) =>
+                              setToolReviewBorrowForm((prev) => ({
+                                ...prev,
+                                destinationCampus: value,
+                                requestedBy: "",
+                              }))
+                            }
+                            options={toolReviewDestinationCampusPickerOptions}
+                            placeholder={lang === "km" ? "ជ្រើសសាខា" : "Select campus"}
+                            searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                            emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                          />
                         </label>
-                      ) : null}
-                      <label className="field tool-review-borrow-note-field">
-                        <span>{t.notes}</span>
-                        <textarea
-                          className="textarea tool-review-borrow-note-textarea"
-                          rows={1}
-                          value={toolReviewBorrowForm.note}
-                          onChange={(e) => {
-                            e.target.style.height = "46px";
-                            e.target.style.height = `${Math.max(46, e.target.scrollHeight)}px`;
-                            setToolReviewBorrowForm((prev) => ({ ...prev, note: e.target.value }));
-                          }}
-                          placeholder={
-                            toolReviewControlMode === "borrow"
-                              ? (lang === "km" ? "មូលហេតុខ្ចីឧបករណ៍ទៅសាខាផ្សេង ឬ បុគ្គលិកផ្សេង" : "Reason for borrowing to another campus or staff")
-                              : (lang === "km" ? "កំណត់ចំណាំពេលត្រឡប់ឧបករណ៍" : "Return note")
-                          }
-                        />
-                      </label>
-                      <div className="tool-review-borrow-save-box">
-                        <div className="tiny">
-                          {toolReviewCampusItemOptions.length
-                            ? toolReviewCampusItemOptions.map((entry) => `${entry.campusLabel}: ${entry.stock}`).join(" | ")
-                            : "-"}
-                        </div>
-                        <button
-                          className="btn-primary"
-                          disabled={
-                            !isAdmin ||
-                            busy ||
-                            !toolReviewForm.itemId ||
-                            !toolReviewBorrowForm.qty ||
-                            !toolReviewBorrowForm.sourceCampus ||
-                            !toolReviewBorrowForm.destinationCampus ||
-                            (toolReviewControlMode === "borrow"
-                              ? (!toolReviewBorrowForm.requestedBy || !toolReviewBorrowForm.approvedBy)
-                              : !toolReviewBorrowForm.receivedBy)
-                          }
-                          onClick={() => void saveToolReviewBorrowAction()}
-                        >
-                          {toolReviewControlMode === "borrow"
-                            ? (lang === "km" ? "រក្សាទុកការខ្ចី" : "Save Borrow")
-                            : (lang === "km" ? "រក្សាទុកការត្រឡប់" : "Save Return")}
-                        </button>
                       </div>
+                    </section>
+                    <section className="tool-review-borrow-section">
+                      <div className="tool-review-borrow-section-head">
+                        <strong>{lang === "km" ? "មនុស្ស និង ភស្តុតាង" : "People & Proof"}</strong>
+                        <span>{lang === "km" ? "បុគ្គលិកដែលពាក់ព័ន្ធ រូបថត និងចំណាំ" : "People, proof photo, and note."}</span>
+                      </div>
+                      <div className="form-grid tool-review-form-grid tool-review-borrow-grid tool-review-borrow-grid-people">
+                        {toolReviewControlMode === "borrow" ? (
+                          <label className="field">
+                            <span>{lang === "km" ? "ស្នើដោយ" : "Requested By"}</span>
+                            {toolReviewBorrowRequesterOptions.length ? (
+                              <select
+                                className="input"
+                                value={toolReviewBorrowForm.requestedBy}
+                                onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: e.target.value }))}
+                              >
+                                <option value="">{lang === "km" ? "ជ្រើសបុគ្គលិក" : "Select user"}</option>
+                                {toolReviewBorrowRequesterOptions.map((user) => (
+                                  <option key={`tool-borrow-request-${user.id}`} value={user.fullName}>
+                                    {user.fullName}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                className="input"
+                                value={toolReviewBorrowForm.requestedBy}
+                                onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: e.target.value }))}
+                                placeholder={lang === "km" ? "បញ្ចូលឈ្មោះអ្នកស្នើ" : "Enter requester name"}
+                              />
+                            )}
+                          </label>
+                        ) : null}
+                        <label className="field">
+                          <span>{toolReviewControlMode === "borrow" ? (lang === "km" ? "អនុម័ត / ទទួលស្គាល់ដោយ" : "Approved / Acknowledged By") : (lang === "km" ? "ទទួលត្រឡប់ដោយ" : "Received By")}</span>
+                          <input
+                            className="input"
+                            value={toolReviewControlMode === "borrow" ? toolReviewBorrowForm.approvedBy : toolReviewBorrowForm.receivedBy}
+                            onChange={(e) =>
+                              setToolReviewBorrowForm((prev) => ({
+                                ...prev,
+                                [toolReviewControlMode === "borrow" ? "approvedBy" : "receivedBy"]: e.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        {toolReviewControlMode === "borrow" ? (
+                          <label className="field tool-review-borrow-photo-field field-wide">
+                            <span>{lang === "km" ? "រូបឧបករណ៍ពេលខ្ចី" : "Borrow Tool Photo"}</span>
+                            <div className="tool-review-borrow-photo-inline">
+                              <input
+                                key={`tool-review-borrow-photo-row-${toolReviewBorrowPhotoFileKey}`}
+                                className="input"
+                                type="file"
+                                accept="image/*"
+                                onChange={onToolReviewBorrowPhotoFile}
+                              />
+                              {toolReviewBorrowForm.photo ? (
+                                <img
+                                  loading="lazy"
+                                  decoding="async"
+                                  src={toolReviewBorrowForm.photo}
+                                  alt="Borrow tool preview"
+                                  className="table-photo"
+                                />
+                              ) : null}
+                            </div>
+                          </label>
+                        ) : null}
+                        <label className="field tool-review-borrow-note-field field-wide">
+                          <span>{t.notes}</span>
+                          <textarea
+                            className="textarea tool-review-borrow-note-textarea"
+                            rows={1}
+                            value={toolReviewBorrowForm.note}
+                            onChange={(e) => {
+                              e.target.style.height = "46px";
+                              e.target.style.height = `${Math.max(46, e.target.scrollHeight)}px`;
+                              setToolReviewBorrowForm((prev) => ({ ...prev, note: e.target.value }));
+                            }}
+                            placeholder={
+                              toolReviewControlMode === "borrow"
+                                ? (lang === "km" ? "មូលហេតុខ្ចីឧបករណ៍ទៅសាខាផ្សេង ឬ បុគ្គលិកផ្សេង" : "Reason for borrowing to another campus or staff")
+                                : (lang === "km" ? "កំណត់ចំណាំពេលត្រឡប់ឧបករណ៍" : "Return note")
+                            }
+                          />
+                        </label>
+                      </div>
+                    </section>
+                  </div>
+                  <div className="tool-review-borrow-footer">
+                    <div className="tool-review-borrow-save-box">
+                      <div className="tiny">
+                        {toolReviewCampusItemOptions.length
+                          ? toolReviewCampusItemOptions.map((entry) => `${entry.campusLabel}: ${entry.stock}`).join(" | ")
+                          : "-"}
+                      </div>
+                      <button
+                        className="btn-primary"
+                        disabled={
+                          !isAdmin ||
+                          busy ||
+                          !toolReviewForm.itemId ||
+                          !toolReviewBorrowForm.qty ||
+                          !toolReviewBorrowForm.sourceCampus ||
+                          !toolReviewBorrowForm.destinationCampus ||
+                          (toolReviewControlMode === "borrow"
+                            ? (!toolReviewBorrowForm.requestedBy || !toolReviewBorrowForm.approvedBy)
+                            : !toolReviewBorrowForm.receivedBy)
+                        }
+                        onClick={() => void saveToolReviewBorrowAction()}
+                      >
+                        {toolReviewControlMode === "borrow"
+                          ? (lang === "km" ? "រក្សាទុកការខ្ចី" : "Save Borrow")
+                          : (lang === "km" ? "រក្សាទុកការត្រឡប់" : "Save Return")}
+                      </button>
                     </div>
                   </div>
                   <div className="tiny tool-review-submit-helper">

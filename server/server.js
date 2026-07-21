@@ -3510,6 +3510,10 @@ async function sendTelegramMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
       ? Boolean(options.includeResults)
       : false;
+  const parseMode =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "parseMode")
+      ? toText(options.parseMode)
+      : "";
   const kind =
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "kind")
       ? toText(options.kind).trim().toLowerCase() || "default"
@@ -3526,7 +3530,7 @@ async function sendTelegramMessage(text, options = {}) {
   const results = [];
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
-    results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, botToken));
+    results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, botToken, parseMode));
   }
   let successCount = results.filter((row) => row.ok).length;
   if (!successCount && TELEGRAM_DISCOVER_CHAT_IDS && !configuredTargets.length) {
@@ -3543,7 +3547,7 @@ async function sendTelegramMessage(text, options = {}) {
     for (const chatId of retryTargets) {
       if (results.some((row) => row.ok && row.chatId === chatId)) continue;
       // eslint-disable-next-line no-await-in-loop
-      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2, botToken));
+      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2, botToken, parseMode));
     }
     successCount = results.filter((row) => row.ok).length;
   }
@@ -4100,7 +4104,11 @@ async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) 
       kind: "tools",
     });
     sent = Boolean(report && report.ok);
-    const mediaReport = await sendTelegramMediaGroup(photoAlerts, { db, kind: "tools" });
+    const albumItems = photoAlerts.map((item) => ({
+      ...item,
+      caption: "",
+    }));
+    const mediaReport = await sendTelegramMediaGroup(albumItems, { db, kind: "tools" });
     sent = Boolean(mediaReport) || sent;
   }
   return {
@@ -4798,16 +4806,15 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
   const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(asset, entry);
   let telegramAlertSent = false;
   const sendMaintenancePhoto = (text, sendOptions = {}) =>
-    sendTelegramMessage(text, {
+    sendTelegramMaintenanceMessage(text, {
       ...sendOptions,
       db,
-      kind: "tools",
     });
   const sendMaintenanceAlbum = (mediaItems, sendOptions = {}) =>
     sendTelegramMediaGroup(mediaItems, {
       ...sendOptions,
       db,
-      kind: "tools",
+      kind: "maintenance",
     });
   try {
     if (photoAlerts.length === 1) {
@@ -4836,7 +4843,14 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       }
 
       if (photoAlerts.length >= 2) {
-        const report = await sendMaintenanceAlbum(photoAlerts);
+        const report = await sendMaintenanceAlbum(
+          message
+            ? photoAlerts.map((item) => ({
+                ...item,
+                caption: "",
+              }))
+            : photoAlerts
+        );
         telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
       } else {
         for (const item of photoAlerts) {
