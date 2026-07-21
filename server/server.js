@@ -860,8 +860,21 @@ function dbScore(db) {
 function looksLikeDataLoss(db) {
   const counts = countDbRows(db);
   const looksEmptyCore = counts.assets === 0 && counts.tickets === 0;
-  const hasPartialSideData = counts.locations > 0 || counts.users <= DEFAULT_USERS.length;
-  return looksEmptyCore && hasPartialSideData;
+  const hasSideData =
+    counts.locations > 0 ||
+    counts.inventoryItems > 0 ||
+    counts.inventoryTxns > 0 ||
+    counts.toolReviewReports > 0 ||
+    counts.rentalPrinters > 0 ||
+    counts.rentalPrinterCounters > 0 ||
+    counts.rentalPrinterCounterResets > 0 ||
+    counts.auditLogs > 0 ||
+    counts.notifications > 0;
+  const missingAssetsButOtherDataExists = counts.assets === 0 && (
+    counts.tickets > 0 ||
+    hasSideData
+  );
+  return (looksEmptyCore && (hasSideData || counts.users <= DEFAULT_USERS.length)) || missingAssetsButOtherDataExists;
 }
 
 function hasRecoverableInventoryGap(currentDb, candidateDb) {
@@ -4378,13 +4391,13 @@ async function renderTelegramWhiteCompareCardPng({
   if (!sharpLib) return null;
   const normalizedLines = Array.isArray(textLines) ? textLines.filter(Boolean) : [];
   const headerLineHeight = 30;
-  const bodyLineHeight = 32;
-  const textStartY = 410;
+  const bodyLineHeight = 30;
+  const textStartY = 428;
   let currentY = textStartY;
   normalizedLines.forEach((_, index) => {
     currentY += index < 2 ? headerLineHeight : bodyLineHeight;
   });
-  const totalHeight = Math.max(760, currentY + 44);
+  const totalHeight = Math.max(820, currentY + 40);
   const iconGradientId = iconColor === "green" ? "compareIconGreen" : "compareIconBlue";
   const iconStops =
     iconColor === "green"
@@ -4401,6 +4414,7 @@ async function renderTelegramWhiteCompareCardPng({
   <rect x="18" y="18" width="724" height="${totalHeight - 36}" rx="28" ry="28" fill="#f7efdf" stroke="#d9cfbf" stroke-width="1.5"/>
   <rect x="24" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
   <rect x="388" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
+  <rect x="24" y="390" width="712" height="${Math.max(180, totalHeight - 414)}" rx="24" ry="24" fill="#ffffff" stroke="#d7c7b4" stroke-width="1.5"/>
   <line x1="74" y1="34" x2="154" y2="34" stroke="#3e3428" stroke-width="1.5" />
   <line x1="226" y1="34" x2="306" y2="34" stroke="#3e3428" stroke-width="1.5" />
   <line x1="438" y1="34" x2="518" y2="34" stroke="#3e3428" stroke-width="1.5" />
@@ -4910,8 +4924,8 @@ async function buildMaintenanceRecordTelegramPreviewSvg(source, text = "") {
   const secondPhotoData = await resolveTelegramPreviewImageData(secondPhoto);
   const textLines = wrapTelegramPreviewText(
     telegramHtmlToPreviewText(text) || `Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`,
-    34
-  ).slice(0, 14);
+    32
+  ).slice(0, 15);
   const contentTop = 392;
   const headerLineHeight = 30;
   const bodyLineHeight = 29;
@@ -4981,10 +4995,11 @@ async function buildMaintenanceRecordTelegramPreviewSvg(source, text = "") {
   <rect x="16" y="16" width="728" height="${totalHeight - 32}" rx="30" ry="30" fill="#f8f1e7" stroke="#d8cebf" stroke-width="1.5" />
   <rect x="24" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
   <rect x="388" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
-  <text x="190" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700">Previous Photo</text>
+  <rect x="24" y="390" width="712" height="${Math.max(180, totalHeight - 414)}" rx="24" ry="24" fill="#ffffff" stroke="#d7c7b4" stroke-width="1.5"/>
+  <text x="190" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700">មុនធ្វើ / Before</text>
   <line x1="86" y1="34" x2="144" y2="34" stroke="#3e3428" stroke-width="1.5" />
   <line x1="236" y1="34" x2="294" y2="34" stroke="#3e3428" stroke-width="1.5" />
-  <text x="566" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700">Current Photo</text>
+  <text x="566" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700">ក្រោយធ្វើ / After</text>
   <line x1="462" y1="34" x2="520" y2="34" stroke="#3e3428" stroke-width="1.5" />
   <line x1="612" y1="34" x2="670" y2="34" stroke="#3e3428" stroke-width="1.5" />
   ${renderPhotoBlock(firstPhotoData, 24, 48, 348, 312, "maintenanceRecordPhotoClipA", "NO", "PHOTO")}
@@ -5010,11 +5025,12 @@ async function buildMaintenanceRecordTelegramPreviewPng(source, text = "") {
   const location = toText(source.location) || "-";
   const firstPhoto = beforePhotoPath || afterPhotoPath;
   const secondPhoto = afterPhotoPath && afterPhotoPath !== beforePhotoPath ? afterPhotoPath : "";
+  const hasBeforeAndAfter = Boolean(beforePhotoPath) && Boolean(afterPhotoPath);
   const textLines = wrapTelegramPreviewText(
     telegramHtmlToPreviewText(text) || `Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`,
-    34
-  ).slice(0, 14);
-  if (telegramPhotoPath) {
+    32
+  ).slice(0, 15);
+  if (!hasBeforeAndAfter && telegramPhotoPath) {
     return renderTelegramWhiteSinglePhotoCardPng({
       photoPath: telegramPhotoPath,
       textLines,
@@ -5024,8 +5040,8 @@ async function buildMaintenanceRecordTelegramPreviewPng(source, text = "") {
   return renderTelegramWhiteCompareCardPng({
     firstPhotoPath: firstPhoto,
     secondPhotoPath: secondPhoto,
-    firstLabel: "Previous Photo",
-    secondLabel: "Current Photo",
+    firstLabel: "មុនធ្វើ / Before",
+    secondLabel: "ក្រោយធ្វើ / After",
     textLines,
     iconColor: "blue",
   });
@@ -5834,31 +5850,17 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   const telegramPhoto = resolveTelegramPhotoUrl(toText(entry.telegramPhoto || ""));
   const beforePhoto = resolveTelegramPhotoUrl(toText((entry.beforePhotos || [])[0] || ""));
   const afterPhoto = resolveTelegramPhotoUrl(toText((entry.afterPhotos || [])[0] || entry.photo || ""));
-  if (telegramPhoto) {
+  const fallbackPhoto = telegramPhoto || afterPhoto || beforePhoto;
+  if (fallbackPhoto) {
     return [
       {
         type: "photo",
-        media: telegramPhoto,
-        caption: `Before Photo | Current Photo\n${baseLabel}`,
+        media: fallbackPhoto,
+        caption: `Maintenance Record\n${baseLabel}`,
       },
     ];
   }
-  const alerts = [];
-  if (beforePhoto) {
-    alerts.push({
-      type: "photo",
-      media: beforePhoto,
-      caption: `Before Photo\n${baseLabel}`,
-    });
-  }
-  if (afterPhoto) {
-    alerts.push({
-      type: "photo",
-      media: afterPhoto,
-      caption: `Current Photo\n${baseLabel}`,
-    });
-  }
-  return alerts;
+  return [];
 }
 
 async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, options = {}) {
@@ -5901,23 +5903,23 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       afterPhoto: toText((entry.afterPhotos || [])[0] || entry.photo || ""),
       telegramPhoto: toText(entry.telegramPhoto || ""),
     };
-    const previewUrl = buildMaintenanceRecordTelegramPreviewUrl(asset, entry, message);
-    if (previewUrl) {
-      const report = await sendMaintenancePhoto("", {
-        photoUrl: previewUrl,
+    const previewPng = await buildMaintenanceRecordTelegramPreviewPng(previewSource, message);
+    if (previewPng) {
+      const report = await sendMaintenancePhotoBuffer(previewPng, {
         includeResults: true,
+        photoFileName: "maintenance-alert-card.png",
+        photoMimeType: "image/png",
       });
       if (report && report.ok) {
         telegramAlertSent = true;
       }
     }
     if (!telegramAlertSent) {
-      const previewPng = await buildMaintenanceRecordTelegramPreviewPng(previewSource, message);
-      if (previewPng) {
-        const report = await sendMaintenancePhotoBuffer(previewPng, {
+      const previewUrl = buildMaintenanceRecordTelegramPreviewUrl(asset, entry, message);
+      if (previewUrl) {
+        const report = await sendMaintenancePhoto("", {
+          photoUrl: previewUrl,
           includeResults: true,
-          photoFileName: "maintenance-alert-card.png",
-          photoMimeType: "image/png",
         });
         if (report && report.ok) {
           telegramAlertSent = true;
