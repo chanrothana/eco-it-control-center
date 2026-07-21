@@ -938,6 +938,8 @@ function tabNeedsAssetDataset(tab: NavModule) {
 
 function tabNeedsFullAssetDetail(tab: NavModule) {
   switch (tab) {
+    case "dashboard":
+    case "schedule":
     case "transfer":
     case "maintenance":
     case "verification":
