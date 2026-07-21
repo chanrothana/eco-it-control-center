@@ -3398,10 +3398,7 @@ function resolveTelegramConfiguredChatIds(db, overrideChatIds = [], kind = "defa
     ? kind === "maintenance"
       ? normalizeTelegramChatIds(settings.telegramChatIds)
       : kind === "tools"
-        ? [
-            ...normalizeTelegramChatIds(settings.telegramMaintenanceChatIds),
-            ...normalizeTelegramChatIds(settings.telegramChatIds),
-          ]
+        ? []
         : []
     : [];
   const explicitTargets = normalizeTelegramChatIds(overrideChatIds);
@@ -3415,7 +3412,7 @@ function resolveTelegramConfiguredChatIds(db, overrideChatIds = [], kind = "defa
     ? kind === "maintenance"
       ? TELEGRAM_CHAT_IDS
       : kind === "tools"
-        ? [...TELEGRAM_MAINTENANCE_CHAT_IDS, ...TELEGRAM_CHAT_IDS]
+        ? []
         : []
     : [];
   return Array.from(
@@ -4042,6 +4039,17 @@ function resolveInventoryItemPhotoForTelegram(db, txn) {
   return txnPhotoUrl || itemPhotoUrl || "";
 }
 
+function isInventoryToolCategoryForTelegram(category) {
+  const normalized = toUpper(category);
+  return (
+    normalized === "CLEAN_TOOL" ||
+    normalized === "MAINT_TOOL" ||
+    normalized === "GARDEN_TOOL" ||
+    normalized === "POOL_TOOL" ||
+    normalized === "SERVICE_TOOL"
+  );
+}
+
 function buildToolReviewTelegramPhotoAlerts(source) {
   if (!source || typeof source !== "object") return [];
   const previousPhoto = resolveTelegramPhotoUrl(toText(source.previousPhoto));
@@ -4494,7 +4502,7 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
 async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
   if (!txn || typeof txn !== "object") return false;
   const txnType = normalizeInventoryTxnType(txn.type);
-  if (txnType !== "IN" && txnType !== "OUT") return false;
+  if (txnType !== "IN" && txnType !== "OUT" && txnType !== "BORROW_OUT" && txnType !== "BORROW_IN" && txnType !== "BORROW_CONSUME") return false;
   if (txnType === "OUT") return sendTelegramInventoryOutRecordedAlert(txn, db);
   const itemCode = toText(txn.itemCode) || "-";
   const itemName = toText(txn.itemName) || "Item";
@@ -4510,8 +4518,65 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
   const items = normalizeInventoryItems(settings.inventoryItems);
   const txns = normalizeInventoryTxns(settings.inventoryTxns);
   const item = items.find((row) => Number(row.id) === Number(txn.itemId));
+  const isToolItem = isInventoryToolCategoryForTelegram(item && item.category);
   const remainingStock = item ? calcInventoryCurrentStock(item, txns) : null;
   const stockUnit = toText(item && item.unit) || "";
+  if (txnType === "BORROW_OUT" || txnType === "BORROW_CONSUME") {
+    const destinationCampus = formatTelegramCampusKhmer(txn.toCampus);
+    const requestedBy = toText(txn.requestedBy) || "-";
+    const approvedBy = toText(txn.approvedBy) || "-";
+    const lines = [
+      "ជូនដំណឹង ECO IT - ឧបករណ៍",
+      txnType === "BORROW_CONSUME" ? "ប្រើប្រាស់អស់ (Borrow Consume)" : "ខ្ចីចេញ (Borrow Out)",
+      `មុខទំនិញ: ${itemCode} - ${itemName}`,
+      `បរិមាណ: ${qty} | ពីសាខា: ${campus}`,
+      `ទៅសាខា: ${destinationCampus || "-"}`,
+      `កាលបរិច្ឆេទ: ${date}`,
+      `កត់ត្រាដោយ: ${recordedBy}`,
+      `ស្នើដោយ: ${requestedBy}`,
+      `អនុម័តដោយ: ${approvedBy}`,
+    ];
+    if (remainingStock !== null) {
+      lines.push(`ស្តុកនៅសល់: ${remainingStock}${stockUnit ? ` ${stockUnit}` : ""}`);
+    }
+    if (reason) lines.push(`មូលហេតុ: ${reason}`);
+    return sendToolReviewTelegramMessageWithPhotos(
+      lines.join("\n"),
+      {
+        ...txn,
+        photo: toText(txn.photo) || resolveInventoryItemPhotoForTelegram(db, txn),
+        previousPhoto: toText(txn.previousPhoto),
+      },
+      db
+    );
+  }
+  if (txnType === "BORROW_IN") {
+    const sourceCampus = formatTelegramCampusKhmer(txn.fromCampus);
+    const receivedBy = toText(txn.receivedBy) || "-";
+    const lines = [
+      "ជូនដំណឹង ECO IT - ឧបករណ៍",
+      "ត្រឡប់ចូល (Borrow Return)",
+      `មុខទំនិញ: ${itemCode} - ${itemName}`,
+      `បរិមាណ: ${qty} | សាខាទទួល: ${campus}`,
+      `មកពីសាខា: ${sourceCampus || "-"}`,
+      `កាលបរិច្ឆេទ: ${date}`,
+      `កត់ត្រាដោយ: ${recordedBy}`,
+      `ទទួលដោយ: ${receivedBy}`,
+    ];
+    if (remainingStock !== null) {
+      lines.push(`ស្តុកបច្ចុប្បន្ន: ${remainingStock}${stockUnit ? ` ${stockUnit}` : ""}`);
+    }
+    if (reason) lines.push(`មូលហេតុ: ${reason}`);
+    return sendToolReviewTelegramMessageWithPhotos(
+      lines.join("\n"),
+      {
+        ...txn,
+        photo: toText(txn.photo) || resolveInventoryItemPhotoForTelegram(db, txn),
+        previousPhoto: toText(txn.previousPhoto),
+      },
+      db
+    );
+  }
   const lines = [
     "ជូនដំណឹង ECO IT - ស្តុក",
     "បន្ថែមសម្ភារៈ (Item In)",
@@ -4525,6 +4590,17 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
   }
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
+  }
+  if (isToolItem) {
+    return sendToolReviewTelegramMessageWithPhotos(
+      lines.join("\n"),
+      {
+        ...txn,
+        photo: toText(txn.photo) || resolveInventoryItemPhotoForTelegram(db, txn),
+        previousPhoto: toText(txn.previousPhoto),
+      },
+      db
+    );
   }
   const report = await sendTelegramMessage(lines.join("\n"), {
     db,
@@ -4575,6 +4651,32 @@ async function sendTelegramToolReviewAlert(reportEntry, db = null) {
       ...reportEntry,
       previousPhoto: toText(reportEntry.previousPhoto),
       photo: toText(reportEntry.photo),
+    },
+    db
+  );
+}
+
+async function sendTelegramInventoryItemCreatedAlert(item, actor = null, db = null) {
+  if (!item || typeof item !== "object") return false;
+  if (!isInventoryToolCategoryForTelegram(item.category)) return false;
+  const campus = formatTelegramCampusKhmer(item.campus);
+  const recordedBy = toText(actor && actor.displayName) || toText(actor && actor.username) || "staff";
+  const lines = [
+    "ជូនដំណឹង ECO IT - ឧបករណ៍",
+    "បង្កើតឧបករណ៍ថ្មី (New Tool Setup)",
+    `មុខទំនិញ: ${toText(item.itemCode) || "-"} - ${toText(item.itemName) || "-"}`,
+    `សាខា: ${campus} | ទីតាំង: ${toText(item.location) || "-"}`,
+    `ឯកតា: ${toText(item.unit) || "pcs"} | ចំនួនដើម: ${Math.max(0, Number(item.openingQty || 0))}`,
+    `កត់ត្រាដោយ: ${recordedBy}`,
+  ];
+  if (toText(item.responsibleParty)) lines.push(`Responsible: ${toText(item.responsibleParty)}`);
+  if (toText(item.notes)) lines.push(`ចំណាំ: ${toText(item.notes)}`);
+  return sendToolReviewTelegramMessageWithPhotos(
+    lines.join("\n"),
+    {
+      ...item,
+      photo: toText(item.photo),
+      previousPhoto: "",
     },
     db
   );
@@ -8451,6 +8553,8 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: "Invalid tool review report" });
         return;
       }
+      nextReport.photo = await normalizePhotoValue(nextReport.photo, "tool_review");
+      nextReport.previousPhoto = await normalizePhotoValue(nextReport.previousPhoto, "tool_review");
       const db = await readDb();
       const settings =
         db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
@@ -9515,6 +9619,11 @@ const server = http.createServer(async (req, res) => {
       setInventoryState(db, settings, nextItems, txns);
       appendAuditLog(db, admin, "CREATE", "inventory_item", itemCode, `${campus} | ${itemName}`);
       await writeDb(db);
+      if (isInventoryToolCategoryForTelegram(item.category)) {
+        void sendTelegramInventoryItemCreatedAlert(item, admin, db).catch((err) => {
+          console.warn("[ALERT] Failed to send tool setup Telegram alert:", err instanceof Error ? err.message : err);
+        });
+      }
       sendJson(res, 201, { item });
       return;
     }
