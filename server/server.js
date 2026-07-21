@@ -1861,7 +1861,7 @@ function itemTypeOptionsWithDefaults(input) {
   return out;
 }
 
-const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL", "GARDEN_TOOL", "SERVICE_TOOL"]);
+const INVENTORY_CATEGORY_SET = new Set(["SUPPLY", "CLEAN_TOOL", "MAINT_TOOL", "GARDEN_TOOL", "POOL_TOOL", "SERVICE_TOOL"]);
 const INVENTORY_TXN_TYPE_SET = new Set(["IN", "OUT", "SET", "BORROW_OUT", "BORROW_IN", "BORROW_CONSUME"]);
 
 function normalizeInventoryCategory(value) {
