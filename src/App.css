@@ -8166,7 +8166,8 @@ h2 {
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected > span:last-child,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-placeholder,
-.maintenance-filter-row .picker-template-list-asset-light .parent-asset-picker-option-title {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-option-title,
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-selected-content {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8178,8 +8179,8 @@ h2 {
   min-width: 100%;
   width: max-content;
   max-width: min(92vw, 640px);
-  padding: 16px;
-  border-radius: 24px;
+  padding: 12px;
+  border-radius: 20px;
   border: 1px solid #d6e2f3;
   z-index: 30;
   background: #ffffff;
@@ -8188,20 +8189,20 @@ h2 {
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .type-code-picker-search-wrap {
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-search {
-  min-height: 56px;
+  min-height: 42px;
   margin-bottom: 0;
-  padding-left: 54px !important;
-  padding-right: 16px !important;
-  border-radius: 18px;
+  padding-left: 42px !important;
+  padding-right: 12px !important;
+  border-radius: 14px;
   border: 1px solid #cfe0f5;
   background: linear-gradient(180deg, #ffffff, #f7fbff);
   color: #17304f;
   -webkit-text-fill-color: #17304f;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
@@ -8212,22 +8213,22 @@ h2 {
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .type-code-picker-search-icon {
-  left: 18px;
+  left: 13px;
   color: #6e85a7;
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-list {
   display: grid;
-  gap: 12px;
-  max-height: 360px;
+  gap: 4px;
+  max-height: 320px;
   padding: 0;
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option {
-  min-height: 58px;
-  padding: 10px 14px;
-  border-radius: 18px;
+  min-height: 40px;
+  padding: 5px 10px;
+  border-radius: 12px;
   border: 1px solid #d6e2f3;
   background: #ffffff;
   color: #1d3156;
@@ -8249,19 +8250,19 @@ h2 {
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
   margin: 0;
   accent-color: #2f7cf6;
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option-checkbox {
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
+  width: 15px;
+  height: 15px;
+  min-width: 15px;
   border: 1px solid #9db5dc;
-  border-radius: 4px;
+  border-radius: 3px;
   background: #ffffff;
   color: transparent;
   box-shadow: none;
@@ -8288,11 +8289,11 @@ h2 {
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option-label,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option > span:last-child,
-.maintenance-filter-row .picker-template-list-asset-light .parent-asset-picker-option-title {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option .parent-asset-picker-option-title {
   color: #1c2f52;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.2;
   white-space: normal;
   overflow: visible;
   text-overflow: unset;
@@ -32342,8 +32343,8 @@ tr.row-maint-maintenance:hover td {
     min-width: 100% !important;
     width: max-content !important;
     max-width: min(92vw, 640px) !important;
-    padding: 16px !important;
-    border-radius: 24px !important;
+    padding: 12px !important;
+    border-radius: 20px !important;
     border: 1px solid #d6e2f3 !important;
     z-index: 30 !important;
     background: #ffffff !important;
@@ -32351,7 +32352,7 @@ tr.row-maint-maintenance:hover td {
   }
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .type-code-picker-search-wrap {
-    margin-bottom: 14px !important;
+    margin-bottom: 8px !important;
   }
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-trigger.input {
@@ -32379,17 +32380,24 @@ tr.row-maint-maintenance:hover td {
     font-weight: 500 !important;
   }
 
+  .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-option-title,
+  .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-selected-content {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-search {
-    min-height: 56px !important;
+    min-height: 42px !important;
     margin-bottom: 0 !important;
-    padding-left: 54px !important;
-    padding-right: 16px !important;
-    border-radius: 18px !important;
+    padding-left: 42px !important;
+    padding-right: 12px !important;
+    border-radius: 14px !important;
     border: 1px solid #cfe0f5 !important;
     background: linear-gradient(180deg, #ffffff, #f7fbff) !important;
     color: #17304f !important;
     -webkit-text-fill-color: #17304f !important;
-    font-size: 15px !important;
+    font-size: 13px !important;
     font-weight: 500 !important;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96) !important;
   }
@@ -32400,22 +32408,22 @@ tr.row-maint-maintenance:hover td {
   }
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .type-code-picker-search-icon {
-    left: 18px !important;
+    left: 13px !important;
     color: #6e85a7 !important;
   }
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-list {
-    gap: 12px !important;
-    max-height: 360px !important;
+    gap: 4px !important;
+    max-height: 320px !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
   }
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-option,
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-option.searchable-multi-option {
-    min-height: 58px !important;
-    padding: 10px 14px !important;
-    border-radius: 18px !important;
+    min-height: 40px !important;
+    padding: 5px 10px !important;
+    border-radius: 12px !important;
     border: 1px solid #d6e2f3 !important;
     background: #ffffff !important;
     color: #1d3156 !important;
@@ -32437,9 +32445,9 @@ tr.row-maint-maintenance:hover td {
   }
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .searchable-multi-option input[type="checkbox"] {
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
+    width: 15px !important;
+    height: 15px !important;
+    min-width: 15px !important;
     margin: 0 !important;
     border: unset !important;
     background: unset !important;
@@ -32448,11 +32456,11 @@ tr.row-maint-maintenance:hover td {
   }
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-option-checkbox {
-    width: 18px !important;
-    height: 18px !important;
-    min-width: 18px !important;
+    width: 15px !important;
+    height: 15px !important;
+    min-width: 15px !important;
     border: 1px solid #9db5dc !important;
-    border-radius: 4px !important;
+    border-radius: 3px !important;
     background: #ffffff !important;
     color: transparent !important;
     box-shadow: none !important;
@@ -32471,20 +32479,77 @@ tr.row-maint-maintenance:hover td {
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-option-label,
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-option > span:last-child,
-  .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .parent-asset-picker-option-title {
+  .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-option .parent-asset-picker-option-title {
     color: #1c2f52 !important;
-    font-size: 16px !important;
+    font-size: 13px !important;
     font-weight: 700 !important;
     white-space: normal !important;
     overflow: visible !important;
     text-overflow: unset !important;
-    line-height: 1.3 !important;
+    line-height: 1.2 !important;
   }
 
   .workspace-main .maintenance-filter-row .report-campus-picker.picker-template-list-asset-light .asset-picker-empty {
     color: #6a7f9f !important;
     font-weight: 700 !important;
     padding: 10px 6px !important;
+  }
+
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input.input,
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input .quickout-date-input-wrap .input,
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-search .input {
+    min-height: 56px !important;
+    padding: 10px 18px !important;
+    border-radius: 22px !important;
+    border: 1px solid #c9dbf2 !important;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 245, 255, 0.98)) !important;
+    color: #223a5c !important;
+    -webkit-text-fill-color: #223a5c !important;
+    font-size: 16px !important;
+    font-weight: 500 !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.92),
+      0 8px 18px rgba(17, 33, 58, 0.08) !important;
+  }
+
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input.input::placeholder,
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input .quickout-date-input-wrap .input::placeholder,
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-search .input::placeholder {
+    color: #6a7f9f !important;
+    -webkit-text-fill-color: #6a7f9f !important;
+  }
+
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input.quickout-date-field {
+    min-width: 220px;
+  }
+
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input .quickout-date-input-wrap {
+    position: relative;
+  }
+
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input .quickout-date-icon-btn {
+    right: 10px !important;
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(186, 157, 103, 0.58) !important;
+    background: rgba(255, 248, 237, 0.96) !important;
+    color: #8a6330 !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  }
+
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input .quickout-date-input-wrap .input {
+    padding-right: 58px !important;
+  }
+
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input.input[type="date"]::-webkit-date-and-time-value,
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input .quickout-date-input-wrap .input::-webkit-date-and-time-value {
+    text-align: left !important;
+  }
+
+  .workspace-main .maintenance-filter-row .picker-template-list-asset-light-input.input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.68 !important;
+    cursor: pointer;
   }
 
   .workspace-main .maintenance-quick-mode-toggle .tab {

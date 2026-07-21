@@ -47,5 +47,9 @@ services:
         sync: false
       - key: TELEGRAM_MAINTENANCE_CHAT_IDS
         sync: false
+      - key: TELEGRAM_TOOL_CHAT_ID
+        sync: false
+      - key: TELEGRAM_TOOL_CHAT_IDS
+        sync: false
       - key: TELEGRAM_DISCOVER_CHAT_IDS
         value: "true"

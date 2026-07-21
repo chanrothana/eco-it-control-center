@@ -1079,6 +1079,7 @@ type TelegramStatus = {
   hasMaintenanceBotToken?: boolean;
   configuredTargets: string[];
   maintenanceConfiguredTargets?: string[];
+  toolConfiguredTargets?: string[];
   discoverEnabled: boolean;
   discoveredTargets: TelegramDiscoveredChat[];
   maintenanceDiscoveredTargets?: TelegramDiscoveredChat[];
@@ -1110,6 +1111,7 @@ type ServerSettings = {
   inventoryApprovalRouting?: InventoryApprovalRoutingMap;
   telegramChatIds?: string[];
   telegramMaintenanceChatIds?: string[];
+  telegramToolChatIds?: string[];
   toolOwnerTypes?: ToolOwnerTypeOption[];
   inventoryItems?: InventoryItem[];
   inventoryTxns?: InventoryTxn[];
@@ -14400,6 +14402,7 @@ export default function App() {
   const [inventoryApprovalRoutingEditingRequester, setInventoryApprovalRoutingEditingRequester] = useState<string | null>(null);
   const [telegramChatIdsText, setTelegramChatIdsText] = useState("");
   const [telegramMaintenanceChatIdsText, setTelegramMaintenanceChatIdsText] = useState("");
+  const [telegramToolChatIdsText, setTelegramToolChatIdsText] = useState("");
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
   const [authCreateForm, setAuthCreateForm] = useState({
     staffId: "",
@@ -21934,15 +21937,24 @@ export default function App() {
     if (!authUser) return;
     try {
       const settingsRes = await requestJson<{ settings?: ServerSettings }>("/api/settings");
+      const settingsObj = settingsRes.settings || {};
+      const hasServerInventoryItems = Object.prototype.hasOwnProperty.call(settingsObj, "inventoryItems");
+      const hasServerInventoryTxns = Object.prototype.hasOwnProperty.call(settingsObj, "inventoryTxns");
       const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
       const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
       const fallbackInventoryItems = readInventoryItemFallback();
       const fallbackInventoryTxns = readInventoryTxnFallback();
-      const preferredInventory = selectPreferredInventorySnapshot([
-        { items: serverInventoryItems, txns: serverInventoryTxns },
-        { items: inventoryItems, txns: inventoryTxns },
-        { items: fallbackInventoryItems, txns: fallbackInventoryTxns },
-      ]);
+      const preferredInventory =
+        hasServerInventoryItems || hasServerInventoryTxns
+          ? {
+              items: hasServerInventoryItems ? serverInventoryItems : inventoryItems,
+              txns: hasServerInventoryTxns ? serverInventoryTxns : inventoryTxns,
+            }
+          : selectPreferredInventorySnapshot([
+              { items: serverInventoryItems, txns: serverInventoryTxns },
+              { items: inventoryItems, txns: inventoryTxns },
+              { items: fallbackInventoryItems, txns: fallbackInventoryTxns },
+            ]);
       const serverToolReviewReports = normalizeToolReviewReportsClient(settingsRes.settings?.toolReviewReports);
       setInventoryItems(preferredInventory.items);
       setInventoryTxns(preferredInventory.txns);
@@ -22203,6 +22215,11 @@ export default function App() {
             ? (settingsRes.settings?.telegramMaintenanceChatIds.filter(Boolean).join(", ") ?? "")
             : ""
         );
+        setTelegramToolChatIdsText(
+          Array.isArray(settingsRes.settings?.telegramToolChatIds)
+            ? (settingsRes.settings?.telegramToolChatIds.filter(Boolean).join(", ") ?? "")
+            : ""
+        );
         setToolOwnerTypeOptions(
           settingsRes.settings?.toolOwnerTypes?.length
             ? normalizeToolOwnerTypeOptions(settingsRes.settings.toolOwnerTypes)
@@ -22243,11 +22260,19 @@ export default function App() {
         const fallbackCctvCameras = readCctvCameraFallback();
         const fallbackCctvServiceHistory = readCctvServiceFallback();
         const fallbackCctvChangeLogs = readCctvChangeLogFallback();
-        const preferredInventory = selectPreferredInventorySnapshot([
-          { items: serverInventoryItems, txns: serverInventoryTxns },
-          { items: inventoryItems, txns: inventoryTxns },
-          { items: fallbackInventoryItems, txns: fallbackInventoryTxns },
-        ]);
+        const hasServerInventoryItems = Object.prototype.hasOwnProperty.call(settingsObj, "inventoryItems");
+        const hasServerInventoryTxns = Object.prototype.hasOwnProperty.call(settingsObj, "inventoryTxns");
+        const preferredInventory =
+          hasServerInventoryItems || hasServerInventoryTxns
+            ? {
+                items: hasServerInventoryItems ? serverInventoryItems : inventoryItems,
+                txns: hasServerInventoryTxns ? serverInventoryTxns : inventoryTxns,
+              }
+            : selectPreferredInventorySnapshot([
+                { items: serverInventoryItems, txns: serverInventoryTxns },
+                { items: inventoryItems, txns: inventoryTxns },
+                { items: fallbackInventoryItems, txns: fallbackInventoryTxns },
+              ]);
         const nextInventoryItems = preferredInventory.items;
         const nextInventoryTxns = preferredInventory.txns;
         const nextSchoolKeys = serverSchoolKeys.length ? serverSchoolKeys : fallbackSchoolKeys;
@@ -24315,7 +24340,11 @@ export default function App() {
     );
   }
 
-  async function saveTelegramChatIdsToServer(nextChatIds: string[], nextMaintenanceChatIds: string[]) {
+  async function saveTelegramChatIdsToServer(
+    nextChatIds: string[],
+    nextMaintenanceChatIds: string[],
+    nextToolChatIds: string[]
+  ) {
     try {
       await requestJson<{ ok: boolean; settings?: ServerSettings }>("/api/settings", {
         method: "PATCH",
@@ -24323,6 +24352,7 @@ export default function App() {
           settings: {
             telegramChatIds: nextChatIds,
             telegramMaintenanceChatIds: nextMaintenanceChatIds,
+            telegramToolChatIds: nextToolChatIds,
           },
         }),
       });
@@ -24368,10 +24398,12 @@ export default function App() {
     if (!requireAdminAction()) return;
     const nextChatIds = parseTelegramChatIds(telegramChatIdsText);
     const nextMaintenanceChatIds = parseTelegramChatIds(telegramMaintenanceChatIdsText);
+    const nextToolChatIds = parseTelegramChatIds(telegramToolChatIdsText);
     try {
-      await saveTelegramChatIdsToServer(nextChatIds, nextMaintenanceChatIds);
+      await saveTelegramChatIdsToServer(nextChatIds, nextMaintenanceChatIds, nextToolChatIds);
       setTelegramChatIdsText(nextChatIds.join(", "));
       setTelegramMaintenanceChatIdsText(nextMaintenanceChatIds.join(", "));
+      setTelegramToolChatIdsText(nextToolChatIds.join(", "));
       await loadTelegramStatus();
       setSetupMessage(
         lang === "km" ? "បានអាប់ដេត Telegram chat ID រួចរាល់។" : "Telegram chat IDs updated."
@@ -38409,11 +38441,15 @@ export default function App() {
       reportFileType: string;
       checkedBy: string;
       signature: string;
+      scheduleTaskKind: string;
+      maintenanceTypeFilterValue: string;
     }> = [];
     for (const asset of resolvedAssets) {
       for (const entry of asset.maintenanceHistory || []) {
         const normalizedPhotos = normalizeMaintenanceEntryPhotos(entry || {});
         const workflow = normalizeMaintenanceWorkflow(entry.workflow);
+        const scheduleTaskKind = String(entry.scheduleTaskKind || "").trim().toLowerCase();
+        const isProviderService = scheduleTaskKind === "service";
         rows.push({
           rowId: `${asset.id}-${entry.id}`,
           assetDbId: asset.id,
@@ -38444,6 +38480,8 @@ export default function App() {
           reportFileName: entry.reportFileName || "",
           reportFileType: entry.reportFileType || "",
           signature: workflow.userConfirmation || "",
+          scheduleTaskKind,
+          maintenanceTypeFilterValue: isProviderService ? "PROVIDER_SERVICE" : (entry.type || ""),
         });
       }
     }
@@ -38465,7 +38503,7 @@ export default function App() {
     if (maintenanceCampusFilter !== "ALL") {
       rows = rows.filter((r) => r.campus === maintenanceCampusFilter);
     }
-    return Array.from(new Set(rows.map((r) => r.type).filter(Boolean))).sort();
+    return Array.from(new Set(rows.map((r) => r.maintenanceTypeFilterValue).filter(Boolean))).sort();
   }, [allMaintenanceRows, maintenanceCategoryFilter, maintenanceCampusFilter]);
   const maintenanceTypeFilterPickerOptions = useMemo<SearchableSelectOption[]>(
     () => [
@@ -38477,9 +38515,15 @@ export default function App() {
       },
       ...maintenanceTypeOptions.map((type) => ({
         value: type,
-        label: lang === "km" ? (MAINTENANCE_TYPE_KM_LABEL[type] || type) : type,
+        label:
+          type === "PROVIDER_SERVICE"
+            ? (lang === "km" ? "សេវាកម្មក្រុមហ៊ុន" : "Provider Service")
+            : (lang === "km" ? (MAINTENANCE_TYPE_KM_LABEL[type] || type) : type),
         description: "",
-        searchText: `${type} ${MAINTENANCE_TYPE_KM_LABEL[type] || ""}`,
+        searchText:
+          type === "PROVIDER_SERVICE"
+            ? `PROVIDER SERVICE ${lang === "km" ? "សេវាកម្មក្រុមហ៊ុន" : "Provider Service"}`
+            : `${type} ${MAINTENANCE_TYPE_KM_LABEL[type] || ""}`,
       })),
     ],
     [lang, maintenanceTypeOptions]
@@ -38512,7 +38556,7 @@ export default function App() {
       rows = rows.filter((r) => maintenanceCategoryFilter.includes(r.category));
     }
     if (maintenanceTypeFilter !== "ALL") {
-      rows = rows.filter((r) => r.type === maintenanceTypeFilter);
+      rows = rows.filter((r) => r.maintenanceTypeFilterValue === maintenanceTypeFilter);
     }
     if (maintenanceCampusFilter !== "ALL") {
       rows = rows.filter((r) => r.campus === maintenanceCampusFilter);
@@ -38566,7 +38610,7 @@ export default function App() {
       rows = rows.filter((r) => maintenanceCategoryFilter.includes(r.category));
     }
     if (maintenanceTypeFilter !== "ALL") {
-      rows = rows.filter((r) => r.type === maintenanceTypeFilter);
+      rows = rows.filter((r) => r.maintenanceTypeFilterValue === maintenanceTypeFilter);
     }
     if (maintenanceCampusFilter !== "ALL") {
       rows = rows.filter((r) => r.campus === maintenanceCampusFilter);
@@ -66444,46 +66488,37 @@ function formatTicketRequestSource(value?: string) {
                 searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                 emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
               />
-              <details className="filter-menu">
-                <summary>
-                  <span className="maintenance-filter-summary-label">
-                    {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
-                      const row = CATEGORY_OPTIONS.find((item) => item.value === value);
-                      return row ? (lang === "km" ? row.km : row.en) : value;
-                    })}
-                  </span>
-                </summary>
-                <div className="filter-menu-list">
-                  <label className="filter-menu-item">
-                    <input
-                      type="checkbox"
-                      checked={maintenanceCategoryFilter.includes("ALL")}
-                      onChange={(e) =>
-                        setMaintenanceCategoryFilter((prev) =>
-                          applyMultiFilterSelection(prev, e.target.checked, "ALL", maintenanceCategoryFilterOptions)
-                        )
-                      }
-                    />
-                    {t.allCategories}
-                  </label>
-                  {maintenanceCategoryFilterOptions.map((category) => (
-                    <label key={`maintenance-logbook-category-${category}`} className="filter-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={maintenanceCategoryFilter.includes(category)}
-                        onChange={(e) =>
-                          setMaintenanceCategoryFilter((prev) =>
-                            applyMultiFilterSelection(prev, e.target.checked, category, maintenanceCategoryFilterOptions)
-                          )
-                        }
-                      />
-                      {lang === "km"
-                        ? CATEGORY_OPTIONS.find((item) => item.value === category)?.km || category
-                        : CATEGORY_OPTIONS.find((item) => item.value === category)?.en || category}
-                    </label>
-                  ))}
-                </div>
-              </details>
+              <SearchableMultiSelectPicker
+                className="report-campus-picker picker-template-list-asset-light"
+                summary={summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
+                  const row = CATEGORY_OPTIONS.find((item) => item.value === value);
+                  return row ? (lang === "km" ? row.km : row.en) : value;
+                })}
+                options={maintenanceCategoryFilterOptions.map((category) => {
+                  const row = CATEGORY_OPTIONS.find((item) => item.value === category);
+                  return {
+                    value: category,
+                    label: lang === "km" ? row?.km || category : row?.en || category,
+                    searchText: `${category} ${row?.en || ""} ${row?.km || ""}`,
+                  };
+                })}
+                selectedValues={maintenanceCategoryFilter}
+                allOptionLabel={t.allCategories}
+                allOptionChecked={maintenanceCategoryFilter.includes("ALL")}
+                onToggleAllOption={(checked) =>
+                  setMaintenanceCategoryFilter((prev) =>
+                    applyMultiFilterSelection(prev, checked, "ALL", maintenanceCategoryFilterOptions)
+                  )
+                }
+                onToggleValue={(value, checked) =>
+                  setMaintenanceCategoryFilter((prev) =>
+                    applyMultiFilterSelection(prev, checked, value, maintenanceCategoryFilterOptions)
+                  )
+                }
+                placeholder={t.allCategories}
+                searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+              />
               <SearchableSelectPicker
                 className="report-campus-picker picker-template-list-asset-light"
                 value={maintenanceTypeFilter}
@@ -66493,14 +66528,16 @@ function formatTicketRequestSource(value?: string) {
                 searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទថែទាំ..." : "Search maintenance type..."}
                 emptyText={lang === "km" ? "មិនមានប្រភេទថែទាំ" : "No maintenance type found."}
               />
-              <input
-                className="input"
-                type="month"
+              <EcoDateInput
                 value={maintenanceMonthFilter}
-                onChange={(e) => setMaintenanceMonthFilter(e.target.value)}
+                onChange={setMaintenanceMonthFilter}
+                mode="month"
+                placeholder={lang === "km" ? "ជ្រើសខែ" : "Choose month"}
+                ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
+                className="maintenance-history-eco-calendar picker-template-list-asset-light-input"
               />
               <input
-                className="input"
+                className="input picker-template-list-asset-light-input"
                 type="date"
                 value={maintenanceDateFrom}
                 onChange={(e) => {
@@ -66510,7 +66547,7 @@ function formatTicketRequestSource(value?: string) {
                 title={lang === "km" ? "ជ្រើសថ្ងៃចាប់ផ្តើម" : "Choose start date"}
               />
               <input
-                className="input"
+                className="input picker-template-list-asset-light-input"
                 type="date"
                 value={maintenanceDateTo}
                 onChange={(e) => {
@@ -66519,9 +66556,9 @@ function formatTicketRequestSource(value?: string) {
                 }}
                 title={lang === "km" ? "ជ្រើសថ្ងៃបញ្ចប់" : "Choose end date"}
               />
-              <div className="maintenance-history-search-row">
+              <div className="maintenance-history-search-row picker-template-list-asset-light-search">
                 <input
-                  className="input"
+                  className="input picker-template-list-asset-light-input"
                   type="search"
                   placeholder={lang === "km" ? "ស្វែងរក asset, ទីតាំង, កំណត់ចំណាំ..." : "Search asset, location, note..."}
                   value={maintenanceSearchInput}
@@ -66685,46 +66722,37 @@ function formatTicketRequestSource(value?: string) {
                 searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                 emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
               />
-              <details className="filter-menu">
-                <summary>
-                  <span className="maintenance-filter-summary-label">
-                    {summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
-                      const row = CATEGORY_OPTIONS.find((item) => item.value === value);
-                      return row ? (lang === "km" ? row.km : row.en) : value;
-                    })}
-                  </span>
-                </summary>
-                <div className="filter-menu-list">
-                  <label className="filter-menu-item">
-                    <input
-                      type="checkbox"
-                      checked={maintenanceCategoryFilter.includes("ALL")}
-                      onChange={(e) =>
-                        setMaintenanceCategoryFilter((prev) =>
-                          applyMultiFilterSelection(prev, e.target.checked, "ALL", maintenanceCategoryFilterOptions)
-                        )
-                      }
-                    />
-                    {t.allCategories}
-                  </label>
-                  {maintenanceCategoryFilterOptions.map((category) => (
-                    <label key={`maintenance-history-category-${category}`} className="filter-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={maintenanceCategoryFilter.includes(category)}
-                        onChange={(e) =>
-                          setMaintenanceCategoryFilter((prev) =>
-                            applyMultiFilterSelection(prev, e.target.checked, category, maintenanceCategoryFilterOptions)
-                          )
-                        }
-                      />
-                      {lang === "km"
-                        ? CATEGORY_OPTIONS.find((item) => item.value === category)?.km || category
-                        : CATEGORY_OPTIONS.find((item) => item.value === category)?.en || category}
-                    </label>
-                  ))}
-                </div>
-              </details>
+              <SearchableMultiSelectPicker
+                className="report-campus-picker picker-template-list-asset-light"
+                summary={summarizeMultiFilter(maintenanceCategoryFilter, t.allCategories, (value) => {
+                  const row = CATEGORY_OPTIONS.find((item) => item.value === value);
+                  return row ? (lang === "km" ? row.km : row.en) : value;
+                })}
+                options={maintenanceCategoryFilterOptions.map((category) => {
+                  const row = CATEGORY_OPTIONS.find((item) => item.value === category);
+                  return {
+                    value: category,
+                    label: lang === "km" ? row?.km || category : row?.en || category,
+                    searchText: `${category} ${row?.en || ""} ${row?.km || ""}`,
+                  };
+                })}
+                selectedValues={maintenanceCategoryFilter}
+                allOptionLabel={t.allCategories}
+                allOptionChecked={maintenanceCategoryFilter.includes("ALL")}
+                onToggleAllOption={(checked) =>
+                  setMaintenanceCategoryFilter((prev) =>
+                    applyMultiFilterSelection(prev, checked, "ALL", maintenanceCategoryFilterOptions)
+                  )
+                }
+                onToggleValue={(value, checked) =>
+                  setMaintenanceCategoryFilter((prev) =>
+                    applyMultiFilterSelection(prev, checked, value, maintenanceCategoryFilterOptions)
+                  )
+                }
+                placeholder={t.allCategories}
+                searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+              />
               <SearchableSelectPicker
                 className="report-campus-picker picker-template-list-asset-light"
                 value={maintenanceTypeFilter}
@@ -66741,10 +66769,10 @@ function formatTicketRequestSource(value?: string) {
                 placeholder={lang === "km" ? "ជ្រើសខែ" : "Choose month"}
                 ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
                 showLegend
-                className="maintenance-history-eco-calendar"
+                className="maintenance-history-eco-calendar picker-template-list-asset-light-input"
               />
               <input
-                className="input"
+                className="input picker-template-list-asset-light-input"
                 type="date"
                 value={maintenanceDateFrom}
                 onChange={(e) => {
@@ -66754,7 +66782,7 @@ function formatTicketRequestSource(value?: string) {
                 title={lang === "km" ? "ជ្រើសថ្ងៃចាប់ផ្តើម" : "Choose start date"}
               />
               <input
-                className="input"
+                className="input picker-template-list-asset-light-input"
                 type="date"
                 value={maintenanceDateTo}
                 onChange={(e) => {
@@ -66763,9 +66791,9 @@ function formatTicketRequestSource(value?: string) {
                 }}
                 title={lang === "km" ? "ជ្រើសថ្ងៃបញ្ចប់" : "Choose end date"}
               />
-              <div className="maintenance-history-search-row">
+              <div className="maintenance-history-search-row picker-template-list-asset-light-search">
                 <input
-                  className="input"
+                  className="input picker-template-list-asset-light-input"
                   type="search"
                   placeholder="Search asset, campus, note, by..."
                   value={maintenanceSearchInput}
@@ -75310,14 +75338,14 @@ function formatTicketRequestSource(value?: string) {
                 <h3 className="section-title">{lang === "km" ? "Telegram Alert Target" : "Telegram Alert Target"}</h3>
                 <span className="tiny">
                   {lang === "km"
-                    ? "រក្សាទុក group chat ID ដាច់ដោយឡែកសម្រាប់ bot ធម្មតា និង bot ថែទាំ។"
-                    : "Save separate group chat IDs for the normal alert bot and the maintenance alert bot."}
+                    ? "រក្សាទុក group chat ID ដាច់ដោយឡែកសម្រាប់ bot ធម្មតា, bot ថែទាំ និង bot សម្រាប់ tools verification។"
+                    : "Save separate group chat IDs for the normal alert bot, the maintenance alert bot, and the tools verification route."}
                 </span>
               </div>
               <div className="tiny" style={{ marginBottom: 8 }}>
                 {lang === "km"
-                  ? "Normal alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot"
-                  : "Normal alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot"}
+                  ? "Normal alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot | Tools route: Tools group"
+                  : "Normal alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot | Tools route: Tools group"}
               </div>
               <label className="field">
                 <span>{lang === "km" ? "Telegram Chat ID(s) - Normal Alerts" : "Telegram Chat ID(s) - Normal Alerts"}</span>
@@ -75340,6 +75368,20 @@ function formatTicketRequestSource(value?: string) {
                   value={telegramMaintenanceChatIdsText}
                   onChange={(e) => setTelegramMaintenanceChatIdsText(e.target.value)}
                   placeholder="-1001234567890"
+                  disabled={!isAdmin || busy}
+                />
+              </label>
+              <label className="field" style={{ marginTop: 10 }}>
+                <span>
+                  {lang === "km"
+                    ? "Telegram Chat ID(s) - Tools Verification Alerts"
+                    : "Telegram Chat ID(s) - Tools Verification Alerts"}
+                </span>
+                <input
+                  className="input"
+                  value={telegramToolChatIdsText}
+                  onChange={(e) => setTelegramToolChatIdsText(e.target.value)}
+                  placeholder="-5533753338"
                   disabled={!isAdmin || busy}
                 />
               </label>
@@ -75371,6 +75413,9 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                   <div className="tiny">
                     {lang === "km" ? "Configured targets (maintenance)" : "Configured targets (maintenance)"}: {telegramStatus.maintenanceConfiguredTargets?.length ? telegramStatus.maintenanceConfiguredTargets.join(", ") : "-"}
+                  </div>
+                  <div className="tiny">
+                    {lang === "km" ? "Configured targets (tools)" : "Configured targets (tools)"}: {telegramStatus.toolConfiguredTargets?.length ? telegramStatus.toolConfiguredTargets.join(", ") : "-"}
                   </div>
                   <div className="tiny">
                     {lang === "km" ? "Discovered chats (normal)" : "Discovered chats (normal)"}: {telegramStatus.discoveredTargets.length ? "" : "-"}

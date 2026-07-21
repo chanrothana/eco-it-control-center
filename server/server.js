@@ -297,6 +297,7 @@ const TELEGRAM_MAINTENANCE_BOT_TOKEN = String(
 ).trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 const TELEGRAM_MAINTENANCE_CHAT_ID = String(process.env.TELEGRAM_MAINTENANCE_CHAT_ID || "").trim();
+const TELEGRAM_TOOL_CHAT_ID = String(process.env.TELEGRAM_TOOL_CHAT_ID || "").trim();
 const TELEGRAM_DISCOVER_CHAT_IDS =
   String(process.env.TELEGRAM_DISCOVER_CHAT_IDS || "true").toLowerCase() !== "false";
 const TELEGRAM_CHAT_IDS = Array.from(
@@ -315,6 +316,17 @@ const TELEGRAM_MAINTENANCE_CHAT_IDS = Array.from(
     [
       TELEGRAM_MAINTENANCE_CHAT_ID,
       ...String(process.env.TELEGRAM_MAINTENANCE_CHAT_IDS || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ].filter(Boolean)
+  )
+);
+const TELEGRAM_TOOL_CHAT_IDS = Array.from(
+  new Set(
+    [
+      TELEGRAM_TOOL_CHAT_ID,
+      ...String(process.env.TELEGRAM_TOOL_CHAT_IDS || "")
         .split(",")
         .map((value) => value.trim())
         .filter(Boolean),
@@ -2761,6 +2773,7 @@ function normalizeImportedDb(input) {
   const inventoryApprovalRouting = normalizeInventoryApprovalRoutingMap(settings.inventoryApprovalRouting);
   const telegramChatIds = normalizeTelegramChatIds(settings.telegramChatIds);
   const telegramMaintenanceChatIds = normalizeTelegramChatIds(settings.telegramMaintenanceChatIds);
+  const telegramToolChatIds = normalizeTelegramChatIds(settings.telegramToolChatIds);
   const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
   const inventoryTxns = normalizeInventoryTxns(settings.inventoryTxns);
   const toolReviewReports = normalizeToolReviewReports(settings.toolReviewReports);
@@ -2815,6 +2828,7 @@ function normalizeImportedDb(input) {
       inventoryApprovalRouting,
       telegramChatIds,
       telegramMaintenanceChatIds,
+      telegramToolChatIds,
       inventoryItems,
       inventoryTxns,
       toolReviewReports,
@@ -3374,18 +3388,36 @@ function resolveTelegramConfiguredChatIds(db, overrideChatIds = [], kind = "defa
       ? db.settings
       : {};
   const primarySettingsTargets = normalizeTelegramChatIds(
-    kind === "maintenance" ? settings.telegramMaintenanceChatIds : settings.telegramChatIds
+    kind === "maintenance"
+      ? settings.telegramMaintenanceChatIds
+      : kind === "tools"
+        ? settings.telegramToolChatIds
+        : settings.telegramChatIds
   );
-  const fallbackSettingsTargets =
-    kind === "maintenance" && !primarySettingsTargets.length
+  const fallbackSettingsTargets = !primarySettingsTargets.length
+    ? kind === "maintenance"
       ? normalizeTelegramChatIds(settings.telegramChatIds)
-      : [];
+      : kind === "tools"
+        ? [
+            ...normalizeTelegramChatIds(settings.telegramMaintenanceChatIds),
+            ...normalizeTelegramChatIds(settings.telegramChatIds),
+          ]
+        : []
+    : [];
   const explicitTargets = normalizeTelegramChatIds(overrideChatIds);
-  const primaryEnvTargets = kind === "maintenance" ? TELEGRAM_MAINTENANCE_CHAT_IDS : TELEGRAM_CHAT_IDS;
-  const fallbackEnvTargets =
-    kind === "maintenance" && !primaryEnvTargets.length
+  const primaryEnvTargets =
+    kind === "maintenance"
+      ? TELEGRAM_MAINTENANCE_CHAT_IDS
+      : kind === "tools"
+        ? TELEGRAM_TOOL_CHAT_IDS
+        : TELEGRAM_CHAT_IDS;
+  const fallbackEnvTargets = !primaryEnvTargets.length
+    ? kind === "maintenance"
       ? TELEGRAM_CHAT_IDS
-      : [];
+      : kind === "tools"
+        ? [...TELEGRAM_MAINTENANCE_CHAT_IDS, ...TELEGRAM_CHAT_IDS]
+        : []
+    : [];
   return Array.from(
     new Set([
       ...explicitTargets,
@@ -3473,7 +3505,11 @@ async function sendTelegramMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
       ? Boolean(options.includeResults)
       : false;
-  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds);
+  const kind =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "kind")
+      ? toText(options.kind).trim().toLowerCase() || "default"
+      : "default";
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, kind);
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
   telegramLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
@@ -3549,7 +3585,11 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
       : [];
-  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds);
+  const kind =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "kind")
+      ? toText(options.kind).trim().toLowerCase() || "default"
+      : "default";
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, kind);
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
   telegramLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
@@ -4023,15 +4063,17 @@ async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) 
       db,
       photoUrl: photoAlerts[0] ? photoAlerts[0].media : "",
       includeResults: true,
+      kind: "tools",
     });
     sent = Boolean(report && report.ok);
   } else {
     report = await sendTelegramMessage(text, {
       db,
       includeResults: true,
+      kind: "tools",
     });
     sent = Boolean(report && report.ok);
-    const mediaReport = await sendTelegramMediaGroup(photoAlerts, { db });
+    const mediaReport = await sendTelegramMediaGroup(photoAlerts, { db, kind: "tools" });
     sent = Boolean(mediaReport) || sent;
   }
   return {
@@ -8095,6 +8137,7 @@ const server = http.createServer(async (req, res) => {
         hasMaintenanceBotToken: Boolean(TELEGRAM_MAINTENANCE_BOT_TOKEN),
         configuredTargets: resolveTelegramConfiguredChatIds(db),
         maintenanceConfiguredTargets: resolveTelegramConfiguredChatIds(db, [], "maintenance"),
+        toolConfiguredTargets: resolveTelegramConfiguredChatIds(db, [], "tools"),
         discoverEnabled: TELEGRAM_DISCOVER_CHAT_IDS,
         discoveredTargets,
         maintenanceDiscoveredTargets,
@@ -8471,6 +8514,10 @@ const server = http.createServer(async (req, res) => {
         incoming && Object.prototype.hasOwnProperty.call(incoming, "telegramMaintenanceChatIds")
           ? normalizeTelegramChatIds(incoming.telegramMaintenanceChatIds)
           : normalizeTelegramChatIds(current.telegramMaintenanceChatIds);
+      const nextTelegramToolChatIds =
+        incoming && Object.prototype.hasOwnProperty.call(incoming, "telegramToolChatIds")
+          ? normalizeTelegramChatIds(incoming.telegramToolChatIds)
+          : normalizeTelegramChatIds(current.telegramToolChatIds);
       const nextInventoryItems =
         incoming && Object.prototype.hasOwnProperty.call(incoming, "inventoryItems")
           ? normalizeInventoryItems(incoming.inventoryItems)
@@ -8572,6 +8619,7 @@ const server = http.createServer(async (req, res) => {
         inventoryApprovalRouting: nextInventoryApprovalRouting,
         telegramChatIds: nextTelegramChatIds,
         telegramMaintenanceChatIds: nextTelegramMaintenanceChatIds,
+        telegramToolChatIds: nextTelegramToolChatIds,
         inventoryItems: nextInventoryItems,
         inventoryTxns: nextInventoryTxns,
         toolReviewReports: nextToolReviewReports,
