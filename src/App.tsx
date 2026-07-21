@@ -45025,7 +45025,7 @@ export default function App() {
           ...(reportInventoryComparisonCampuses.map((campus) => rentalPrinterCampusLabel(campus))),
           lang === "km" ? "ស្តុកសរុប" : "Total Stock",
         ];
-        rows = reportInventoryComparisonRows.map((row) => [
+        rows = sortedReportInventoryComparisonRows.map((row) => [
           row.itemName,
           ...reportInventoryComparisonCampuses.map((campus) => {
             const match = row.campusStocks.find((entry) => entry.campusName === campus);
@@ -45395,10 +45395,10 @@ export default function App() {
       reportType === "inventory_balance"
         ? (() => {
             if (reportInventoryViewMode === "campus_compare") {
-              if (!reportInventoryComparisonRows.length) {
+              if (!sortedReportInventoryComparisonRows.length) {
                 return `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
               }
-              return reportInventoryComparisonRows
+              return sortedReportInventoryComparisonRows
                 .map((row, index) => {
                   const campusCells = reportInventoryComparisonCampuses
                     .map((campus) => {
@@ -72265,8 +72265,8 @@ function formatTicketRequestSource(value?: string) {
                   <>
                     {isPhoneView ? (
                       <div className="report-card-list" style={{ marginTop: 12 }}>
-                        {reportInventoryComparisonRows.length ? (
-                          reportInventoryComparisonRows.map((row) => (
+                        {sortedReportInventoryComparisonRows.length ? (
+                          sortedReportInventoryComparisonRows.map((row) => (
                             <article key={`report-inventory-compare-mobile-${row.itemKey}`} className="report-card report-inventory-mobile-card">
                               <div className="report-card-head report-inventory-mobile-head">
                                 <div className="report-card-photo">
