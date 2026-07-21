@@ -3301,13 +3301,15 @@ function stripTelegramHtml(value) {
 
 function sendTelegramMessageToChat(chatId, text, photoUrl = "", botToken = TELEGRAM_BOT_TOKEN, parseMode = "") {
   return new Promise((resolve) => {
-    if (!toText(chatId) || !toText(text)) return resolve({ ok: false, chatId: toText(chatId), statusCode: 0, body: "" });
+    if (!toText(chatId) || (!toText(text) && !toText(photoUrl))) {
+      return resolve({ ok: false, chatId: toText(chatId), statusCode: 0, body: "" });
+    }
     const method = toText(photoUrl) ? "sendPhoto" : "sendMessage";
     const payload = toText(photoUrl)
       ? {
           chat_id: toText(chatId),
           photo: toText(photoUrl),
-          caption: toText(text).slice(0, 1024),
+          ...(toText(text) ? { caption: toText(text).slice(0, 1024) } : {}),
           ...(toText(parseMode) ? { parse_mode: toText(parseMode) } : {}),
         }
       : {
@@ -3495,22 +3497,22 @@ async function sendTelegramMediaGroupToChatWithRetry(chatId, mediaItems = [], at
 }
 
 async function sendTelegramMessage(text, options = {}) {
-  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || !toText(text)) {
+  const photoUrl =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoUrl")
+      ? toText(options.photoUrl)
+      : "";
+  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || (!toText(text) && !photoUrl)) {
     telegramLastSendReport = {
       at: new Date().toISOString(),
       ok: false,
       successCount: 0,
       targetCount: 0,
       targets: [],
-      errors: ["telegram disabled, token missing, or empty text"],
+      errors: ["telegram disabled, token missing, or empty text/photo"],
     };
     return false;
   }
   const db = options && typeof options === "object" ? options.db : null;
-  const photoUrl =
-    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoUrl")
-      ? toText(options.photoUrl)
-      : "";
   const explicitChatIds =
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
