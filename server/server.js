@@ -295,6 +295,9 @@ const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_MAINTENANCE_BOT_TOKEN = String(
   process.env.TELEGRAM_MAINTENANCE_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || ""
 ).trim();
+const TELEGRAM_TOOL_BOT_TOKEN = String(
+  process.env.TELEGRAM_TOOL_BOT_TOKEN || process.env.TELEGRAM_MAINTENANCE_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || ""
+).trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 const TELEGRAM_MAINTENANCE_CHAT_ID = String(process.env.TELEGRAM_MAINTENANCE_CHAT_ID || "").trim();
 const TELEGRAM_TOOL_CHAT_ID = String(process.env.TELEGRAM_TOOL_CHAT_ID || "").trim();
@@ -526,6 +529,9 @@ if (TELEGRAM_ALERT_ENABLED && (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_IDS.length)
 }
 if (TELEGRAM_ALERT_ENABLED && !TELEGRAM_MAINTENANCE_BOT_TOKEN) {
   console.warn("[ALERT] Maintenance Telegram bot token is missing. Maintenance reminders will fall back to the default bot token.");
+}
+if (TELEGRAM_ALERT_ENABLED && !TELEGRAM_TOOL_BOT_TOKEN) {
+  console.warn("[ALERT] Tools Telegram bot token is missing. Tools alerts will fall back to the maintenance/default bot token.");
 }
 
 function mapDbToSqlRows(db) {
@@ -3439,8 +3445,11 @@ function waitMs(ms) {
 
 function resolveTelegramBotTokenForKind(kind = "default") {
   const normalizedKind = toText(kind).trim().toLowerCase();
-  if (normalizedKind === "maintenance" || normalizedKind === "tools") {
+  if (normalizedKind === "maintenance") {
     return TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
+  }
+  if (normalizedKind === "tools") {
+    return TELEGRAM_TOOL_BOT_TOKEN || TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   }
   return TELEGRAM_BOT_TOKEN;
 }
@@ -8279,6 +8288,7 @@ const server = http.createServer(async (req, res) => {
         enabled: TELEGRAM_ALERT_ENABLED,
         hasBotToken: Boolean(TELEGRAM_BOT_TOKEN),
         hasMaintenanceBotToken: Boolean(TELEGRAM_MAINTENANCE_BOT_TOKEN),
+        hasToolBotToken: Boolean(TELEGRAM_TOOL_BOT_TOKEN),
         configuredTargets: resolveTelegramConfiguredChatIds(db),
         maintenanceConfiguredTargets: resolveTelegramConfiguredChatIds(db, [], "maintenance"),
         toolConfiguredTargets: resolveTelegramConfiguredChatIds(db, [], "tools"),
