@@ -49,6 +49,7 @@ import {
   Webcam,
   Wifi,
   Droplets,
+  Waves,
   Wrench,
   X,
 } from "lucide-react";
@@ -66,6 +67,7 @@ const MAINTENANCE_NOTIFICATION_READ_FALLBACK_KEY = "maintenance_notification_rea
 const DOCUMENT_LIBRARY_FALLBACK_KEY = "it_document_library_v1";
 const ASSET_DATA_REQUEST_TIMEOUT_MS = 45000;
 const SETTINGS_SNAPSHOT_REFRESH_MS = 60000;
+const POOL_TOOL_CAMPUSES = ["Chaktomuk Campus (C2.2)", "Veng Sreng Campus"] as const;
 const TONER_OLD_STATUS_OPTIONS = ["Empty", "Low", "Leaking", "Defective"] as const;
 const SCHEDULE_GROUP_PRESET_OPTIONS = [
   { value: "", en: "Auto by asset type", km: "ស្វ័យប្រវត្តិតាមប្រភេទទ្រព្យ" },
@@ -579,7 +581,7 @@ type StaffUser = {
 type InventoryItem = {
   id: number;
   campus: string;
-  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL";
+  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL";
   itemCode: string;
   itemName: string;
   unit: string;
@@ -2963,17 +2965,20 @@ const INVENTORY_CATEGORY_OPTIONS = [
   { value: "CLEAN_TOOL", label: "Cleaning Tools" },
   { value: "MAINT_TOOL", label: "Maintenance Tools" },
   { value: "GARDEN_TOOL", label: "Garden Tools" },
+  { value: "POOL_TOOL", label: "Pool Tools" },
 ] as const;
 const INVENTORY_REPORT_GROUP_ORDER: InventoryBusinessGroup[] = [
   "SUPPLY",
   "CLEAN_TOOL",
   "MAINT_TOOL",
   "GARDEN_TOOL",
+  "POOL_TOOL",
 ];
 const INVENTORY_REPORT_TOOL_GROUPS: InventoryBusinessGroup[] = [
   "CLEAN_TOOL",
   "MAINT_TOOL",
   "GARDEN_TOOL",
+  "POOL_TOOL",
 ];
 const DEFAULT_TOOL_OWNER_TYPE_OPTIONS: ToolOwnerTypeOption[] = [
   { value: "SCHOOL", label: "School" },
@@ -6067,10 +6072,11 @@ function assetIdCampusCode(campus: string) {
   if (match) return `ECO${match[1]}`;
   return "ECOX";
 }
-function inventoryCategoryCode(category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL") {
+function inventoryCategoryCode(category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL") {
   if (category === "CLEAN_TOOL") return "CT";
   if (category === "MAINT_TOOL") return "MT";
   if (category === "GARDEN_TOOL") return "GT";
+  if (category === "POOL_TOOL") return "PT";
   if (category === "SERVICE_TOOL") return "SP";
   return "CS";
 }
@@ -6177,7 +6183,7 @@ function isPrinterAssetRow(asset: Pick<Asset, "type"> | Pick<PublicQrAsset, "typ
 function isTonerInventoryItemRow(item: Pick<InventoryItem, "itemGroup"> | null | undefined) {
   return String(item?.itemGroup || "").trim().toUpperCase() === "TONER";
 }
-type InventoryBusinessGroup = "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL" | "TONER";
+type InventoryBusinessGroup = "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL" | "TONER";
 function inventoryBusinessGroupValue(
   item: Pick<InventoryItem, "category" | "itemGroup"> | null | undefined
 ): InventoryBusinessGroup {
@@ -6186,6 +6192,7 @@ function inventoryBusinessGroupValue(
   if (category === "CLEAN_TOOL" || category === "SERVICE_TOOL") return "CLEAN_TOOL";
   if (category === "MAINT_TOOL") return "MAINT_TOOL";
   if (category === "GARDEN_TOOL") return "GARDEN_TOOL";
+  if (category === "POOL_TOOL") return "POOL_TOOL";
   return "SUPPLY";
 }
 function inventoryBusinessGroupLabel(value: InventoryBusinessGroup) {
@@ -6197,19 +6204,20 @@ function inventoryBusinessGroupThemeClass(value: InventoryBusinessGroup) {
   if (value === "CLEAN_TOOL") return "inventory-theme-clean-tool";
   if (value === "MAINT_TOOL") return "inventory-theme-maint-tool";
   if (value === "GARDEN_TOOL") return "inventory-theme-garden-tool";
+  if (value === "POOL_TOOL") return "inventory-theme-pool-tool";
   return "inventory-theme-toner";
 }
 function inventoryBusinessGroupHasDailyStockFlow(value: InventoryBusinessGroup) {
   return value === "SUPPLY";
 }
 function inventoryToolGroupNeedsMonthlyReview(value: InventoryBusinessGroup) {
-  return value === "CLEAN_TOOL" || value === "MAINT_TOOL" || value === "GARDEN_TOOL";
+  return value === "CLEAN_TOOL" || value === "MAINT_TOOL" || value === "GARDEN_TOOL" || value === "POOL_TOOL";
 }
 function isInventoryToolCategory(
   value?: InventoryItem["category"] | InventoryBusinessGroup | string
-): value is "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL" {
+): value is "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL" {
   const category = String(value || "").trim().toUpperCase();
-  return category === "CLEAN_TOOL" || category === "MAINT_TOOL" || category === "GARDEN_TOOL" || category === "SERVICE_TOOL";
+  return category === "CLEAN_TOOL" || category === "MAINT_TOOL" || category === "GARDEN_TOOL" || category === "POOL_TOOL" || category === "SERVICE_TOOL";
 }
 function toolOwnerTypeLabel(value?: string) {
   const normalized = String(value || "").trim().toUpperCase();
@@ -6217,11 +6225,12 @@ function toolOwnerTypeLabel(value?: string) {
 }
 function normalizeInventoryEditableCategory(
   value?: InventoryItem["category"] | InventoryBusinessGroup | string
-): "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL" {
+): "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL" {
   const category = String(value || "").trim().toUpperCase();
   if (category === "SERVICE_TOOL") return "CLEAN_TOOL";
   if (category === "MAINT_TOOL") return "MAINT_TOOL";
   if (category === "GARDEN_TOOL") return "GARDEN_TOOL";
+  if (category === "POOL_TOOL") return "POOL_TOOL";
   if (category === "CLEAN_TOOL") return "CLEAN_TOOL";
   return "SUPPLY";
 }
@@ -6518,7 +6527,7 @@ function isCleaningSupplyItem(item: Pick<InventoryItem, "category" | "itemName" 
 function calcNextInventorySeq(
   list: InventoryItem[],
   campus: string,
-  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL"
+  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL"
 ) {
   const campusCode = inventoryRecordCampusCode(campus);
   const catCode = inventoryCategoryCode(category);
@@ -6535,7 +6544,7 @@ function calcNextInventorySeq(
 function buildInventoryItemCode(
   list: InventoryItem[],
   campus: string,
-  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL"
+  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL"
 ) {
   const campusCode = inventoryRecordCampusCode(campus);
   const catCode = inventoryCategoryCode(category);
@@ -6547,7 +6556,7 @@ function buildClonedInventoryItemCode(
   list: InventoryItem[],
   sourceItemCode: string,
   targetCampus: string,
-  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL"
+  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL"
 ) {
   const campusCode = inventoryRecordCampusCode(targetCampus);
   const catCode = inventoryCategoryCode(category);
@@ -10748,14 +10757,14 @@ export default function App() {
     note: string;
   }>(null);
   const [reportInventoryGroupFilter, setReportInventoryGroupFilter] = useState<
-    "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL"
+    "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL"
   >("CLEAN_TOOL");
   const [reportInventoryCampusFilter, setReportInventoryCampusFilter] = useState("ALL");
   const [reportInventoryPropertyFilter, setReportInventoryPropertyFilter] = useState<ReportInventoryPropertyFilter>("AUTO");
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
-      group: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "TONER",
+      group: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "TONER",
       view?: "dashboard" | "items" | "list" | "daily" | "stock" | "review"
     ) => {
       startTabTransition(() => {
@@ -10867,6 +10876,12 @@ export default function App() {
         onSelect: () => openInventorySection("GARDEN_TOOL", "review"),
       },
       {
+        id: "inventory-pool-tool" as const,
+        label: lang === "km" ? "ឧបករណ៍អាងទឹក" : "Pool Tools",
+        active: tab === "inventory" && inventoryDashboardGroup === "POOL_TOOL",
+        onSelect: () => openInventorySection("POOL_TOOL", "review"),
+      },
+      {
         id: "verification" as const,
         label: lang === "km" ? "ពិនិត្យទ្រព្យ" : "Asset Check",
         active: tab === "verification",
@@ -10950,18 +10965,20 @@ export default function App() {
               : []),
           ];
         case "inventory":
-          const inventoryNavLabelsKm: Record<"SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "TONER", string> = {
+          const inventoryNavLabelsKm: Record<"SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "TONER", string> = {
             SUPPLY: "សម្ភារៈសម្អាត",
             CLEAN_TOOL: "ឧបករណ៍សម្អាត",
             MAINT_TOOL: "ឧបករណ៍ថែទាំ",
             GARDEN_TOOL: "ឧបករណ៍ថែសួន",
+            POOL_TOOL: "ឧបករណ៍អាងទឹក",
             TONER: "ទឹកថ្នាំព្រីនធ័រ",
           };
-          const inventorySidebarGroups: Array<"SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "TONER"> = [
+          const inventorySidebarGroups: Array<"SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "TONER"> = [
             "SUPPLY",
             "CLEAN_TOOL",
             "MAINT_TOOL",
             "GARDEN_TOOL",
+            "POOL_TOOL",
             "TONER",
           ];
           return inventorySidebarGroups.map((group) => {
@@ -12890,6 +12907,8 @@ export default function App() {
   const [locationPhoto, setLocationPhoto] = useState("");
   const [locationPhotoFileKey, setLocationPhotoFileKey] = useState(0);
   const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
+  const [locationListCampusFilter, setLocationListCampusFilter] = useState("ALL");
+  const [locationListSearchInput, setLocationListSearchInput] = useState("");
   const [campusEditCode, setCampusEditCode] = useState("C1");
   const [campusEditName, setCampusEditName] = useState("Samdach Pan Campus");
   const [campusDraftNames, setCampusDraftNames] = useState<Record<string, string>>(() => {
@@ -14509,7 +14528,7 @@ export default function App() {
   const [inventorySearch, setInventorySearch] = useState("");
   const [inventoryItemForm, setInventoryItemForm] = useState({
     campus: CAMPUS_LIST[0],
-    category: "SUPPLY" as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "SERVICE_TOOL",
+    category: "SUPPLY" as "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL",
     itemCode: "",
     itemName: "",
     unit: "pcs",
@@ -17782,7 +17801,8 @@ export default function App() {
           reportInventoryGroupFilter === "ALL" ||
           reportInventoryGroupFilter === "CLEAN_TOOL" ||
           reportInventoryGroupFilter === "MAINT_TOOL" ||
-          reportInventoryGroupFilter === "GARDEN_TOOL";
+          reportInventoryGroupFilter === "GARDEN_TOOL" ||
+          reportInventoryGroupFilter === "POOL_TOOL";
         const rowGroup = inventoryBusinessGroupValue(row);
         if (reportInventoryGroupFilter === "ALL") {
           if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
@@ -17791,7 +17811,11 @@ export default function App() {
         } else if (rowGroup !== reportInventoryGroupFilter) {
           return false;
         }
-        if (reportInventoryCampusFilter !== "ALL" && String(row.campus || "") !== reportInventoryCampusFilter) {
+        const rowCampus = String(row.campus || "").trim();
+        if (reportInventoryGroupFilter === "POOL_TOOL" && !POOL_TOOL_CAMPUSES.includes(rowCampus as typeof POOL_TOOL_CAMPUSES[number])) {
+          return false;
+        }
+        if (reportInventoryCampusFilter !== "ALL" && rowCampus !== reportInventoryCampusFilter) {
           return false;
         }
         if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
@@ -17814,13 +17838,18 @@ export default function App() {
           reportInventoryGroupFilter === "ALL" ||
           reportInventoryGroupFilter === "CLEAN_TOOL" ||
           reportInventoryGroupFilter === "MAINT_TOOL" ||
-          reportInventoryGroupFilter === "GARDEN_TOOL";
+          reportInventoryGroupFilter === "GARDEN_TOOL" ||
+          reportInventoryGroupFilter === "POOL_TOOL";
         const rowGroup = inventoryBusinessGroupValue(row);
         if (reportInventoryGroupFilter === "ALL") {
           if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
             return false;
           }
         } else if (rowGroup !== reportInventoryGroupFilter) {
+          return false;
+        }
+        const rowCampus = String(row.campus || "").trim();
+        if (reportInventoryGroupFilter === "POOL_TOOL" && !POOL_TOOL_CAMPUSES.includes(rowCampus as typeof POOL_TOOL_CAMPUSES[number])) {
           return false;
         }
         if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
@@ -18081,6 +18110,7 @@ export default function App() {
       if (reportInventoryGroupFilter === "CLEAN_TOOL") return "ឧបករណ៍សម្អាត";
       if (reportInventoryGroupFilter === "MAINT_TOOL") return "ឧបករណ៍ថែទាំ";
       if (reportInventoryGroupFilter === "GARDEN_TOOL") return "ឧបករណ៍ថែសួន";
+      if (reportInventoryGroupFilter === "POOL_TOOL") return "ឧបករណ៍អាងទឹក";
       if (reportInventoryGroupFilter === "SUPPLY") return "សម្ភារៈសម្អាត";
       if (reportInventoryGroupFilter === "TONER") return "ទឹកថ្នាំម៉ាស៊ីនបោះពុម្ព";
     }
@@ -18099,14 +18129,18 @@ export default function App() {
     [lang]
   );
   const reportInventoryCampusOptions = useMemo(() => {
+    if (reportInventoryGroupFilter === "POOL_TOOL") {
+      return allowedCampusOptions.filter((campus) => POOL_TOOL_CAMPUSES.includes(campus as typeof POOL_TOOL_CAMPUSES[number]));
+    }
     return allowedCampusOptions;
-  }, [allowedCampusOptions]);
+  }, [allowedCampusOptions, reportInventoryGroupFilter]);
   const reportInventoryGroupTabs = useMemo(
     () => [
       { value: "SUPPLY" as const, label: lang === "km" ? "សម្ភារៈសម្អាត" : "Cleaning Supplies" },
       { value: "CLEAN_TOOL" as const, label: lang === "km" ? "ឧបករណ៍សម្អាត" : "Cleaning Tools" },
       { value: "MAINT_TOOL" as const, label: lang === "km" ? "ឧបករណ៍ថែទាំ" : "Maintenance Tools" },
       { value: "GARDEN_TOOL" as const, label: lang === "km" ? "ឧបករណ៍ថែសួន" : "Garden Tools" },
+      { value: "POOL_TOOL" as const, label: lang === "km" ? "ឧបករណ៍អាងទឹក" : "Pool Tools" },
     ],
     [lang]
   );
@@ -18120,6 +18154,8 @@ export default function App() {
         return <Wrench size={16} aria-hidden={true} />;
       case "GARDEN_TOOL":
         return <Flame size={16} aria-hidden={true} />;
+      case "POOL_TOOL":
+        return <Waves size={16} aria-hidden={true} />;
       default:
         return <Boxes size={16} aria-hidden={true} />;
     }
@@ -18129,7 +18165,8 @@ export default function App() {
       reportInventoryGroupFilter === "ALL" ||
       reportInventoryGroupFilter === "CLEAN_TOOL" ||
       reportInventoryGroupFilter === "MAINT_TOOL" ||
-      reportInventoryGroupFilter === "GARDEN_TOOL",
+      reportInventoryGroupFilter === "GARDEN_TOOL" ||
+      reportInventoryGroupFilter === "POOL_TOOL",
     [reportInventoryGroupFilter]
   );
   const reportInventorySplitByCategoryPages = useMemo(
@@ -18182,12 +18219,19 @@ export default function App() {
       setReportInventoryGroupFilter("CLEAN_TOOL");
     }
   }, [reportInventoryGroupFilter]);
+  useEffect(() => {
+    if (reportInventoryGroupFilter !== "POOL_TOOL") return;
+    if (reportInventoryCampusFilter === "ALL") return;
+    if (reportInventoryCampusOptions.includes(reportInventoryCampusFilter)) return;
+    setReportInventoryCampusFilter("ALL");
+  }, [reportInventoryCampusFilter, reportInventoryCampusOptions, reportInventoryGroupFilter]);
   const reportInventoryToolPages = useMemo(() => {
     if (!reportInventorySplitByCategoryPages) return [];
 
     const cleaningRows = reportInventoryRows.filter((row) => inventoryBusinessGroupValue(row) === "CLEAN_TOOL");
     const maintenanceRows = reportInventoryRows.filter((row) => inventoryBusinessGroupValue(row) === "MAINT_TOOL");
     const gardenRows = reportInventoryRows.filter((row) => inventoryBusinessGroupValue(row) === "GARDEN_TOOL");
+    const poolRows = reportInventoryRows.filter((row) => inventoryBusinessGroupValue(row) === "POOL_TOOL");
 
     return [
       {
@@ -18215,6 +18259,15 @@ export default function App() {
         rows: gardenRows,
         sections: [
           { key: "garden", title: "Garden Tools", rows: gardenRows },
+        ],
+      },
+      {
+        key: "pool",
+        title: "Pool Tools",
+        description: "Pool tools listed on their own report page for pool campuses.",
+        rows: poolRows,
+        sections: [
+          { key: "pool", title: "Pool Tools", rows: poolRows },
         ],
       },
     ].filter((page) => page.rows.length);
@@ -20612,9 +20665,133 @@ export default function App() {
       .slice(0, 6);
   }, [activePoolCleaningSchedules, todayYmd]);
 
-  const setupLocations = useMemo(
-    () => sortLocationEntriesByName(locations.filter((l) => l.campus === locationCampus)),
-    [locations, locationCampus]
+  const setupLocations = useMemo(() => {
+    const search = locationListSearchInput.trim().toLowerCase();
+    return sortLocationEntriesByName(
+      locations.filter((loc) => {
+        if (locationListCampusFilter !== "ALL" && loc.campus !== locationListCampusFilter) return false;
+        if (!search) return true;
+        const typeLabel = isClassroomLocationLike(loc) ? "classroom" : "general";
+        return [
+          reportLocationName(loc.name),
+          String(loc.notes || ""),
+          String(loc.campus || ""),
+          String(loc.currentStudents || ""),
+          typeLabel,
+          campusLabel(loc.campus),
+        ].some((value) => String(value || "").toLowerCase().includes(search));
+      })
+    );
+  }, [locations, locationListCampusFilter, locationListSearchInput, campusNames]);
+  const locationCampusPickerOptions = useMemo(
+    () => buildCampusPickerOptions(campusOptions),
+    [campusOptions]
+  );
+  const locationListCampusPickerOptions = useMemo(
+    () => [{ value: "ALL", label: "All Campuses", searchText: "all campuses" }, ...locationCampusPickerOptions],
+    [locationCampusPickerOptions]
+  );
+  const locationFormFields = (
+    <>
+      <label className="field">
+        <span>{t.campus}</span>
+        <LocationPicker
+          value={locationCampus}
+          onChange={setLocationCampus}
+          options={locationCampusPickerOptions}
+          placeholder="Select campus"
+          searchPlaceholder="Search campus..."
+          emptyText="No campus found."
+        />
+      </label>
+      <label className="field">
+        <span>{t.locationName}</span>
+        <input className="input" value={locationName} onChange={(e) => setLocationName(e.target.value)} />
+      </label>
+      <label className="field">
+        <span>Classroom Record</span>
+        <select
+          className="input"
+          value={locationIsClassroom ? "YES" : "NO"}
+          onChange={(e) => setLocationIsClassroom(e.target.value === "YES")}
+        >
+          <option value="NO">General Location</option>
+          <option value="YES">Classroom</option>
+        </select>
+      </label>
+      <label className="field">
+        <span>Current Students</span>
+        <input
+          className="input"
+          type="number"
+          min="0"
+          value={locationCurrentStudents}
+          onChange={(e) => setLocationCurrentStudents(e.target.value)}
+          placeholder="Current class size"
+        />
+      </label>
+      <label className="field field-wide">
+        <span>Notes</span>
+        <input className="input" value={locationNotes} onChange={(e) => setLocationNotes(e.target.value)} />
+      </label>
+      <label className="field field-wide">
+        <span>Location Photo</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input
+            key={locationPhotoFileKey}
+            type="file"
+            accept="image/*"
+            className="input"
+            onChange={onLocationPhotoFile}
+          />
+          <div className="tiny">
+            {locationIsClassroom
+              ? "Upload a real classroom photo. This is optional. If empty, Classroom Gallery will use the default classroom image."
+              : "Upload a real room/location photo if you want. This is optional."}
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div className="tiny" style={{ marginBottom: 6 }}>Gallery Preview</div>
+              {String(locationPhoto || "").trim() ? (
+                <img
+                  loading="lazy"
+                  decoding="async"
+                  src={String(locationPhoto || "").trim()}
+                  alt="location-preview"
+                  className="photo-preview"
+                  style={{ width: 128, height: 96, objectFit: "cover" }}
+                />
+              ) : locationIsClassroom ? (
+                <img
+                  loading="lazy"
+                  decoding="async"
+                  src={DEFAULT_CLASSROOM_IMAGE_URL}
+                  alt="classroom-preview"
+                  className="photo-preview"
+                  style={{ width: 128, height: 96, objectFit: "cover" }}
+                />
+              ) : (
+                <div className="photo-placeholder" style={{ width: 128, height: 96 }}>
+                  {t.noPhoto}
+                </div>
+              )}
+            </div>
+            {String(locationPhoto || "").trim() ? (
+              <button
+                type="button"
+                className="tab btn-small"
+                onClick={() => {
+                  setLocationPhoto("");
+                  setLocationPhotoFileKey((key) => key + 1);
+                }}
+              >
+                Remove uploaded photo
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </label>
+    </>
   );
 
   const isInactiveTabletCreate = useMemo(() => {
@@ -28874,11 +29051,12 @@ export default function App() {
   function normalizeInventoryBulkCategory(value: string) {
     const text = String(value || "").trim().toUpperCase();
     if (!text) return inventoryItemForm.category;
-    if (text === "SUPPLY" || text === "CLEAN_TOOL" || text === "MAINT_TOOL" || text === "GARDEN_TOOL" || text === "SERVICE_TOOL") return text;
+    if (text === "SUPPLY" || text === "CLEAN_TOOL" || text === "MAINT_TOOL" || text === "GARDEN_TOOL" || text === "POOL_TOOL" || text === "SERVICE_TOOL") return text;
     if (text === "CLEANING SUPPLIES") return "SUPPLY";
     if (text === "CLEANING TOOLS") return "CLEAN_TOOL";
     if (text === "MAINTENANCE TOOLS") return "MAINT_TOOL";
     if (text === "GARDEN TOOLS") return "GARDEN_TOOL";
+    if (text === "POOL TOOLS") return "POOL_TOOL";
     if (text === "SERVICE PROVIDER TOOLS" || text === "SERVICE TOOLS") return "SERVICE_TOOL";
     return inventoryItemForm.category;
   }
@@ -31488,13 +31666,7 @@ export default function App() {
         `${nextLocationCampus} | ${nextLocationName}`
       );
 
-      setLocationName("");
-      setLocationIsClassroom(false);
-      setLocationCurrentStudents("");
-      setLocationNotes("");
-      setLocationPhoto("");
-      setLocationPhotoFileKey((key) => key + 1);
-      setEditingLocationId(null);
+      resetLocationForm();
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save location");
@@ -31515,7 +31687,12 @@ export default function App() {
   }
 
   function cancelEditLocation() {
+    resetLocationForm();
+  }
+
+  function resetLocationForm() {
     setEditingLocationId(null);
+    setLocationCampus(CAMPUS_LIST[0]);
     setLocationName("");
     setLocationIsClassroom(false);
     setLocationCurrentStudents("");
@@ -45930,23 +46107,23 @@ export default function App() {
       reportType === "asset_full_record"
         ? (() => {
             const assetPhoto = toPrintablePhotoUrl(String(focusedReportAsset?.photo || ""));
-            const maintenanceHeaders = ["No.", "Date", "Type", "Status", "Condition", "By", "Note"];
+            const maintenanceHeaders = ["No.", "Date", "Type", "Status", "Condition", "By", "Note", "After Photo"];
             const maintenanceDataRows = assetFullRecordMaintenanceRows.map((row, index) => [
               String(index + 1),
-              `${formatDate(row.date || "-")}${
-                maintenanceEntryDisplayTime(row) ? ` ${formatTimeOnly(maintenanceEntryDisplayTime(row))}` : ""
-              }${isMaintenanceEntryEdited(row) ? " (edited)" : ""}`,
+              `${formatDate(row.date || "-")}${maintenanceEntryDisplayTime(row) ? ` ${formatTimeOnly(maintenanceEntryDisplayTime(row))}` : ""}${isMaintenanceEntryEdited(row) ? " (edited)" : ""}`,
               row.type || "-",
               row.completion || "-",
               row.condition || "-",
               row.by || "-",
               row.note || "-",
+              String(row.afterPhotos?.[0] || row.photo || "").trim() ? "Photo" : "-",
             ]);
             const maintenanceColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(maintenanceHeaders, maintenanceDataRows));
             const maintenanceRowsHtml = assetFullRecordMaintenanceRows.length
               ? assetFullRecordMaintenanceRows
-                  .map(
-                    (row, index) => `<tr>
+                  .map((row, index) => {
+                    const maintenanceAfterPhoto = toPrintablePhotoUrl(String(row.afterPhotos?.[0] || row.photo || "").trim());
+                    return `<tr>
                       <td>${index + 1}</td>
                       <td>${escapeHtml(
                         `${formatDate(row.date || "-")}${
@@ -45958,11 +46135,16 @@ export default function App() {
                       <td>${escapeHtml(row.condition || "-")}</td>
                       <td>${escapeHtml(row.by || "-")}</td>
                       <td>${escapeHtml(row.note || "-")}</td>
-                    </tr>`
-                  )
+                      <td>${
+                        maintenanceAfterPhoto
+                          ? `<img loading="lazy" decoding="async" src="${escapeHtml(maintenanceAfterPhoto)}" alt="maintenance-after-${index + 1}" style="width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid #cfded0;" />`
+                          : "-"
+                      }</td>
+                    </tr>`;
+                  })
                   .join("")
-              : `<tr><td colspan="7">No maintenance history.</td></tr>`;
-            const transferHeaders = ["No.", "Date", "From Campus", "From Location", "To Campus", "To Location", "To Staff", "By", "Reason"];
+              : `<tr><td colspan="8">No maintenance history.</td></tr>`;
+            const transferHeaders = ["No.", "Date", "From Campus", "From Location", "To Campus", "To Location", "To Staff", "By", "Reason", "Transfer Photo"];
             const transferDataRows = assetFullRecordTransferRows.map((row, index) => [
               String(index + 1),
               formatDate(row.date || "-"),
@@ -45973,12 +46155,14 @@ export default function App() {
               row.toUser || "-",
               row.by || "-",
               row.reason || "-",
+              String(row.transferPhoto || "").trim() ? "Photo" : "-",
             ]);
             const transferColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(transferHeaders, transferDataRows));
             const transferRowsHtml = assetFullRecordTransferRows.length
               ? assetFullRecordTransferRows
-                  .map(
-                    (row, index) => `<tr>
+                  .map((row, index) => {
+                    const transferPhoto = toPrintablePhotoUrl(String(row.transferPhoto || "").trim());
+                    return `<tr>
                       <td>${index + 1}</td>
                       <td>${escapeHtml(formatDate(row.date || "-"))}</td>
                       <td>${escapeHtml(reportCampusName(row.fromCampus))}</td>
@@ -45988,10 +46172,15 @@ export default function App() {
                       <td>${escapeHtml(row.toUser || "-")}</td>
                       <td>${escapeHtml(row.by || "-")}</td>
                       <td>${escapeHtml(row.reason || "-")}</td>
-                    </tr>`
-                  )
+                      <td>${
+                        transferPhoto
+                          ? `<img loading="lazy" decoding="async" src="${escapeHtml(transferPhoto)}" alt="transfer-${index + 1}" style="width:42px;height:42px;object-fit:cover;border-radius:8px;border:1px solid #cfded0;" />`
+                          : "-"
+                      }</td>
+                    </tr>`;
+                  })
                   .join("")
-              : `<tr><td colspan="9">No transfer history.</td></tr>`;
+              : `<tr><td colspan="10">No transfer history.</td></tr>`;
             const verificationHeaders = ["No.", "Date", "Result", "Condition", "By", "Note"];
             const verificationDataRows = assetFullRecordVerificationRows.map((row, index) => [
               String(index + 1),
@@ -72850,6 +73039,7 @@ function formatTicketRequestSource(value?: string) {
                             <th>Cost</th>
                             <th>By</th>
                             <th>Note</th>
+                            <th>After Photo</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -72868,11 +73058,17 @@ function formatTicketRequestSource(value?: string) {
                                 <td>{row.cost || "-"}</td>
                                 <td>{row.by || "-"}</td>
                                 <td>{row.note || "-"}</td>
+                                <td className="report-full-record-photo-cell">
+                                  {renderAssetPhoto(
+                                    String(row.afterPhotos?.[0] || row.photo || "").trim(),
+                                    `maintenance-after-${row.id}`
+                                  )}
+                                </td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={8}>No maintenance history.</td>
+                              <td colSpan={9}>No maintenance history.</td>
                             </tr>
                           )}
                         </tbody>
@@ -72899,6 +73095,7 @@ function formatTicketRequestSource(value?: string) {
                             <th>To Staff</th>
                             <th>By</th>
                             <th>Reason</th>
+                            <th>Transfer Photo</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -72915,11 +73112,14 @@ function formatTicketRequestSource(value?: string) {
                                 <td>{row.toUser || "-"}</td>
                                 <td>{row.by || "-"}</td>
                                 <td>{row.reason || "-"}</td>
+                                <td className="report-full-record-photo-cell">
+                                  {renderAssetPhoto(String(row.transferPhoto || "").trim(), `${row.assetId}-transfer-photo-${index}`)}
+                                </td>
                               </tr>
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={10}>No transfer history.</td>
+                              <td colSpan={11}>No transfer history.</td>
                             </tr>
                           )}
                         </tbody>
@@ -76297,104 +76497,7 @@ function formatTicketRequestSource(value?: string) {
           <section className="panel">
             <h2>{t.locationSetup}</h2>
             <div className="form-grid">
-              <label className="field">
-                <span>{t.campus}</span>
-                <LocationPicker
-                  value={locationCampus}
-                  onChange={setLocationCampus}
-                  options={buildCampusPickerOptions(campusOptions)}
-                  placeholder="Select campus"
-                  searchPlaceholder="Search campus..."
-                  emptyText="No campus found."
-                />
-              </label>
-              <label className="field">
-                <span>{t.locationName}</span>
-                <input className="input" value={locationName} onChange={(e) => setLocationName(e.target.value)} />
-              </label>
-              <label className="field">
-                <span>Classroom Record</span>
-                <select
-                  className="input"
-                  value={locationIsClassroom ? "YES" : "NO"}
-                  onChange={(e) => setLocationIsClassroom(e.target.value === "YES")}
-                >
-                  <option value="NO">General Location</option>
-                  <option value="YES">Classroom</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Current Students</span>
-                <input
-                  className="input"
-                  type="number"
-                  min="0"
-                  value={locationCurrentStudents}
-                  onChange={(e) => setLocationCurrentStudents(e.target.value)}
-                  placeholder="Current class size"
-                />
-              </label>
-              <label className="field field-wide">
-                <span>Notes</span>
-                <input className="input" value={locationNotes} onChange={(e) => setLocationNotes(e.target.value)} />
-              </label>
-              <label className="field field-wide">
-                <span>Location Photo</span>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <input
-                    key={locationPhotoFileKey}
-                    type="file"
-                    accept="image/*"
-                    className="input"
-                    onChange={onLocationPhotoFile}
-                  />
-                  <div className="tiny">
-                    {locationIsClassroom
-                      ? "Upload a real classroom photo. This is optional. If empty, Classroom Gallery will use the default classroom image."
-                      : "Upload a real room/location photo if you want. This is optional."}
-                  </div>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                    <div>
-                      <div className="tiny" style={{ marginBottom: 6 }}>Gallery Preview</div>
-                      {String(locationPhoto || "").trim() ? (
-                        <img
-                          loading="lazy"
-                          decoding="async"
-                          src={String(locationPhoto || "").trim()}
-                          alt="location-preview"
-                          className="photo-preview"
-                          style={{ width: 128, height: 96, objectFit: "cover" }}
-                        />
-                      ) : locationIsClassroom ? (
-                        <img
-                          loading="lazy"
-                          decoding="async"
-                          src={DEFAULT_CLASSROOM_IMAGE_URL}
-                          alt="classroom-preview"
-                          className="photo-preview"
-                          style={{ width: 128, height: 96, objectFit: "cover" }}
-                        />
-                      ) : (
-                        <div className="photo-placeholder" style={{ width: 128, height: 96 }}>
-                          {t.noPhoto}
-                        </div>
-                      )}
-                    </div>
-                    {String(locationPhoto || "").trim() ? (
-                      <button
-                        type="button"
-                        className="tab btn-small"
-                        onClick={() => {
-                          setLocationPhoto("");
-                          setLocationPhotoFileKey((key) => key + 1);
-                        }}
-                      >
-                        Remove uploaded photo
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </label>
+              {locationFormFields}
             </div>
             <div className="asset-actions">
               <div className="tiny">
@@ -76402,13 +76505,35 @@ function formatTicketRequestSource(value?: string) {
                 {locationIsClassroom ? " | Classroom tracking enabled" : ""}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                {editingLocationId ? (
-                  <button className="tab" onClick={cancelEditLocation}>{t.cancelEdit}</button>
-                ) : null}
-                <button className="btn-primary" disabled={busy || !isAdmin} onClick={createOrUpdateLocation}>
-                  {editingLocationId ? t.updateLocation : t.addLocation}
+                <button className="btn-primary" disabled={busy || !isAdmin || editingLocationId !== null} onClick={createOrUpdateLocation}>
+                  {t.addLocation}
                 </button>
               </div>
+            </div>
+            <div className="form-grid setup-location-filter-grid" style={{ marginTop: 12 }}>
+              <label className="field">
+                <span>{t.campus}</span>
+                <LocationPicker
+                  value={locationListCampusFilter}
+                  onChange={setLocationListCampusFilter}
+                  options={locationListCampusPickerOptions}
+                  placeholder="Filter campus"
+                  searchPlaceholder="Search campus..."
+                  emptyText="No campus found."
+                />
+              </label>
+              <label className="field">
+                <span>Search</span>
+                <input
+                  className="input"
+                  value={locationListSearchInput}
+                  onChange={(e) => setLocationListSearchInput(e.target.value)}
+                  placeholder="Search location, notes, type..."
+                />
+              </label>
+            </div>
+            <div className="tiny" style={{ marginTop: 8 }}>
+              Showing {setupLocations.length} location{setupLocations.length === 1 ? "" : "s"}.
             </div>
 
             {isPhoneView ? (
@@ -76496,6 +76621,36 @@ function formatTicketRequestSource(value?: string) {
             )}
           </section>
           )}
+
+          {tab === "setup" && setupView === "locations" && editingLocationId !== null && canAccessMenu("setup.locations", "setup") ? (
+            <div className="modal-backdrop" onClick={() => { if (!busy) cancelEditLocation(); }}>
+              <section className="panel modal-panel user-setup-modal-panel" onClick={(e) => e.stopPropagation()}>
+                <div className="panel-row" style={{ alignItems: "flex-start", marginBottom: 16 }}>
+                  <div>
+                    <div className="tiny" style={{ letterSpacing: "0.14em", textTransform: "uppercase" }}>Location Editor</div>
+                    <h2 style={{ marginBottom: 6 }}>{t.edit} {t.locationSetup}</h2>
+                    <div className="tiny">Update one location in a popup so it is faster and easier to manage.</div>
+                  </div>
+                  <button className="tab" onClick={cancelEditLocation} disabled={busy}>Close</button>
+                </div>
+                <div className="form-grid">
+                  {locationFormFields}
+                </div>
+                <div className="asset-actions">
+                  <div className="tiny">
+                    {campusLabel(locationCampus)}
+                    {locationIsClassroom ? " | Classroom tracking enabled" : ""}
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="tab" onClick={cancelEditLocation} disabled={busy}>{t.cancelEdit}</button>
+                    <button className="btn-primary" disabled={busy || !isAdmin} onClick={createOrUpdateLocation}>
+                      {t.updateLocation}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          ) : null}
 
           {tab === "setup" && setupView === "calendar" && canAccessMenu("setup.calendar", "setup") && (
           <section className="panel">
