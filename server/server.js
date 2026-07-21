@@ -4036,19 +4036,28 @@ function buildToolReviewTelegramPhotoAlerts(source) {
   if (!source || typeof source !== "object") return [];
   const previousPhoto = resolveTelegramPhotoUrl(toText(source.previousPhoto));
   const currentPhoto = resolveTelegramPhotoUrl(toText(source.photo));
+  const itemCode = toText(source.itemCode || source.code || "").trim();
+  const itemName = toText(source.itemName || "").trim();
+  const baseLabel = [itemCode, itemName].filter(Boolean).join(" - ") || "Tool Verification";
   const alerts = [];
   if (previousPhoto) {
     alerts.push({
       type: "photo",
       media: previousPhoto,
-      caption: "រូបចាស់ (Old Photo)",
+      caption: `IMG (Before)\n${baseLabel}`,
     });
   }
   if (currentPhoto && currentPhoto !== previousPhoto) {
     alerts.push({
       type: "photo",
       media: currentPhoto,
-      caption: "រូបថ្មី (New Photo)",
+      caption: `IMG (Latest / Checked)\n${baseLabel}`,
+    });
+  } else if (currentPhoto) {
+    alerts.push({
+      type: "photo",
+      media: currentPhoto,
+      caption: `IMG (Latest / Checked)\n${baseLabel}`,
     });
   }
   return alerts;

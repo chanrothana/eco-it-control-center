@@ -2750,6 +2750,22 @@ function staffSexTemplateLabel(sex?: unknown) {
   return normalizeStaffSex(sex) === "Female" ? "Women" : "Men";
 }
 
+function preferredResponsibleTeamForCategory(
+  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL"
+) {
+  if (category === "MAINT_TOOL") return "Maintenance Team";
+  if (category === "CLEAN_TOOL" || category === "SERVICE_TOOL") return "Cleaning Team";
+  if (category === "GARDEN_TOOL") return "Garden Team";
+  if (category === "POOL_TOOL") return "Pool Team";
+  return "";
+}
+
+function responsibleTeamPlaceholderForCategory(
+  category: "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL" | "SERVICE_TOOL"
+) {
+  return preferredResponsibleTeamForCategory(category) || "Maintenance Team";
+}
+
 function staffUsersForCampus(users: StaffUser[], campusName = "", selectedName = "") {
   const sortUsersByName = (list: StaffUser[]) =>
     [...list].sort((a, b) => String(a.fullName || "").localeCompare(String(b.fullName || "")));
@@ -11004,7 +11020,10 @@ export default function App() {
                   : [
                     {
                       key: `inventory.group.${group}.review`,
-                      label: lang === "km" ? "ពិនិត្យប្រចាំខែ" : "Monthly Check",
+                      label:
+                        group === "MAINT_TOOL"
+                          ? (lang === "km" ? "ផ្ទាំងគ្រប់គ្រងឧបករណ៍ថែទាំ" : "Maintenance Tools Controller")
+                          : (lang === "km" ? "ពិនិត្យប្រចាំខែ" : "Monthly Check"),
                       active: tab === "inventory" && inventoryDashboardGroup === group && (inventoryView === "review" || inventoryView === "dashboard"),
                       onSelect: () => openInventorySection(group, "review"),
                     },
@@ -14626,6 +14645,8 @@ export default function App() {
   const [toolReviewSupervisorFilter, setToolReviewSupervisorFilter] = useState("ALL");
   const [toolReviewPhotoFileKey, setToolReviewPhotoFileKey] = useState(0);
   const [toolReviewPhotoName, setToolReviewPhotoName] = useState("");
+  const [toolReviewBorrowPhotoFileKey, setToolReviewBorrowPhotoFileKey] = useState(0);
+  const [toolReviewBorrowPhotoName, setToolReviewBorrowPhotoName] = useState("");
   const [toolReviewModalOpen, setToolReviewModalOpen] = useState(false);
   const [toolReviewControlMode, setToolReviewControlMode] = useState<"verify" | "borrow" | "return">("verify");
   const [toolReviewForm, setToolReviewForm] = useState({
@@ -14649,6 +14670,7 @@ export default function App() {
     receivedBy: "",
     expectedReturnDate: toYmd(new Date()),
     note: "",
+    photo: "",
   });
   const [inventoryItemSort, setInventoryItemSort] = useState<{
     key:
@@ -19465,6 +19487,14 @@ export default function App() {
       }))
       .sort((a, b) => compareCampusByCode(a.campusName, b.campusName));
   }, [compareCampusByCode, inventoryCampusLabel, inventoryStockMap, inventoryVisibleItems, toolReviewSelectedItem]);
+  const toolReviewDestinationCampusOptions = useMemo(() => {
+    const selected = String(toolReviewBorrowForm.destinationCampus || "").trim();
+    return Array.from(new Set([...CAMPUS_LIST, ...(selected ? [selected] : [])]));
+  }, [toolReviewBorrowForm.destinationCampus]);
+  const toolReviewBorrowRequesterOptions = useMemo(
+    () => staffUsersForCampus(users, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.requestedBy),
+    [toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.requestedBy, users]
+  );
   const inventoryDailyItemOptions = useMemo(() => {
     const q = String(inventoryDailyForm.search || "").trim().toLowerCase();
     let list = [...inventoryVisibleItems];
@@ -21677,26 +21707,52 @@ export default function App() {
     const today = toYmd(new Date());
     const sourceEntry = toolReviewCampusItemOptions.find((entry) => entry.stock > 0) || toolReviewCampusItemOptions[0] || null;
     const destinationEntry =
-      toolReviewCampusItemOptions.find((entry) => entry.campusName !== sourceEntry?.campusName) ||
-      toolReviewCampusItemOptions[0] ||
-      null;
+      CAMPUS_LIST.find((campus) => campus !== sourceEntry?.campusName) ||
+      toolReviewCampusItemOptions.find((entry) => entry.campusName !== sourceEntry?.campusName)?.campusName ||
+      "";
     setToolReviewBorrowForm((prev) => ({
       ...prev,
       date: today,
       qty: "",
       sourceCampus: sourceEntry?.campusName || "",
-      destinationCampus: destinationEntry?.campusName || "",
+      destinationCampus: destinationEntry,
       requestedBy: recorder,
       approvedBy: recorder,
       receivedBy: recorder,
       expectedReturnDate: today,
       note: "",
+      photo: "",
     }));
+    setToolReviewBorrowPhotoName("");
+    setToolReviewBorrowPhotoFileKey((key) => key + 1);
   }, [authUser?.displayName, authUser?.username, toolReviewCampusItemOptions, toolReviewModalOpen, toolReviewSelectedItem]);
+  useEffect(() => {
+    if (toolReviewControlMode !== "borrow") return;
+    const campusUsers = staffUsersForCampus(users, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.requestedBy);
+    if (!campusUsers.length) return;
+    const selected = String(toolReviewBorrowForm.requestedBy || "").trim();
+    if (selected && campusUsers.some((user) => user.fullName === selected)) return;
+    setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: campusUsers[0]?.fullName || "" }));
+  }, [toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.requestedBy, toolReviewControlMode, users]);
   useEffect(() => {
     if (inventoryCodeManual) return;
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
   }, [autoInventoryItemCode, inventoryCodeManual]);
+  useEffect(() => {
+    if (isProviderToolOwnerType(inventoryItemForm.ownerType)) return;
+    const preferred = preferredResponsibleTeamForCategory(inventoryItemForm.category);
+    if (!preferred) return;
+    const autoTeams = new Set([
+      "Maintenance Team",
+      "Cleaning Team",
+      "Garden Team",
+      "Pool Team",
+    ]);
+    const current = String(inventoryItemForm.responsibleParty || "").trim();
+    if (current && !autoTeams.has(current)) return;
+    if (current === preferred) return;
+    setInventoryItemForm((prev) => ({ ...prev, responsibleParty: preferred }));
+  }, [inventoryItemForm.category, inventoryItemForm.ownerType, inventoryItemForm.responsibleParty]);
   useEffect(() => {
     const el = toolReviewNoteRef.current;
     if (!el) return;
@@ -28539,6 +28595,22 @@ export default function App() {
       handlePhotoUploadError(err);
     }
   }
+  async function onToolReviewBorrowPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      alert(t.photoLimit);
+      return;
+    }
+    try {
+      const photo = await optimizeUploadPhoto(file);
+      setError("");
+      setToolReviewBorrowPhotoName(file.name);
+      setToolReviewBorrowForm((prev) => ({ ...prev, photo }));
+    } catch (err) {
+      handlePhotoUploadError(err);
+    }
+  }
   const persistInventorySettings = useCallback(
     async (nextItems: InventoryItem[], nextTxns: InventoryTxn[], nextToolReviewReports: ToolReviewReport[] = toolReviewReports) => {
       try {
@@ -28783,6 +28855,7 @@ export default function App() {
         expectedReturnDate: normalizeYmdInput(toolReviewBorrowForm.expectedReturnDate) || "",
         requestedBy: toolReviewBorrowForm.requestedBy,
         approvedBy: toolReviewBorrowForm.approvedBy,
+        photo: toolReviewBorrowForm.photo,
       });
       if (!saved.ok) return;
     } else if (toolReviewControlMode === "return") {
@@ -28809,6 +28882,8 @@ export default function App() {
     }
     setToolReviewModalOpen(false);
     setToolReviewControlMode("verify");
+    setToolReviewBorrowPhotoName("");
+    setToolReviewBorrowPhotoFileKey((key) => key + 1);
   }
 
   async function createInventoryItem() {
@@ -59204,7 +59279,11 @@ function formatTicketRequestSource(value?: string) {
                       className="input"
                       value={inventoryItemForm.responsibleParty}
                       onChange={(e) => setInventoryItemForm((f) => ({ ...f, responsibleParty: e.target.value }))}
-                      placeholder={isProviderToolOwnerType(inventoryItemForm.ownerType) ? "PCS, Dynamic, Vendor..." : "Maintenance, Cleaning, Garden..."}
+                      placeholder={
+                        isProviderToolOwnerType(inventoryItemForm.ownerType)
+                          ? "PCS, Dynamic, Vendor..."
+                          : responsibleTeamPlaceholderForCategory(inventoryItemForm.category)
+                      }
                     />
                   </label>
                   <label className="field field-notes-shared">
@@ -70083,7 +70162,11 @@ function formatTicketRequestSource(value?: string) {
                     className="input"
                     value={inventoryItemForm.responsibleParty}
                     onChange={(e) => setInventoryItemForm((f) => ({ ...f, responsibleParty: e.target.value }))}
-                    placeholder={isProviderToolOwnerType(inventoryItemForm.ownerType) ? "PCS, Dynamic, Vendor..." : "Maintenance, Cleaning, Garden..."}
+                    placeholder={
+                      isProviderToolOwnerType(inventoryItemForm.ownerType)
+                        ? "PCS, Dynamic, Vendor..."
+                        : responsibleTeamPlaceholderForCategory(inventoryItemForm.category)
+                    }
                   />
                 </label>
                 <label className="field field-notes-shared">
@@ -80894,35 +80977,35 @@ function formatTicketRequestSource(value?: string) {
                   <div className="form-grid tool-review-form-grid tool-review-borrow-grid">
                     <label className="field">
                       <span>{t.date}</span>
-                      <input
-                        className="input"
-                        type="date"
+                      <EcoDateInput
                         value={toolReviewBorrowForm.date}
-                        onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, date: e.target.value }))}
+                        onChange={(value) => setToolReviewBorrowForm((prev) => ({ ...prev, date: value }))}
+                        ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
+                        className="picker-template-list-asset-light-input"
                       />
                     </label>
                     <label className="field">
-                      <span>{lang === "km" ? "បរិមាណ" : "Qty"}</span>
+                      <span>{lang === "km" ? "បរិមាណ" : "QTY"}</span>
                       <input
                         className="input"
                         type="number"
-                        min="0"
+                        min="1"
                         value={toolReviewBorrowForm.qty}
                         onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, qty: e.target.value }))}
                       />
                     </label>
                     <label className="field">
                       <span>{lang === "km" ? "ថ្ងៃត្រឡប់រំពឹង" : "Expected Return"}</span>
-                      <input
-                        className="input"
-                        type="date"
+                      <EcoDateInput
                         value={toolReviewControlMode === "borrow" ? toolReviewBorrowForm.expectedReturnDate : toolReviewBorrowForm.date}
-                        onChange={(e) =>
+                        onChange={(value) =>
                           setToolReviewBorrowForm((prev) => ({
                             ...prev,
-                            expectedReturnDate: e.target.value,
+                            expectedReturnDate: value,
                           }))
                         }
+                        ariaLabel={lang === "km" ? "បើក Eco Calendar" : "Open Eco Calendar"}
+                        className="picker-template-list-asset-light-input"
                         disabled={toolReviewControlMode !== "borrow"}
                       />
                     </label>
@@ -80954,12 +81037,18 @@ function formatTicketRequestSource(value?: string) {
                       <select
                         className="input"
                         value={toolReviewBorrowForm.destinationCampus}
-                        onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, destinationCampus: e.target.value }))}
+                        onChange={(e) =>
+                          setToolReviewBorrowForm((prev) => ({
+                            ...prev,
+                            destinationCampus: e.target.value,
+                            requestedBy: "",
+                          }))
+                        }
                       >
                         <option value="">{lang === "km" ? "ជ្រើសសាខា" : "Select campus"}</option>
-                        {toolReviewCampusItemOptions.map((entry) => (
-                          <option key={`tool-review-destination-${entry.itemId}`} value={entry.campusName}>
-                            {entry.campusLabel} ({entry.stock})
+                        {toolReviewDestinationCampusOptions.map((campus) => (
+                          <option key={`tool-review-destination-${campus}`} value={campus}>
+                            {inventoryCampusLabel(campus)}
                           </option>
                         ))}
                       </select>
@@ -80968,11 +81057,51 @@ function formatTicketRequestSource(value?: string) {
                       <>
                         <label className="field">
                           <span>{lang === "km" ? "ស្នើដោយ" : "Requested By"}</span>
+                          {toolReviewBorrowRequesterOptions.length ? (
+                            <select
+                              className="input"
+                              value={toolReviewBorrowForm.requestedBy}
+                              onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: e.target.value }))}
+                            >
+                              <option value="">{lang === "km" ? "ជ្រើសបុគ្គលិក" : "Select user"}</option>
+                              {toolReviewBorrowRequesterOptions.map((user) => (
+                                <option key={`tool-borrow-request-${user.id}`} value={user.fullName}>
+                                  {user.fullName}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              className="input"
+                              value={toolReviewBorrowForm.requestedBy}
+                              onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: e.target.value }))}
+                              placeholder={lang === "km" ? "បញ្ចូលឈ្មោះអ្នកស្នើ" : "Enter requester name"}
+                            />
+                          )}
+                        </label>
+                        <label className="field">
+                          <span>{lang === "km" ? "រូបឧបករណ៍ពេលខ្ចី" : "Borrow Tool Photo"}</span>
                           <input
+                            key={`tool-review-borrow-photo-${toolReviewBorrowPhotoFileKey}`}
                             className="input"
-                            value={toolReviewBorrowForm.requestedBy}
-                            onChange={(e) => setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: e.target.value }))}
+                            type="file"
+                            accept="image/*"
+                            onChange={onToolReviewBorrowPhotoFile}
                           />
+                          {toolReviewBorrowPhotoName ? (
+                            <div className="tiny" style={{ marginTop: 6 }}>{toolReviewBorrowPhotoName}</div>
+                          ) : null}
+                          {toolReviewBorrowForm.photo ? (
+                            <div style={{ marginTop: 8 }}>
+                              <img
+                                loading="lazy"
+                                decoding="async"
+                                src={toolReviewBorrowForm.photo}
+                                alt="Borrow tool preview"
+                                className="table-photo"
+                              />
+                            </div>
+                          ) : null}
                         </label>
                       </>
                     ) : (
@@ -80980,7 +81109,7 @@ function formatTicketRequestSource(value?: string) {
                     )}
                     <div className="tool-review-borrow-action-row field-wide">
                       <label className="field">
-                        <span>{toolReviewControlMode === "borrow" ? (lang === "km" ? "អនុម័តដោយ" : "Approved By") : (lang === "km" ? "ទទួលត្រឡប់ដោយ" : "Received By")}</span>
+                        <span>{toolReviewControlMode === "borrow" ? (lang === "km" ? "អនុម័ត / ទទួលស្គាល់ដោយ" : "Approved / Acknowledged By") : (lang === "km" ? "ទទួលត្រឡប់ដោយ" : "Received By")}</span>
                         <input
                           className="input"
                           value={toolReviewControlMode === "borrow" ? toolReviewBorrowForm.approvedBy : toolReviewBorrowForm.receivedBy}
@@ -81040,7 +81169,7 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                   <div className="tiny tool-review-submit-helper">
                     {toolReviewControlMode === "borrow"
-                      ? (lang === "km" ? "ប្រើសម្រាប់ការខ្ចីឧបករណ៍ឆ្លងសាខា ឬ ឲ្យបុគ្គលិកប្រើបណ្តោះអាសន្ន។" : "Use this for cross-campus borrowing or temporary staff use.")
+                      ? (lang === "km" ? "ប្រើសម្រាប់ការខ្ចីឧបករណ៍ឆ្លងសាខា។ ជ្រើសអ្នកស្នើតាមសាខាទទួល និងបន្ថែមរូបឧបករណ៍ពេលខ្ចីបើចាំបាច់។" : "Use this for cross-campus borrowing. Requested By follows the destination campus, and you can attach a borrow photo.")
                       : (lang === "km" ? "ប្រើសម្រាប់កត់ត្រាឧបករណ៍ត្រឡប់ចូលវិញ។" : "Use this to record returned tools.")}
                   </div>
                 </>
