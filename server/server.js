@@ -4060,6 +4060,24 @@ function buildToolTelegramPreviewUrl(source, text = "") {
   return url.toString();
 }
 
+function telegramHtmlToPreviewText(html) {
+  return toText(html)
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(Boolean)
+    .join("\n");
+}
+
 async function buildToolTelegramPreviewSvg(source, text = "") {
   if (!source || typeof source !== "object") return "";
   const previousPhotoPath = toText(source.previousPhoto);
@@ -4070,12 +4088,8 @@ async function buildToolTelegramPreviewSvg(source, text = "") {
   const location = toText(source.location) || "-";
   const firstPhoto = previousPhotoPath || currentPhotoPath;
   const secondPhoto = currentPhotoPath && currentPhotoPath !== previousPhotoPath ? currentPhotoPath : "";
-  const firstPhotoLabel = previousPhotoPath
-    ? "រូបភាពមុនជួសជុល"
-    : currentPhotoPath
-      ? "រូបភាពឧបករណ៍"
-      : "រូបភាពឧបករណ៍";
-  const secondPhotoLabel = previousPhotoPath ? "រូបភាពក្រោយជួសជុល" : "រូបភាពបច្ចុប្បន្ន";
+  const firstPhotoLabel = "Previous Photo";
+  const secondPhotoLabel = "Current Photo";
   const firstPhotoData = await resolveTelegramPreviewImageData(firstPhoto);
   const secondPhotoData = await resolveTelegramPreviewImageData(secondPhoto);
   const bodyLines = wrapTelegramPreviewText(text, 34).slice(0, 14);
@@ -4160,6 +4174,119 @@ async function buildToolTelegramPreviewSvg(source, text = "") {
   <rect x="80" y="446" width="34" height="34" fill="url(#toolBlue)" />
   <rect x="122" y="446" width="34" height="34" fill="url(#toolBlue)" />
   ${textSvg}
+</svg>`;
+}
+
+function buildMaintenanceRecordTelegramPreviewUrl(asset, entry, text = "") {
+  if (!PUBLIC_APP_URL || !asset || !entry) return "";
+  const url = new URL(`${PUBLIC_APP_URL}/api/alerts/telegram/maintenance-record-preview`);
+  const setIfPresent = (key, value) => {
+    const normalized = toText(value);
+    if (normalized) url.searchParams.set(key, normalized);
+  };
+  setIfPresent("text", text);
+  setIfPresent("assetId", asset.assetId);
+  setIfPresent("itemName", assetItemName(asset.category, asset.type, asset.pcType || ""));
+  setIfPresent("campus", asset.campus);
+  setIfPresent("location", asset.location);
+  setIfPresent("beforePhoto", (entry.beforePhotos || [])[0] || "");
+  setIfPresent("afterPhoto", (entry.afterPhotos || [])[0] || entry.photo || "");
+  return url.toString();
+}
+
+async function buildMaintenanceRecordTelegramPreviewSvg(source, text = "") {
+  if (!source || typeof source !== "object") return "";
+  const beforePhotoPath = toText(source.beforePhoto);
+  const afterPhotoPath = toText(source.afterPhoto);
+  const itemCode = toText(source.assetId) || "-";
+  const itemName = toText(source.itemName) || "General Maintenance Task";
+  const campus = formatTelegramCampusKhmer(source.campus);
+  const location = toText(source.location) || "-";
+  const firstPhoto = beforePhotoPath || afterPhotoPath;
+  const secondPhoto = afterPhotoPath && afterPhotoPath !== beforePhotoPath ? afterPhotoPath : "";
+  const firstPhotoData = await resolveTelegramPreviewImageData(firstPhoto);
+  const secondPhotoData = await resolveTelegramPreviewImageData(secondPhoto);
+  const textLines = wrapTelegramPreviewText(
+    telegramHtmlToPreviewText(text) || `Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`,
+    34
+  ).slice(0, 14);
+  const contentTop = 392;
+  const headerLineHeight = 30;
+  const bodyLineHeight = 29;
+  const bottomPadding = 38;
+  let currentY = contentTop + 38;
+  const textSvgParts = [];
+  textLines.forEach((line, index) => {
+    const escaped = escapeSvgText(line);
+    let fontSize = 21;
+    let fontWeight = "400";
+    let fill = "#f8fbff";
+    let textDecoration = "";
+    let lineHeight = bodyLineHeight;
+    if (index === 0 || index === 1) {
+      fontSize = 24;
+      fontWeight = "700";
+      lineHeight = headerLineHeight;
+    } else if (/^Asset:/i.test(line) || /^ការងារទូទៅ:/i.test(line)) {
+      fontSize = 22;
+      fontWeight = "700";
+      textDecoration = ' text-decoration="underline"';
+    } else if (/^(សាខា:|ទីតាំង:|កាលបរិច្ឆេទ|ប្រភេទការងារ:|អ្នកអនុវត្ត:|ការងារដែលបានធ្វើ:|ចំណាំបន្ថែម:|ពិនិត្យដោយ:|តម្លៃ:|Ticket:)/.test(line)) {
+      fontSize = 20;
+      fontWeight = "600";
+      fill = "#ffffff";
+    }
+    textSvgParts.push(
+      `<text x="166" y="${currentY}" fill="${fill}" font-size="${fontSize}" font-weight="${fontWeight}" font-family="Arial, sans-serif"${textDecoration}>${escaped}</text>`
+    );
+    currentY += lineHeight;
+  });
+  const totalHeight = Math.max(760, currentY + bottomPadding);
+  const renderPhotoBlock = (imageHref, x, y, width, height, clipId, placeholderTop, placeholderBottom) => `
+    <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#ffffff" stroke="#d7c7b4" stroke-width="2"/>
+    ${
+      imageHref
+        ? `<image href="${imageHref}" x="${x + 18}" y="${y + 18}" width="${width - 36}" height="${height - 36}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />`
+        : `<rect x="${x + 18}" y="${y + 18}" width="${width - 36}" height="${height - 36}" fill="#efe7dc" rx="8" ry="8" />
+           <text x="${x + width / 2}" y="${y + height / 2 - 12}" text-anchor="middle" fill="#8b7359" font-size="22" font-family="Arial, sans-serif">${escapeSvgText(placeholderTop)}</text>
+           <text x="${x + width / 2}" y="${y + height / 2 + 18}" text-anchor="middle" fill="#8b7359" font-size="22" font-family="Arial, sans-serif">${escapeSvgText(placeholderBottom)}</text>`
+    }
+  `;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="${totalHeight}" viewBox="0 0 760 ${totalHeight}">
+  <defs>
+    <clipPath id="maintenanceRecordPhotoClipA">
+      <rect x="42" y="66" width="300" height="276" rx="8" ry="8" />
+    </clipPath>
+    <clipPath id="maintenanceRecordPhotoClipB">
+      <rect x="418" y="66" width="300" height="276" rx="8" ry="8" />
+    </clipPath>
+    <linearGradient id="maintenanceGreen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#50df59" />
+      <stop offset="100%" stop-color="#149a28" />
+    </linearGradient>
+    <linearGradient id="maintenanceDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#243245" />
+      <stop offset="100%" stop-color="#182230" />
+    </linearGradient>
+  </defs>
+  <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#f7f2eb" />
+  <rect x="0" y="372" width="760" height="${totalHeight - 372}" fill="url(#maintenanceDark)" />
+  <text x="190" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700" font-family="Arial, sans-serif">Previous Photo</text>
+  <line x1="86" y1="34" x2="144" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <line x1="236" y1="34" x2="294" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <text x="566" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700" font-family="Arial, sans-serif">Current Photo</text>
+  <line x1="462" y1="34" x2="520" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <line x1="612" y1="34" x2="670" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  ${renderPhotoBlock(firstPhotoData, 24, 48, 348, 312, "maintenanceRecordPhotoClipA", "NO", "PHOTO")}
+  ${renderPhotoBlock(secondPhotoData, 388, 48, 348, 312, "maintenanceRecordPhotoClipB", "NO", "PHOTO")}
+  <rect x="38" y="404" width="34" height="34" fill="url(#maintenanceGreen)" />
+  <rect x="80" y="404" width="34" height="34" fill="url(#maintenanceGreen)" />
+  <rect x="122" y="404" width="34" height="34" fill="url(#maintenanceGreen)" />
+  <rect x="38" y="446" width="34" height="34" fill="url(#maintenanceGreen)" />
+  <rect x="80" y="446" width="34" height="34" fill="url(#maintenanceGreen)" />
+  <rect x="122" y="446" width="34" height="34" fill="url(#maintenanceGreen)" />
+  ${textSvgParts.join("")}
 </svg>`;
 }
 
@@ -5020,7 +5147,18 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       kind: "maintenance",
     });
   try {
-    if (photoAlerts.length === 1) {
+    const previewUrl = buildMaintenanceRecordTelegramPreviewUrl(asset, entry, message);
+    if (previewUrl) {
+      const report = await sendMaintenancePhoto("", {
+        photoUrl: previewUrl,
+        includeResults: true,
+      });
+      if (report && report.ok) {
+        telegramAlertSent = true;
+      }
+    }
+
+    if (!telegramAlertSent && photoAlerts.length === 1) {
       const primaryText = message || photoAlerts[0].caption;
       const report = await sendMaintenancePhoto(primaryText, {
         photoUrl: photoAlerts[0].media,
@@ -5036,7 +5174,7 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
         });
         telegramAlertSent = Boolean(fallback && fallback.ok);
       }
-    } else {
+    } else if (!telegramAlertSent) {
       if (message) {
         const report = await sendMaintenancePhoto(message, {
           includeResults: true,
@@ -8580,6 +8718,41 @@ const server = http.createServer(async (req, res) => {
           location: toText(url.searchParams.get("location")),
           photo: toText(url.searchParams.get("photo")),
           previousPhoto: toText(url.searchParams.get("previousPhoto")),
+        },
+        toText(url.searchParams.get("text"))
+      );
+      if (!svg) {
+        sendJson(res, 404, { error: "Preview unavailable" });
+        return;
+      }
+      const sharpLib = getSharp();
+      const body =
+        sharpLib
+          ? await sharpLib(Buffer.from(svg)).png().toBuffer()
+          : Buffer.from(svg);
+      res.writeHead(200, {
+        "Content-Type": sharpLib ? "image/png" : "image/svg+xml",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
+      res.end(body);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/alerts/telegram/maintenance-record-preview") {
+      const svg = await buildMaintenanceRecordTelegramPreviewSvg(
+        {
+          assetId: toText(url.searchParams.get("assetId")),
+          itemName: toText(url.searchParams.get("itemName")),
+          campus: toText(url.searchParams.get("campus")),
+          location: toText(url.searchParams.get("location")),
+          beforePhoto: toText(url.searchParams.get("beforePhoto")),
+          afterPhoto: toText(url.searchParams.get("afterPhoto")),
         },
         toText(url.searchParams.get("text"))
       );
