@@ -3984,6 +3984,157 @@ function buildMaintenanceTelegramAppLink(assetId, maintenanceDate = "") {
   return url.toString();
 }
 
+function wrapTelegramPreviewText(value, maxChars = 38) {
+  const normalized = toText(value).replace(/\r/g, "");
+  if (!normalized) return [""];
+  const rawLines = normalized.split("\n");
+  const out = [];
+  for (const rawLine of rawLines) {
+    const line = rawLine.trim();
+    if (!line) {
+      out.push("");
+      continue;
+    }
+    const words = line.split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      out.push("");
+      continue;
+    }
+    let current = "";
+    for (const word of words) {
+      if (!current) {
+        if (word.length <= maxChars) {
+          current = word;
+          continue;
+        }
+        for (let i = 0; i < word.length; i += maxChars) {
+          out.push(word.slice(i, i + maxChars));
+        }
+        current = "";
+        continue;
+      }
+      const next = `${current} ${word}`;
+      if (next.length <= maxChars) {
+        current = next;
+        continue;
+      }
+      out.push(current);
+      if (word.length <= maxChars) {
+        current = word;
+      } else {
+        for (let i = 0; i < word.length; i += maxChars) {
+          out.push(word.slice(i, i + maxChars));
+        }
+        current = "";
+      }
+    }
+    if (current) out.push(current);
+  }
+  return out.length ? out : [""];
+}
+
+async function resolveTelegramPreviewImageData(photoPath) {
+  const absolutePath = resolveUploadedAbsolutePath(photoPath);
+  if (!absolutePath || !(await fileExists(absolutePath))) return "";
+  const mimeType = contentTypeFor(absolutePath);
+  const raw = await fs.readFile(absolutePath);
+  return `data:${mimeType};base64,${raw.toString("base64")}`;
+}
+
+function buildToolTelegramPreviewUrl(source, text = "") {
+  if (!PUBLIC_APP_URL || !source || typeof source !== "object") return "";
+  const url = new URL(`${PUBLIC_APP_URL}/api/alerts/telegram/tool-preview`);
+  const setIfPresent = (key, value) => {
+    const normalized = toText(value);
+    if (normalized) url.searchParams.set(key, normalized);
+  };
+  setIfPresent("text", text);
+  setIfPresent("itemCode", source.itemCode || source.code);
+  setIfPresent("itemName", source.itemName);
+  setIfPresent("campus", source.campus);
+  setIfPresent("location", source.location);
+  setIfPresent("photo", source.photo);
+  setIfPresent("previousPhoto", source.previousPhoto);
+  return url.toString();
+}
+
+async function buildToolTelegramPreviewSvg(source, text = "") {
+  if (!source || typeof source !== "object") return "";
+  const previousPhotoPath = toText(source.previousPhoto);
+  const currentPhotoPath = toText(source.photo);
+  const itemCode = toText(source.itemCode || source.code) || "-";
+  const itemName = toText(source.itemName) || "Tool";
+  const campus = formatTelegramCampusKhmer(source.campus);
+  const location = toText(source.location) || "-";
+  const firstPhoto = previousPhotoPath || currentPhotoPath;
+  const secondPhoto = currentPhotoPath && currentPhotoPath !== previousPhotoPath ? currentPhotoPath : "";
+  const firstPhotoLabel = previousPhotoPath
+    ? "រូបភាពមុនជួសជុល"
+    : currentPhotoPath
+      ? "រូបភាពឧបករណ៍"
+      : "រូបភាពឧបករណ៍";
+  const secondPhotoLabel = previousPhotoPath ? "រូបភាពក្រោយជួសជុល" : "រូបភាពបច្ចុប្បន្ន";
+  const firstPhotoData = await resolveTelegramPreviewImageData(firstPhoto);
+  const secondPhotoData = await resolveTelegramPreviewImageData(secondPhoto);
+  const bodyLines = wrapTelegramPreviewText(text, 38).slice(0, 14);
+  const textLines = bodyLines.length
+    ? bodyLines
+    : wrapTelegramPreviewText(`Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`, 38);
+  const lineHeight = 34;
+  const textStartY = 442;
+  const bottomPadding = 48;
+  const totalHeight = Math.max(760, textStartY + lineHeight * textLines.length + bottomPadding);
+  const textSvg = textLines
+    .map((line, index) => {
+      const escaped = escapeSvgText(line);
+      const y = textStartY + index * lineHeight;
+      return `<text x="150" y="${y}" fill="#111827" font-size="28" font-family="Arial, sans-serif">${escaped}</text>`;
+    })
+    .join("");
+  const renderPhotoBlock = (imageHref, x, y, width, height, clipId, placeholderTop, placeholderBottom) => `
+    <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#ffffff" stroke="#d7c7b4" stroke-width="2"/>
+    ${
+      imageHref
+        ? `<image href="${imageHref}" x="${x + 18}" y="${y + 18}" width="${width - 36}" height="${height - 36}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />`
+        : `<rect x="${x + 18}" y="${y + 18}" width="${width - 36}" height="${height - 36}" fill="#efe7dc" rx="8" ry="8" />
+           <text x="${x + width / 2}" y="${y + height / 2 - 12}" text-anchor="middle" fill="#8b7359" font-size="22" font-family="Arial, sans-serif">${escapeSvgText(placeholderTop)}</text>
+           <text x="${x + width / 2}" y="${y + height / 2 + 18}" text-anchor="middle" fill="#8b7359" font-size="22" font-family="Arial, sans-serif">${escapeSvgText(placeholderBottom)}</text>`
+    }
+  `;
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="${totalHeight}" viewBox="0 0 760 ${totalHeight}">
+  <defs>
+    <clipPath id="toolPhotoClipA">
+      <rect x="42" y="66" width="300" height="276" rx="8" ry="8" />
+    </clipPath>
+    <clipPath id="toolPhotoClipB">
+      <rect x="418" y="66" width="300" height="276" rx="8" ry="8" />
+    </clipPath>
+    <linearGradient id="toolBlue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4f8dff" />
+      <stop offset="100%" stop-color="#1d5fdd" />
+    </linearGradient>
+  </defs>
+  <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#fbf7f2" />
+  <text x="190" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700" font-family="Arial, sans-serif">${escapeSvgText(firstPhotoLabel)}</text>
+  <line x1="86" y1="34" x2="144" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <line x1="236" y1="34" x2="294" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <text x="566" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700" font-family="Arial, sans-serif">${escapeSvgText(secondPhotoLabel)}</text>
+  <line x1="462" y1="34" x2="520" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <line x1="612" y1="34" x2="670" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  ${renderPhotoBlock(firstPhotoData, 24, 48, 348, 312, "toolPhotoClipA", "NO", "PHOTO")}
+  ${renderPhotoBlock(secondPhotoData, 388, 48, 348, 312, "toolPhotoClipB", "NO", "PHOTO")}
+  <rect x="40" y="392" width="32" height="32" fill="url(#toolBlue)" />
+  <rect x="80" y="392" width="32" height="32" fill="url(#toolBlue)" />
+  <rect x="120" y="392" width="32" height="32" fill="url(#toolBlue)" />
+  <rect x="40" y="432" width="32" height="32" fill="url(#toolBlue)" />
+  <rect x="80" y="432" width="32" height="32" fill="url(#toolBlue)" />
+  <rect x="120" y="432" width="32" height="32" fill="url(#toolBlue)" />
+  <text x="40" y="${totalHeight - 18}" fill="#8f8b84" font-size="15" font-family="Arial, sans-serif">${escapeSvgText(itemCode)} - ${escapeSvgText(itemName)}</text>
+  ${textSvg}
+</svg>`;
+}
+
 async function buildMaintenanceTelegramPreviewSvg(asset, options = {}) {
   if (!asset || typeof asset !== "object") return "";
   const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
@@ -4095,6 +4246,21 @@ function buildToolReviewTelegramPhotoAlerts(source) {
 }
 
 async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) {
+  const previewUrl = buildToolTelegramPreviewUrl(source, text);
+  if (previewUrl) {
+    const report = await sendTelegramMessage("", {
+      db,
+      photoUrl: previewUrl,
+      includeResults: true,
+      kind: "tools",
+    });
+    if (report && report.ok) {
+      return {
+        ok: true,
+        messageRefs: normalizeTelegramMessageRefs(report && report.results),
+      };
+    }
+  }
   const photoAlerts = buildToolReviewTelegramPhotoAlerts(source);
   let report = null;
   let sent = false;
@@ -8374,6 +8540,41 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       res.end(svg);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/alerts/telegram/tool-preview") {
+      const svg = await buildToolTelegramPreviewSvg(
+        {
+          itemCode: toText(url.searchParams.get("itemCode")),
+          itemName: toText(url.searchParams.get("itemName")),
+          campus: toText(url.searchParams.get("campus")),
+          location: toText(url.searchParams.get("location")),
+          photo: toText(url.searchParams.get("photo")),
+          previousPhoto: toText(url.searchParams.get("previousPhoto")),
+        },
+        toText(url.searchParams.get("text"))
+      );
+      if (!svg) {
+        sendJson(res, 404, { error: "Preview unavailable" });
+        return;
+      }
+      const sharpLib = getSharp();
+      const body =
+        sharpLib
+          ? await sharpLib(Buffer.from(svg)).png().toBuffer()
+          : Buffer.from(svg);
+      res.writeHead(200, {
+        "Content-Type": sharpLib ? "image/png" : "image/svg+xml",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
+      res.end(body);
       return;
     }
 
