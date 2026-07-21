@@ -1779,6 +1779,7 @@ const POOL_COMPLAINT_FALLBACK_KEY = "it_pool_complaint_v1";
 const UTILITY_METER_FALLBACK_KEY = "it_utility_meters_v1";
 const UTILITY_READING_FALLBACK_KEY = "it_utility_readings_v1";
 const RENTAL_PRINTER_FALLBACK_KEY = "it_rental_printers_v1";
+const INVENTORY_LAST_LOCATION_KEY = "it_inventory_last_location_v1";
 const RENTAL_PRINTER_COUNTER_FALLBACK_KEY = "it_rental_printer_counters_v1";
 const RENTAL_PRINTER_COUNTER_RESET_FALLBACK_KEY = "it_rental_printer_counter_resets_v1";
 const API_BASE_OVERRIDE_KEY = "it_api_base_url_v1";
@@ -4373,6 +4374,37 @@ function trySetLocalStorage(key: string, value: string) {
 
 function writeLocationFallback(list: LocationEntry[]) {
   trySetLocalStorage(LOCATION_FALLBACK_KEY, JSON.stringify(list));
+}
+
+function inventoryLastLocationStorageKey(campus: string, category: string) {
+  return `${String(campus || "").trim()}::${String(category || "").trim().toUpperCase()}`;
+}
+
+function readInventoryLastLocationMap() {
+  if (SERVER_ONLY_STORAGE) return {} as Record<string, string>;
+  try {
+    const raw = localStorage.getItem(INVENTORY_LAST_LOCATION_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
+  } catch {
+    return {} as Record<string, string>;
+  }
+}
+
+function readInventoryLastLocation(campus: string, category: string) {
+  const key = inventoryLastLocationStorageKey(campus, category);
+  return String(readInventoryLastLocationMap()[key] || "").trim();
+}
+
+function writeInventoryLastLocation(campus: string, category: string, location: string) {
+  const trimmedLocation = String(location || "").trim();
+  if (!trimmedLocation) return;
+  const key = inventoryLastLocationStorageKey(campus, category);
+  const nextMap = {
+    ...readInventoryLastLocationMap(),
+    [key]: trimmedLocation,
+  };
+  trySetLocalStorage(INVENTORY_LAST_LOCATION_KEY, JSON.stringify(nextMap));
 }
 
 function readClassroomVerificationFallback(): ClassroomVerificationRecord[] {
@@ -16715,6 +16747,15 @@ export default function App() {
     () => sortLocationEntriesByName(locations.filter((l) => l.campus === inventoryItemForm.campus)),
     [locations, inventoryItemForm.campus]
   );
+  const inventoryLocationPickerOptions = useMemo(
+    () =>
+      inventoryLocations.map((loc) => ({
+        value: loc.name,
+        label: loc.name,
+        searchText: `${loc.name} ${loc.area || ""}`.trim(),
+      })),
+    [inventoryLocations]
+  );
   const canViewAllInventoryCampuses = useMemo(
     () => !authUser || hasGlobalCampusAccess(authUser.role, authUser.campuses),
     [authUser]
@@ -21289,10 +21330,23 @@ export default function App() {
   }, [campusLocations, assetForm.location, isInactiveTabletCreate]);
   useEffect(() => {
     if (!inventoryLocations.length) return;
-    if (!inventoryLocations.some((loc) => loc.name === inventoryItemForm.location)) {
-      setInventoryItemForm((f) => ({ ...f, location: inventoryLocations[0].name }));
+    const currentLocation = String(inventoryItemForm.location || "").trim();
+    const rememberedLocation = readInventoryLastLocation(inventoryItemForm.campus, inventoryItemForm.category);
+    const fallbackLocation = inventoryLocations[0]?.name || "";
+    const preferredLocation =
+      inventoryLocations.find((loc) => loc.name === currentLocation)?.name ||
+      inventoryLocations.find((loc) => loc.name === rememberedLocation)?.name ||
+      fallbackLocation;
+    if (preferredLocation && preferredLocation !== currentLocation) {
+      setInventoryItemForm((f) => ({ ...f, location: preferredLocation }));
     }
-  }, [inventoryLocations, inventoryItemForm.location]);
+  }, [inventoryLocations, inventoryItemForm.campus, inventoryItemForm.category, inventoryItemForm.location]);
+  useEffect(() => {
+    if (editingInventoryItemId !== null) return;
+    const location = String(inventoryItemForm.location || "").trim();
+    if (!location) return;
+    writeInventoryLastLocation(inventoryItemForm.campus, inventoryItemForm.category, location);
+  }, [editingInventoryItemId, inventoryItemForm.campus, inventoryItemForm.category, inventoryItemForm.location]);
   useEffect(() => {
     const operator = String(authUser?.displayName || authUser?.username || "").trim();
     if (!operator) return;
@@ -28570,7 +28624,10 @@ export default function App() {
       unit: "pcs",
       openingQty: "0",
       minStock: "",
-      location: inventoryLocations[0]?.name || "",
+      location:
+        readInventoryLastLocation(f.campus, f.category) ||
+        inventoryLocations[0]?.name ||
+        "",
       responsibleParty: "",
       vendor: "",
       notes: "",
@@ -28917,7 +28974,7 @@ export default function App() {
       openingQty: "0",
       minStock: "",
       area: "",
-      location: "",
+      location: readInventoryLastLocation(CAMPUS_LIST[0], "SUPPLY"),
       ownerType: "SCHOOL",
       responsibleParty: "",
       vendor: "",
@@ -39929,29 +39986,50 @@ export default function App() {
         statusLabel: lang === "km" ? "កាលវិភាគបន្ទាប់" : "Next Due",
       };
     };
-    const assetRows: ScheduleCalendarRow[] = scheduleListRows.map((asset) => ({
-      ...statusForRow(
-        String(asset.nextMaintenanceDate || ""),
-        hasCompletedMaintenanceOnDate(asset, String(asset.nextMaintenanceDate || ""))
-      ),
-      id: `asset-${asset.id}`,
-      kind: "asset",
-      date: String(asset.nextMaintenanceDate || ""),
-      campus: asset.campus,
-      title: asset.assetId,
-      subtitle: assetItemName(asset.category, asset.type, asset.pcType || ""),
-      note: asset.scheduleNote || "",
-      groupLabel: assetScheduleGroupLabel(asset),
-      modeLabel: maintenanceRepeatLabel(
+    const assetRows: ScheduleCalendarRow[] = [];
+    const seenAssetKeys = new Set<string>();
+    scheduleListRows.forEach((asset) => {
+      const subtitle = assetItemName(asset.category, asset.type, asset.pcType || "");
+      const groupLabel = assetScheduleGroupLabel(asset);
+      const modeLabel = maintenanceRepeatLabel(
         String(asset.repeatMode || "NONE"),
         Number(asset.repeatWeekOfMonth || 1),
         Number(asset.repeatWeekday || 6)
-      ),
-      photo: asset.photo || "",
-      completed: hasCompletedMaintenanceOnDate(asset, String(asset.nextMaintenanceDate || "")),
-      lastCompletedDate: latestCompletedAssetMap.get(String(asset.id)) || "",
-      asset,
-    }));
+      );
+      const pushAssetRow = (date: string, completed: boolean) => {
+        const normalizedDate = String(date || "").trim();
+        if (!normalizedDate) return;
+        const key = `${asset.id}||${normalizedDate}||${completed ? "done" : "pending"}`;
+        if (seenAssetKeys.has(key)) return;
+        seenAssetKeys.add(key);
+        assetRows.push({
+          ...statusForRow(normalizedDate, completed),
+          id: `asset-${asset.id}-${completed ? "done" : "pending"}-${normalizedDate}`,
+          kind: "asset",
+          date: normalizedDate,
+          campus: asset.campus,
+          title: asset.assetId,
+          subtitle,
+          note: asset.scheduleNote || "",
+          groupLabel,
+          modeLabel,
+          photo: asset.photo || "",
+          completed,
+          lastCompletedDate: latestCompletedAssetMap.get(String(asset.id)) || "",
+          asset,
+        });
+      };
+
+      const nextDate = String(asset.nextMaintenanceDate || "");
+      if (nextDate) {
+        pushAssetRow(nextDate, hasCompletedMaintenanceOnDate(asset, nextDate));
+      }
+      (asset.maintenanceHistory || []).forEach((entry) => {
+        if (String(entry.completion || "").trim().toLowerCase() !== "done") return;
+        const sourceDate = String(entry.scheduleSourceDate || entry.date || "").trim();
+        pushAssetRow(sourceDate, true);
+      });
+    });
     const serviceRows: ScheduleCalendarRow[] = calendarEvents
       .filter((row) => isServiceTaskCalendarType(normalizeCalendarEventType(row.type)))
       .map((row) => {
@@ -39987,7 +40065,7 @@ export default function App() {
     return [...assetRows, ...serviceRows]
       .sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
-        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        if (a.completed !== b.completed) return a.completed ? -1 : 1;
         if (a.kind !== b.kind) return a.kind === "service" ? -1 : 1;
         return a.title.localeCompare(b.title);
       });
@@ -58761,11 +58839,14 @@ function formatTicketRequestSource(value?: string) {
                   </label>
                   <label className="field field-location-main">
                     <span>Location</span>
-                    <select className="input" value={inventoryItemForm.location} onChange={(e) => setInventoryItemForm((f) => ({ ...f, location: e.target.value }))}>
-                      {inventoryLocations.map((loc) => (
-                        <option key={`inv-loc-${loc.id}`} value={loc.name}>{loc.name}</option>
-                      ))}
-                    </select>
+                    <LocationPicker
+                      value={inventoryItemForm.location}
+                      onChange={(value) => setInventoryItemForm((f) => ({ ...f, location: value }))}
+                      options={inventoryLocationPickerOptions}
+                      placeholder={lang === "km" ? "ជ្រើសទីតាំង" : "Select location"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                      emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                    />
                   </label>
                   <label className="field field-opening-qty">
                     <span>Opening Qty</span>
@@ -69656,11 +69737,14 @@ function formatTicketRequestSource(value?: string) {
                 </label>
                 <label className="field field-location-main">
                   <span>Location</span>
-                  <select className="input" value={inventoryItemForm.location} onChange={(e) => setInventoryItemForm((f) => ({ ...f, location: e.target.value }))}>
-                    {inventoryLocations.map((loc) => (
-                      <option key={`inventory-edit-location-${loc.id}`} value={loc.name}>{loc.name}</option>
-                    ))}
-                  </select>
+                  <LocationPicker
+                    value={inventoryItemForm.location}
+                    onChange={(value) => setInventoryItemForm((f) => ({ ...f, location: value }))}
+                    options={inventoryLocationPickerOptions}
+                    placeholder={lang === "km" ? "ជ្រើសទីតាំង" : "Select location"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                  />
                 </label>
                 <label className="field field-opening-qty">
                   <span>Opening Qty</span>
