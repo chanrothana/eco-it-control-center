@@ -3646,22 +3646,26 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
 }
 
 async function sendTelegramMaintenanceMessage(text, options = {}) {
-  if (!TELEGRAM_ALERT_ENABLED || (!TELEGRAM_MAINTENANCE_BOT_TOKEN && !TELEGRAM_BOT_TOKEN) || !toText(text)) {
+  const photoUrl =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoUrl")
+      ? toText(options.photoUrl)
+      : "";
+  if (
+    !TELEGRAM_ALERT_ENABLED ||
+    (!TELEGRAM_MAINTENANCE_BOT_TOKEN && !TELEGRAM_BOT_TOKEN) ||
+    (!toText(text) && !photoUrl)
+  ) {
     telegramMaintenanceLastSendReport = {
       at: new Date().toISOString(),
       ok: false,
       successCount: 0,
       targetCount: 0,
       targets: [],
-      errors: ["maintenance telegram disabled, token missing, or empty text"],
+      errors: ["maintenance telegram disabled, token missing, or empty text/photo"],
     };
     return false;
   }
   const db = options && typeof options === "object" ? options.db : null;
-  const photoUrl =
-    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoUrl")
-      ? toText(options.photoUrl)
-      : "";
   const explicitChatIds =
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
