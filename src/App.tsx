@@ -39449,8 +39449,8 @@ export default function App() {
     const normalized = normalizeMaintenanceEntryPhotos(entry);
     const hasBefore = normalized.beforePhotos.length > 0;
     const hasAfter = normalized.afterPhotos.length > 0;
-    const beforeLabel = labels?.before || (lang === "km" ? "មុនថែទាំ" : "Before");
-    const afterLabel = labels?.after || (lang === "km" ? "បន្ទាប់ពីថែទាំ" : "After");
+    const beforeLabel = labels?.before || (lang === "km" ? "រូបភាពមុន" : "Before Photo");
+    const afterLabel = labels?.after || (lang === "km" ? "រូបភាពបច្ចុប្បន្ន" : "Current Photo");
     const maxPhotosPerGroup = Math.max(1, Number(options?.maxPhotosPerGroup || 4));
     const groupClassName = options?.className ? `maintenance-photo-groups ${options.className}` : "maintenance-photo-groups";
     if (!hasBefore && !hasAfter) return <span className="photo-empty">{t.noPhoto}</span>;

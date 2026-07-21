@@ -4653,29 +4653,30 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   const telegramPhoto = resolveTelegramPhotoUrl(toText(entry.telegramPhoto || ""));
   const beforePhoto = resolveTelegramPhotoUrl(toText((entry.beforePhotos || [])[0] || ""));
   const afterPhoto = resolveTelegramPhotoUrl(toText((entry.afterPhotos || [])[0] || entry.photo || ""));
-  if (telegramPhoto) {
-    return [
-      {
-        type: "photo",
-        media: telegramPhoto,
-        caption: `រូបមុន និង ក្រោយជួសជុល\n${baseLabel}`,
-      },
-    ];
-  }
   const alerts = [];
   if (beforePhoto) {
     alerts.push({
       type: "photo",
       media: beforePhoto,
-      caption: `រូបមុនជួសជុល\n${baseLabel}`,
+      caption: `Before Photo\n${baseLabel}`,
     });
   }
   if (afterPhoto) {
     alerts.push({
       type: "photo",
       media: afterPhoto,
-      caption: `រូបក្រោយជួសជុល\n${baseLabel}`,
+      caption: `Current Photo\n${baseLabel}`,
     });
+  }
+  if (alerts.length) return alerts;
+  if (telegramPhoto) {
+    return [
+      {
+        type: "photo",
+        media: telegramPhoto,
+        caption: `Before Photo | Current Photo\n${baseLabel}`,
+      },
+    ];
   }
   return alerts;
 }
@@ -4694,11 +4695,22 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
   const message = buildMaintenanceRecordTelegramMessage(asset, entry, user, options);
   const photoAlerts = buildMaintenanceRecordTelegramPhotoAlerts(asset, entry);
   let telegramAlertSent = false;
+  const sendMaintenancePhoto = (text, sendOptions = {}) =>
+    sendTelegramMessage(text, {
+      ...sendOptions,
+      db,
+      kind: "tools",
+    });
+  const sendMaintenanceAlbum = (mediaItems, sendOptions = {}) =>
+    sendTelegramMediaGroup(mediaItems, {
+      ...sendOptions,
+      db,
+      kind: "tools",
+    });
   try {
     if (photoAlerts.length === 1) {
       const primaryText = message || photoAlerts[0].caption;
-      const report = await sendTelegramMaintenanceMessage(primaryText, {
-        db,
+      const report = await sendMaintenancePhoto(primaryText, {
         photoUrl: photoAlerts[0].media,
         parseMode: message ? "HTML" : "",
         includeResults: true,
@@ -4706,8 +4718,7 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       if (report && report.ok) {
         telegramAlertSent = true;
       } else if (message) {
-        const fallback = await sendTelegramMaintenanceMessage(message, {
-          db,
+        const fallback = await sendMaintenancePhoto(message, {
           parseMode: "HTML",
           includeResults: true,
         });
@@ -4715,8 +4726,7 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       }
     } else {
       if (message) {
-        const report = await sendTelegramMaintenanceMessage(message, {
-          db,
+        const report = await sendMaintenancePhoto(message, {
           includeResults: true,
           parseMode: "HTML",
         });
@@ -4724,13 +4734,12 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       }
 
       if (photoAlerts.length >= 2) {
-        const report = await sendTelegramMaintenanceMediaGroup(photoAlerts, { db });
+        const report = await sendMaintenanceAlbum(photoAlerts);
         telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
       } else {
         for (const item of photoAlerts) {
           // eslint-disable-next-line no-await-in-loop
-          const report = await sendTelegramMaintenanceMessage(item.caption, {
-            db,
+          const report = await sendMaintenancePhoto(item.caption, {
             photoUrl: item.media,
           });
           telegramAlertSent = Boolean(report && report.ok) || telegramAlertSent;
