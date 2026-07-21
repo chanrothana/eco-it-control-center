@@ -4078,21 +4078,43 @@ async function buildToolTelegramPreviewSvg(source, text = "") {
   const secondPhotoLabel = previousPhotoPath ? "រូបភាពក្រោយជួសជុល" : "រូបភាពបច្ចុប្បន្ន";
   const firstPhotoData = await resolveTelegramPreviewImageData(firstPhoto);
   const secondPhotoData = await resolveTelegramPreviewImageData(secondPhoto);
-  const bodyLines = wrapTelegramPreviewText(text, 38).slice(0, 14);
+  const bodyLines = wrapTelegramPreviewText(text, 34).slice(0, 14);
   const textLines = bodyLines.length
     ? bodyLines
-    : wrapTelegramPreviewText(`Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`, 38);
-  const lineHeight = 34;
-  const textStartY = 442;
-  const bottomPadding = 48;
-  const totalHeight = Math.max(760, textStartY + lineHeight * textLines.length + bottomPadding);
-  const textSvg = textLines
-    .map((line, index) => {
-      const escaped = escapeSvgText(line);
-      const y = textStartY + index * lineHeight;
-      return `<text x="150" y="${y}" fill="#111827" font-size="28" font-family="Arial, sans-serif">${escaped}</text>`;
-    })
-    .join("");
+    : wrapTelegramPreviewText(`Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`, 34);
+  const contentTop = 392;
+  const headerLineHeight = 30;
+  const bodyLineHeight = 29;
+  const bottomPadding = 38;
+  let currentY = contentTop + 38;
+  const textSvgParts = [];
+  textLines.forEach((line, index) => {
+    const escaped = escapeSvgText(line);
+    let fontSize = 21;
+    let fontWeight = "400";
+    let fill = "#f8fbff";
+    let textDecoration = "";
+    let lineHeight = bodyLineHeight;
+    if (index === 0 || index === 1) {
+      fontSize = 24;
+      fontWeight = "700";
+      lineHeight = headerLineHeight;
+    } else if (/^Asset:/i.test(line)) {
+      fontSize = 22;
+      fontWeight = "700";
+      textDecoration = ' text-decoration="underline"';
+    } else if (/^(សាខា:|ទីតាំង:|កាលបរិច្ឆេទ|ប្រភេទការងារ:|អ្នកអនុវត្ត:|កំណត់ចំណាំ:|ចំនួនបច្ចុប្បន្ន:|ចំនួន:|ស្ថានភាព:|កត់ត្រាដោយ:|ស្នើដោយ:|អនុម័តដោយ:|ទទួលដោយ:|មូលហេតុ:|ចំណាំ:|ឯកតា:)/.test(line)) {
+      fontSize = 20;
+      fontWeight = "600";
+      fill = "#ffffff";
+    }
+    textSvgParts.push(
+      `<text x="166" y="${currentY}" fill="${fill}" font-size="${fontSize}" font-weight="${fontWeight}" font-family="Arial, sans-serif"${textDecoration}>${escaped}</text>`
+    );
+    currentY += lineHeight;
+  });
+  const totalHeight = Math.max(760, currentY + bottomPadding);
+  const textSvg = textSvgParts.join("");
   const renderPhotoBlock = (imageHref, x, y, width, height, clipId, placeholderTop, placeholderBottom) => `
     <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#ffffff" stroke="#d7c7b4" stroke-width="2"/>
     ${
@@ -4116,8 +4138,13 @@ async function buildToolTelegramPreviewSvg(source, text = "") {
       <stop offset="0%" stop-color="#4f8dff" />
       <stop offset="100%" stop-color="#1d5fdd" />
     </linearGradient>
+    <linearGradient id="toolDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#243245" />
+      <stop offset="100%" stop-color="#182230" />
+    </linearGradient>
   </defs>
-  <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#fbf7f2" />
+  <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#f7f2eb" />
+  <rect x="0" y="372" width="760" height="${totalHeight - 372}" fill="url(#toolDark)" />
   <text x="190" y="40" text-anchor="middle" fill="#3e3428" font-size="18" font-weight="700" font-family="Arial, sans-serif">${escapeSvgText(firstPhotoLabel)}</text>
   <line x1="86" y1="34" x2="144" y2="34" stroke="#3e3428" stroke-width="1.5" />
   <line x1="236" y1="34" x2="294" y2="34" stroke="#3e3428" stroke-width="1.5" />
@@ -4126,13 +4153,12 @@ async function buildToolTelegramPreviewSvg(source, text = "") {
   <line x1="612" y1="34" x2="670" y2="34" stroke="#3e3428" stroke-width="1.5" />
   ${renderPhotoBlock(firstPhotoData, 24, 48, 348, 312, "toolPhotoClipA", "NO", "PHOTO")}
   ${renderPhotoBlock(secondPhotoData, 388, 48, 348, 312, "toolPhotoClipB", "NO", "PHOTO")}
-  <rect x="40" y="392" width="32" height="32" fill="url(#toolBlue)" />
-  <rect x="80" y="392" width="32" height="32" fill="url(#toolBlue)" />
-  <rect x="120" y="392" width="32" height="32" fill="url(#toolBlue)" />
-  <rect x="40" y="432" width="32" height="32" fill="url(#toolBlue)" />
-  <rect x="80" y="432" width="32" height="32" fill="url(#toolBlue)" />
-  <rect x="120" y="432" width="32" height="32" fill="url(#toolBlue)" />
-  <text x="40" y="${totalHeight - 18}" fill="#8f8b84" font-size="15" font-family="Arial, sans-serif">${escapeSvgText(itemCode)} - ${escapeSvgText(itemName)}</text>
+  <rect x="38" y="404" width="34" height="34" fill="url(#toolBlue)" />
+  <rect x="80" y="404" width="34" height="34" fill="url(#toolBlue)" />
+  <rect x="122" y="404" width="34" height="34" fill="url(#toolBlue)" />
+  <rect x="38" y="446" width="34" height="34" fill="url(#toolBlue)" />
+  <rect x="80" y="446" width="34" height="34" fill="url(#toolBlue)" />
+  <rect x="122" y="446" width="34" height="34" fill="url(#toolBlue)" />
   ${textSvg}
 </svg>`;
 }
