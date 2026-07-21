@@ -10724,6 +10724,14 @@ export default function App() {
   const [reportType, setReportType] = useState<ReportType>("asset_master");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
   const [reportInventoryViewMode, setReportInventoryViewMode] = useState<"list" | "campus_compare">("list");
+  const [reportInventoryCompareSort, setReportInventoryCompareSort] = useState<{
+    key: "item" | "totalStock" | "campus";
+    direction: "asc" | "desc";
+    campus?: string;
+  }>({
+    key: "item",
+    direction: "asc",
+  });
   const [reportInventoryBorrowModal, setReportInventoryBorrowModal] = useState<null | {
     itemKey: string;
     itemName: string;
@@ -16752,7 +16760,7 @@ export default function App() {
       inventoryLocations.map((loc) => ({
         value: loc.name,
         label: loc.name,
-        searchText: `${loc.name} ${loc.area || ""}`.trim(),
+        searchText: loc.name,
       })),
     [inventoryLocations]
   );
@@ -18010,6 +18018,36 @@ export default function App() {
     }),
     [reportInventoryComparisonRows]
   );
+  const sortedReportInventoryComparisonRows = useMemo(() => {
+    const rows = [...reportInventoryComparisonRows];
+    rows.sort((a, b) => {
+      let result = 0;
+      if (reportInventoryCompareSort.key === "totalStock") {
+        result = a.totalStock - b.totalStock;
+      } else if (reportInventoryCompareSort.key === "campus" && reportInventoryCompareSort.campus) {
+        const campusName = reportInventoryCompareSort.campus;
+        const aStock = Number(a.campusStocks.find((entry) => entry.campusName === campusName)?.stock || 0);
+        const bStock = Number(b.campusStocks.find((entry) => entry.campusName === campusName)?.stock || 0);
+        result = aStock - bStock;
+        if (result === 0) {
+          result =
+            a.totalStock - b.totalStock ||
+            a.itemName.localeCompare(b.itemName, undefined, { sensitivity: "base" });
+        }
+      } else {
+        result =
+          a.itemName.localeCompare(b.itemName, undefined, { sensitivity: "base" }) ||
+          a.sortCode.localeCompare(b.sortCode, undefined, { numeric: true, sensitivity: "base" });
+      }
+      if (result === 0) {
+        result =
+          a.sortCode.localeCompare(b.sortCode, undefined, { numeric: true, sensitivity: "base" }) ||
+          a.itemName.localeCompare(b.itemName, undefined, { sensitivity: "base" });
+      }
+      return reportInventoryCompareSort.direction === "asc" ? result : -result;
+    });
+    return rows;
+  }, [reportInventoryCompareSort, reportInventoryComparisonRows]);
   const reportInventoryBorrowCampuses = useMemo(() => {
     if (!reportInventoryBorrowModal) return [] as Array<{
       campusName: string;
@@ -18018,10 +18056,11 @@ export default function App() {
       itemId: number;
       location: string;
     }>;
-    const row = reportInventoryComparisonRows.find((entry) => entry.itemKey === reportInventoryBorrowModal.itemKey);
+    const row = sortedReportInventoryComparisonRows.find((entry) => entry.itemKey === reportInventoryBorrowModal.itemKey)
+      || reportInventoryComparisonRows.find((entry) => entry.itemKey === reportInventoryBorrowModal.itemKey);
     if (!row) return [];
     return row.campusStocks.filter((entry) => entry.itemId > 0);
-  }, [reportInventoryBorrowModal, reportInventoryComparisonRows]);
+  }, [reportInventoryBorrowModal, reportInventoryComparisonRows, sortedReportInventoryComparisonRows]);
   const reportInventoryBorrowSourceEntry = useMemo(
     () =>
       reportInventoryBorrowCampuses.find((entry) => entry.campusName === reportInventoryBorrowModal?.sourceCampus) || null,
@@ -18106,6 +18145,37 @@ export default function App() {
         ? (lang === "km" ? "ប្រៀបធៀបតាមសាខា" : "Compare by Campus")
         : (lang === "km" ? "បញ្ជីស្តុក" : "Stock List"),
     [lang, reportInventoryViewMode]
+  );
+  const toggleReportInventoryCompareSort = useCallback(
+    (key: "item" | "totalStock" | "campus", campus?: string) => {
+      setReportInventoryCompareSort((prev) => {
+        const sameKey = prev.key === key;
+        const sameCampus = key !== "campus" || prev.campus === campus;
+        if (sameKey && sameCampus) {
+          return {
+            key,
+            campus,
+            direction: prev.direction === "asc" ? "desc" : "asc",
+          };
+        }
+        return {
+          key,
+          campus,
+          direction: key === "item" ? "asc" : "desc",
+        };
+      });
+    },
+    []
+  );
+  const reportInventoryCompareSortIndicator = useCallback(
+    (key: "item" | "totalStock" | "campus", campus?: string) => {
+      const isActive =
+        reportInventoryCompareSort.key === key &&
+        (key !== "campus" || reportInventoryCompareSort.campus === campus);
+      if (!isActive) return "↕";
+      return reportInventoryCompareSort.direction === "asc" ? "↑" : "↓";
+    },
+    [reportInventoryCompareSort]
   );
   useEffect(() => {
     if (reportInventoryGroupFilter === "ALL") {
@@ -72228,11 +72298,13 @@ function formatTicketRequestSource(value?: string) {
                               <div className="report-card-meta">
                                 <div><strong>{lang === "km" ? "តាមសាខា" : "By Campus"}:</strong> {row.campusSummary.join(" | ") || "-"}</div>
                               </div>
-                              <div className="asset-actions" style={{ marginTop: 10 }}>
-                                <button className="btn-primary btn-small" type="button" onClick={() => openReportInventoryBorrowModal(row)}>
-                                  {lang === "km" ? "ខ្ចី / ត្រឡប់" : "Borrow / Return"}
-                                </button>
-                              </div>
+                              {row.borrowSuggestion !== (lang === "km" ? "សមតុល្យល្អ" : "Balanced") ? (
+                                <div className="report-card-meta report-compare-note-mobile">
+                                  <div>
+                                    <strong>{lang === "km" ? "ចំណាំ" : "Note"}:</strong> {row.borrowSuggestion}
+                                  </div>
+                                </div>
+                              ) : null}
                             </article>
                           ))
                         ) : (
@@ -72244,19 +72316,56 @@ function formatTicketRequestSource(value?: string) {
                         <table>
                           <thead>
                             <tr>
-                              <th>{lang === "km" ? "ទំនិញ" : "Item"}</th>
+                              <th className="report-compare-item-col">
+                                <button
+                                  type="button"
+                                  className="report-compare-sort-btn"
+                                  onClick={() => toggleReportInventoryCompareSort("item")}
+                                >
+                                  <span>{lang === "km" ? "ទំនិញ" : "Item"}</span>
+                                  <span className="report-compare-sort-indicator" aria-hidden="true">
+                                    {reportInventoryCompareSortIndicator("item")}
+                                  </span>
+                                </button>
+                              </th>
                               {reportInventoryComparisonCampuses.map((campus) => (
-                                <th key={`report-compare-campus-col-${campus}`}>{rentalPrinterCampusLabel(campus)}</th>
+                                <th key={`report-compare-campus-col-${campus}`} className="report-compare-campus-col">
+                                  <button
+                                    type="button"
+                                    className="report-compare-sort-btn report-compare-sort-btn-campus"
+                                    onClick={() => toggleReportInventoryCompareSort("campus", campus)}
+                                  >
+                                    <span className="report-compare-campus-head">{rentalPrinterCampusLabel(campus)}</span>
+                                    <span className="report-compare-sort-indicator" aria-hidden="true">
+                                      {reportInventoryCompareSortIndicator("campus", campus)}
+                                    </span>
+                                  </button>
+                                </th>
                               ))}
-                              <th className="report-compare-total-col">{lang === "km" ? "ស្តុកសរុប" : "Total Stock"}</th>
-                              <th>{lang === "km" ? "សកម្មភាព" : "Actions"}</th>
+                              <th className="report-compare-total-col">
+                                <button
+                                  type="button"
+                                  className="report-compare-sort-btn"
+                                  onClick={() => toggleReportInventoryCompareSort("totalStock")}
+                                >
+                                  <span>{lang === "km" ? "ស្តុកសរុប" : "Total Stock"}</span>
+                                  <span className="report-compare-sort-indicator" aria-hidden="true">
+                                    {reportInventoryCompareSortIndicator("totalStock")}
+                                  </span>
+                                </button>
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
-                            {reportInventoryComparisonRows.length ? (
-                              reportInventoryComparisonRows.map((row) => (
+                            {sortedReportInventoryComparisonRows.length ? (
+                              sortedReportInventoryComparisonRows.map((row) => (
                                 <tr key={`report-inventory-compare-${row.itemKey}`}>
-                                  <td><strong>{row.itemName}</strong></td>
+                                  <td className="report-compare-item-cell">
+                                    <strong>{row.itemName}</strong>
+                                    {row.borrowSuggestion !== (lang === "km" ? "សមតុល្យល្អ" : "Balanced") ? (
+                                      <span className="report-compare-item-note">{row.borrowSuggestion}</span>
+                                    ) : null}
+                                  </td>
                                   {reportInventoryComparisonCampuses.map((campus) => {
                                     const match = row.campusStocks.find((entry) => entry.campusName === campus);
                                     const stock = Number(match?.stock || 0);
@@ -72269,7 +72378,6 @@ function formatTicketRequestSource(value?: string) {
                                           {stock > 0 && match?.photo
                                             ? <div className="report-compare-stock-photo">{renderAssetPhoto(match.photo, `${row.itemName}-${campus}`)}</div>
                                             : null}
-                                          {stock > 0 ? <span className="report-compare-stock-divider" aria-hidden="true"></span> : null}
                                           <div className="report-compare-stock-amount">
                                             {stock > 0 ? (
                                               <>
@@ -72285,16 +72393,11 @@ function formatTicketRequestSource(value?: string) {
                                     );
                                   })}
                                   <td className="report-compare-stock-cell report-compare-stock-total"><strong>{row.totalStock}</strong></td>
-                                  <td>
-                                    <button className="btn-primary btn-small" type="button" onClick={() => openReportInventoryBorrowModal(row)}>
-                                      {lang === "km" ? "ខ្ចី / ត្រឡប់" : "Borrow / Return"}
-                                    </button>
-                                  </td>
                                 </tr>
                               ))
                             ) : (
                               <tr>
-                                <td colSpan={reportInventoryComparisonCampuses.length + 3}>{lang === "km" ? "មិនមានទិន្នន័យប្រៀបធៀបទេ។" : "No campus comparison data."}</td>
+                                <td colSpan={reportInventoryComparisonCampuses.length + 2}>{lang === "km" ? "មិនមានទិន្នន័យប្រៀបធៀបទេ។" : "No campus comparison data."}</td>
                               </tr>
                             )}
                           </tbody>
