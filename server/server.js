@@ -3440,6 +3440,14 @@ function waitMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
+function resolveTelegramBotTokenForKind(kind = "default") {
+  const normalizedKind = toText(kind).trim().toLowerCase();
+  if (normalizedKind === "maintenance" || normalizedKind === "tools") {
+    return TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
+  }
+  return TELEGRAM_BOT_TOKEN;
+}
+
 async function sendTelegramMessageToChatWithRetry(
   chatId,
   text,
@@ -3509,8 +3517,9 @@ async function sendTelegramMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "kind")
       ? toText(options.kind).trim().toLowerCase() || "default"
       : "default";
+  const botToken = resolveTelegramBotTokenForKind(kind);
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, kind);
-  const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
+  const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS && botToken ? await discoverTelegramChatIds(botToken) : [];
   telegramLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
   const targets = configuredTargets.length
@@ -3520,7 +3529,7 @@ async function sendTelegramMessage(text, options = {}) {
   const results = [];
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
-    results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl));
+    results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, botToken));
   }
   let successCount = results.filter((row) => row.ok).length;
   if (!successCount && TELEGRAM_DISCOVER_CHAT_IDS && !configuredTargets.length) {
@@ -3528,7 +3537,7 @@ async function sendTelegramMessage(text, options = {}) {
       new Set(
         [
           ...targets,
-          ...(await discoverTelegramChatIds()),
+          ...(await discoverTelegramChatIds(botToken)),
         ]
           .map((row) => toText(row).trim())
           .filter(Boolean)
@@ -3537,7 +3546,7 @@ async function sendTelegramMessage(text, options = {}) {
     for (const chatId of retryTargets) {
       if (results.some((row) => row.ok && row.chatId === chatId)) continue;
       // eslint-disable-next-line no-await-in-loop
-      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2));
+      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2, botToken));
     }
     successCount = results.filter((row) => row.ok).length;
   }
@@ -3589,8 +3598,9 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "kind")
       ? toText(options.kind).trim().toLowerCase() || "default"
       : "default";
+  const botToken = resolveTelegramBotTokenForKind(kind);
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, kind);
-  const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS ? await discoverTelegramChatIds() : [];
+  const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS && botToken ? await discoverTelegramChatIds(botToken) : [];
   telegramLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
   const targets = configuredTargets.length
@@ -3600,7 +3610,7 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
   const results = [];
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
-    results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 3, TELEGRAM_BOT_TOKEN));
+    results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 3, botToken));
   }
   if (results.some((row) => row.ok)) return true;
   if (TELEGRAM_DISCOVER_CHAT_IDS) {
@@ -3608,7 +3618,7 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
       new Set(
         [
           ...targets,
-          ...(await discoverTelegramChatIds()),
+          ...(await discoverTelegramChatIds(botToken)),
         ]
           .map((row) => toText(row).trim())
           .filter(Boolean)
@@ -3617,7 +3627,7 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
     for (const chatId of retryTargets) {
       if (results.some((row) => row.ok && row.chatId === chatId)) continue;
       // eslint-disable-next-line no-await-in-loop
-      results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 2, TELEGRAM_BOT_TOKEN));
+      results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 2, botToken));
     }
   }
   return results.some((row) => row.ok);
@@ -4044,20 +4054,20 @@ function buildToolReviewTelegramPhotoAlerts(source) {
     alerts.push({
       type: "photo",
       media: previousPhoto,
-      caption: `IMG (Before)\n${baseLabel}`,
+      caption: `Before Photo\n${baseLabel}`,
     });
   }
   if (currentPhoto && currentPhoto !== previousPhoto) {
     alerts.push({
       type: "photo",
       media: currentPhoto,
-      caption: `IMG (Latest / Checked)\n${baseLabel}`,
+      caption: `Current Photo\n${baseLabel}`,
     });
   } else if (currentPhoto) {
     alerts.push({
       type: "photo",
       media: currentPhoto,
-      caption: `IMG (Latest / Checked)\n${baseLabel}`,
+      caption: `Current Photo\n${baseLabel}`,
     });
   }
   return alerts;
