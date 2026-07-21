@@ -13761,9 +13761,28 @@ label.backup-action-btn {
 
 .tool-review-borrow-action-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(220px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 1.1fr) minmax(0, 1.35fr) minmax(190px, 0.9fr);
   gap: 12px;
   align-items: end;
+}
+
+.tool-review-borrow-photo-field {
+  min-width: 0;
+}
+
+.tool-review-borrow-photo-inline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.tool-review-borrow-photo-inline .table-photo {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(144, 175, 219, 0.26);
 }
 
 .tool-review-borrow-note-field {
@@ -14166,17 +14185,18 @@ label.backup-action-btn {
   position: relative;
   z-index: 1201;
   width: min(700px, calc(100vw - 32px));
-  max-height: min(78vh, 680px);
+  max-height: min(88vh, 760px);
   display: grid;
   gap: 8px;
   padding: 12px;
   box-sizing: border-box;
+  overflow: visible;
 }
 
 .tool-review-modal-backdrop {
   z-index: 1200;
   place-items: start center;
-  padding-top: 96px;
+  padding-top: 32px;
   padding-bottom: 20px;
 }
 
