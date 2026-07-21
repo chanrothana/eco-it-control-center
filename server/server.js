@@ -4729,6 +4729,17 @@ async function resolveTelegramPreviewImageData(photoPath) {
   return `data:${mimeType};base64,${raw.toString("base64")}`;
 }
 
+async function renderTelegramPreviewSvgToPng(svgText) {
+  const sharpLib = getSharp();
+  const normalized = toText(svgText);
+  if (!sharpLib || !normalized) return null;
+  try {
+    return await sharpLib(Buffer.from(normalized, "utf8")).png().toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 function buildToolTelegramPreviewUrl(source, text = "") {
   if (!PUBLIC_APP_URL || !source || typeof source !== "object") return "";
   const url = new URL(`${PUBLIC_APP_URL}/api/alerts/telegram/tool-preview`);
@@ -4891,22 +4902,65 @@ async function buildToolTelegramPreviewPng(source, text = "") {
   });
 }
 
-function buildMaintenanceRecordTelegramPreviewUrl(asset, entry, text = "") {
+function buildMaintenanceRecordTelegramPreviewUrl(asset, entry, actor = null, options = {}) {
   if (!PUBLIC_APP_URL || !asset || !entry) return "";
   const url = new URL(`${PUBLIC_APP_URL}/api/alerts/telegram/maintenance-record-preview`);
+  const source = buildMaintenanceRecordTelegramPreviewSource(asset, entry, actor, options) || {};
   const setIfPresent = (key, value) => {
     const normalized = toText(value);
     if (normalized) url.searchParams.set(key, normalized);
   };
-  setIfPresent("text", text);
-  setIfPresent("assetId", asset.assetId);
-  setIfPresent("itemName", assetItemName(asset.category, asset.type, asset.pcType || ""));
-  setIfPresent("campus", asset.campus);
-  setIfPresent("location", asset.location);
-  setIfPresent("beforePhoto", (entry.beforePhotos || [])[0] || "");
-  setIfPresent("afterPhoto", (entry.afterPhotos || [])[0] || entry.photo || "");
-  setIfPresent("telegramPhoto", entry.telegramPhoto || "");
+  [
+    "headerTitle",
+    "headerSubtitle",
+    "ticketNo",
+    "assetId",
+    "itemName",
+    "isGeneralTask",
+    "campus",
+    "location",
+    "date",
+    "type",
+    "performedBy",
+    "note",
+    "condition",
+    "checkedBy",
+    "cost",
+    "beforePhoto",
+    "afterPhoto",
+    "telegramPhoto",
+  ].forEach((key) => setIfPresent(key, source[key]));
   return url.toString();
+}
+
+function buildMaintenanceRecordTelegramPreviewTextLines(source) {
+  if (!source || typeof source !== "object") return [];
+  const isGeneralTask = toText(source.isGeneralTask) === "1";
+  const rawLines = [
+    toText(source.headerTitle) || "ជូនដំណឹង ECO - ការងារជួសជុល",
+    toText(source.headerSubtitle) || "មានកំណត់ត្រាការងារថ្មី",
+    isGeneralTask
+      ? `ការងារទូទៅ: ${toText(source.itemName) || "General Maintenance Task"}`
+      : `Asset: ${toText(source.assetId) || "-"} - ${toText(source.itemName) || "-"}`,
+    ...(toText(source.ticketNo) ? [`Ticket: ${toText(source.ticketNo)}`] : []),
+    `សាខា: ${toText(source.campus) || "-"}`,
+    ...(!isGeneralTask ? [`ទីតាំង: ${toText(source.location) || "-"}`] : []),
+    `កាលបរិច្ឆេទ និងម៉ោង: ${toText(source.date) || "-"}`,
+    `ប្រភេទការងារ: ${toText(source.type) || "-"}`,
+    `អ្នកអនុវត្ត: ${toText(source.performedBy) || "staff"}`,
+    `ការងារដែលបានធ្វើ: ${toText(source.note) || "-"}`,
+    ...(toText(source.condition) ? [`ចំណាំបន្ថែម: ${toText(source.condition)}`] : []),
+    ...(toText(source.checkedBy) ? [`ពិនិត្យដោយ: ${toText(source.checkedBy)}`] : []),
+    ...(toText(source.cost) ? [`តម្លៃ: ${toText(source.cost)}`] : []),
+  ];
+  const maxCharsForLine = (index) => {
+    if (index < 2) return 26;
+    if (index === 2) return 30;
+    return 32;
+  };
+  return rawLines
+    .filter((line) => Boolean(toText(line)))
+    .flatMap((line, index) => wrapTelegramPreviewText(line, maxCharsForLine(index)));
 }
 
 async function buildMaintenanceRecordTelegramPreviewSvg(source, text = "") {
@@ -4914,18 +4968,11 @@ async function buildMaintenanceRecordTelegramPreviewSvg(source, text = "") {
   const fontCss = await buildTelegramPreviewFontCss();
   const beforePhotoPath = toText(source.beforePhoto);
   const afterPhotoPath = toText(source.afterPhoto);
-  const itemCode = toText(source.assetId) || "-";
-  const itemName = toText(source.itemName) || "General Maintenance Task";
-  const campus = formatTelegramCampusKhmer(source.campus);
-  const location = toText(source.location) || "-";
   const firstPhoto = beforePhotoPath || afterPhotoPath;
   const secondPhoto = afterPhotoPath && afterPhotoPath !== beforePhotoPath ? afterPhotoPath : "";
   const firstPhotoData = await resolveTelegramPreviewImageData(firstPhoto);
   const secondPhotoData = await resolveTelegramPreviewImageData(secondPhoto);
-  const textLines = wrapTelegramPreviewText(
-    telegramHtmlToPreviewText(text) || `Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`,
-    32
-  ).slice(0, 15);
+  const textLines = buildMaintenanceRecordTelegramPreviewTextLines(source).slice(0, 16);
   const contentTop = 392;
   const headerLineHeight = 30;
   const bodyLineHeight = 29;
@@ -5015,36 +5062,8 @@ async function buildMaintenanceRecordTelegramPreviewSvg(source, text = "") {
 }
 
 async function buildMaintenanceRecordTelegramPreviewPng(source, text = "") {
-  if (!source || typeof source !== "object") return null;
-  const beforePhotoPath = toText(source.beforePhoto);
-  const afterPhotoPath = toText(source.afterPhoto);
-  const telegramPhotoPath = toText(source.telegramPhoto);
-  const itemCode = toText(source.assetId) || "-";
-  const itemName = toText(source.itemName) || "General Maintenance Task";
-  const campus = formatTelegramCampusKhmer(source.campus);
-  const location = toText(source.location) || "-";
-  const firstPhoto = beforePhotoPath || afterPhotoPath;
-  const secondPhoto = afterPhotoPath && afterPhotoPath !== beforePhotoPath ? afterPhotoPath : "";
-  const hasBeforeAndAfter = Boolean(beforePhotoPath) && Boolean(afterPhotoPath);
-  const textLines = wrapTelegramPreviewText(
-    telegramHtmlToPreviewText(text) || `Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`,
-    32
-  ).slice(0, 15);
-  if (!hasBeforeAndAfter && telegramPhotoPath) {
-    return renderTelegramWhiteSinglePhotoCardPng({
-      photoPath: telegramPhotoPath,
-      textLines,
-      iconColor: "blue",
-    });
-  }
-  return renderTelegramWhiteCompareCardPng({
-    firstPhotoPath: firstPhoto,
-    secondPhotoPath: secondPhoto,
-    firstLabel: "មុនធ្វើ / Before",
-    secondLabel: "ក្រោយធ្វើ / After",
-    textLines,
-    iconColor: "blue",
-  });
+  const svg = await buildMaintenanceRecordTelegramPreviewSvg(source, text);
+  return renderTelegramPreviewSvgToPng(svg);
 }
 
 async function buildMaintenanceTelegramPreviewSvg(asset, options = {}) {
@@ -5800,13 +5819,9 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, optio
   const checkedBy = toText(entry.checkedBy);
   const cost = toText(entry.cost);
   const emphasize = (label, value) => `<b><u>${escapeTelegramHtml(label)}</u></b>: ${escapeTelegramHtml(value)}`;
-  const header = mode === "ticket_fixed"
-    ? buildTelegramColorStrip("🟩", "ជូនដំណឹង ECO - ការងារជួសជុល", "ការស្នើសុំជួសជុលត្រូវបានបញ្ចប់", true)
-    : mode === "schedule_completed"
-      ? buildTelegramColorStrip("🟩", "ជូនដំណឹង ECO - កាលវិភាគថែទាំ", "ការងារថែទាំតាមកាលវិភាគបានបញ្ចប់", true)
-    : buildTelegramColorStrip("🟦", "ជូនដំណឹង ECO - ការងារជួសជុល", "មានកំណត់ត្រាការងារថ្មី", true);
+  const header = getMaintenanceRecordTelegramHeader(options);
   const lines = [
-    ...header,
+    ...buildTelegramColorStrip(header.colorEmoji, header.title, header.subtitle, true),
     isGeneralTask
       ? emphasize("ការងារទូទៅ", itemName || "General Maintenance Task")
       : emphasize("Asset", `${toText(asset.assetId) || "-"} - ${itemName || "-"}`),
@@ -5832,6 +5847,62 @@ function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, optio
     lines.push(`តម្លៃ: ${escapeTelegramHtml(cost)}`);
   }
   return lines.join("\n");
+}
+
+function getMaintenanceRecordTelegramHeader(options = {}) {
+  const mode = toText(options.mode) || "general";
+  if (mode === "ticket_fixed") {
+    return {
+      colorEmoji: "🟩",
+      title: "ជូនដំណឹង ECO - ការងារជួសជុល",
+      subtitle: "ការស្នើសុំជួសជុលត្រូវបានបញ្ចប់",
+    };
+  }
+  if (mode === "schedule_completed") {
+    return {
+      colorEmoji: "🟩",
+      title: "ជូនដំណឹង ECO - កាលវិភាគថែទាំ",
+      subtitle: "ការងារថែទាំតាមកាលវិភាគបានបញ្ចប់",
+    };
+  }
+  return {
+    colorEmoji: "🟦",
+    title: "ជូនដំណឹង ECO - ការងារជួសជុល",
+    subtitle: "មានកំណត់ត្រាការងារថ្មី",
+  };
+}
+
+function buildMaintenanceRecordTelegramPreviewSource(asset, entry, actor = null, options = {}) {
+  if (!asset || !entry) return null;
+  const header = getMaintenanceRecordTelegramHeader(options);
+  const itemName = assetItemName(asset.category, asset.type, asset.pcType || "");
+  const isGeneralTask =
+    toText(asset.notes) === "SYSTEM_PLACEHOLDER_GENERAL_MAINTENANCE" ||
+    (
+      normalizeCategoryInput(asset.category) === "FACILITY" &&
+      toUpper(asset.type) === "GEN" &&
+      toText(asset.location) === "General Record"
+    );
+  return {
+    headerTitle: header.title,
+    headerSubtitle: header.subtitle,
+    ticketNo: toText(options.ticketNo),
+    assetId: toText(asset.assetId) || "-",
+    itemName: itemName || "General Maintenance Task",
+    isGeneralTask: isGeneralTask ? "1" : "",
+    campus: formatTelegramCampusKhmer(asset.campus),
+    location: toText(asset.location) || "-",
+    date: formatMaintenanceTelegramDateTime(entry),
+    type: toText(entry.type) || "-",
+    performedBy: toText(entry.by) || toText(actor && actor.displayName) || toText(actor && actor.username) || "staff",
+    note: toText(entry.note) || "-",
+    condition: toText(entry.condition),
+    checkedBy: toText(entry.checkedBy),
+    cost: toText(entry.cost),
+    beforePhoto: toText((entry.beforePhotos || [])[0] || ""),
+    afterPhoto: toText((entry.afterPhotos || [])[0] || entry.photo || ""),
+    telegramPhoto: toText(entry.telegramPhoto || ""),
+  };
 }
 
 function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
@@ -5894,7 +5965,7 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       kind: "maintenance",
     });
   try {
-    const previewSource = {
+    const previewSource = buildMaintenanceRecordTelegramPreviewSource(asset, entry, user, options) || {
       assetId: toText(asset && asset.assetId),
       itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
       campus: toText(asset && asset.campus),
@@ -5915,7 +5986,7 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       }
     }
     if (!telegramAlertSent) {
-      const previewUrl = buildMaintenanceRecordTelegramPreviewUrl(asset, entry, message);
+      const previewUrl = buildMaintenanceRecordTelegramPreviewUrl(asset, entry, user, options);
       if (previewUrl) {
         const report = await sendMaintenancePhoto("", {
           photoUrl: previewUrl,
@@ -9534,10 +9605,21 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/api/alerts/telegram/maintenance-record-preview") {
       const source = {
+        headerTitle: toText(url.searchParams.get("headerTitle")),
+        headerSubtitle: toText(url.searchParams.get("headerSubtitle")),
+        ticketNo: toText(url.searchParams.get("ticketNo")),
         assetId: toText(url.searchParams.get("assetId")),
         itemName: toText(url.searchParams.get("itemName")),
+        isGeneralTask: toText(url.searchParams.get("isGeneralTask")),
         campus: toText(url.searchParams.get("campus")),
         location: toText(url.searchParams.get("location")),
+        date: toText(url.searchParams.get("date")),
+        type: toText(url.searchParams.get("type")),
+        performedBy: toText(url.searchParams.get("performedBy")),
+        note: toText(url.searchParams.get("note")),
+        condition: toText(url.searchParams.get("condition")),
+        checkedBy: toText(url.searchParams.get("checkedBy")),
+        cost: toText(url.searchParams.get("cost")),
         beforePhoto: toText(url.searchParams.get("beforePhoto")),
         afterPhoto: toText(url.searchParams.get("afterPhoto")),
         telegramPhoto: toText(url.searchParams.get("telegramPhoto")),
