@@ -5965,40 +5965,7 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       kind: "maintenance",
     });
   try {
-    const previewSource = buildMaintenanceRecordTelegramPreviewSource(asset, entry, user, options) || {
-      assetId: toText(asset && asset.assetId),
-      itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
-      campus: toText(asset && asset.campus),
-      location: toText(asset && asset.location),
-      beforePhoto: toText((entry.beforePhotos || [])[0] || ""),
-      afterPhoto: toText((entry.afterPhotos || [])[0] || entry.photo || ""),
-      telegramPhoto: toText(entry.telegramPhoto || ""),
-    };
-    const previewPng = await buildMaintenanceRecordTelegramPreviewPng(previewSource, message);
-    if (previewPng) {
-      const report = await sendMaintenancePhotoBuffer(previewPng, {
-        includeResults: true,
-        photoFileName: "maintenance-alert-card.png",
-        photoMimeType: "image/png",
-      });
-      if (report && report.ok) {
-        telegramAlertSent = true;
-      }
-    }
-    if (!telegramAlertSent) {
-      const previewUrl = buildMaintenanceRecordTelegramPreviewUrl(asset, entry, user, options);
-      if (previewUrl) {
-        const report = await sendMaintenancePhoto("", {
-          photoUrl: previewUrl,
-          includeResults: true,
-        });
-        if (report && report.ok) {
-          telegramAlertSent = true;
-        }
-      }
-    }
-
-    if (!telegramAlertSent && photoAlerts.length === 1) {
+    if (photoAlerts.length === 1) {
       const primaryText = message || photoAlerts[0].caption;
       const report = await sendMaintenancePhoto(primaryText, {
         photoUrl: photoAlerts[0].media,
