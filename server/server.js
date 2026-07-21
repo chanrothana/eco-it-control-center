@@ -3270,6 +3270,106 @@ function sendTelegramRequestWithToken(botToken, method, payload) {
   });
 }
 
+function sanitizeMultipartDispositionValue(value, fallback) {
+  const normalized = toText(value).replace(/[\r\n"]/g, "").trim();
+  return normalized || fallback;
+}
+
+function buildMultipartBody(fields = {}, files = []) {
+  const boundary = `----ecoTelegram${crypto.randomBytes(12).toString("hex")}`;
+  const chunks = [];
+  const appendBuffer = (value) => {
+    chunks.push(Buffer.isBuffer(value) ? value : Buffer.from(String(value || ""), "utf8"));
+  };
+  const appendField = (name, value) => {
+    if (value === undefined || value === null) return;
+    appendBuffer(`--${boundary}\r\n`);
+    appendBuffer(
+      `Content-Disposition: form-data; name="${sanitizeMultipartDispositionValue(name, "field")}"\r\n\r\n`
+    );
+    appendBuffer(`${toText(value)}\r\n`);
+  };
+  const normalizedFiles = Array.isArray(files) ? files : [];
+  Object.entries(fields || {}).forEach(([name, value]) => {
+    appendField(name, value);
+  });
+  normalizedFiles.forEach((file, index) => {
+    const buffer = Buffer.isBuffer(file && file.buffer)
+      ? file.buffer
+      : Buffer.from(file && file.buffer ? file.buffer : "");
+    if (!buffer.length) return;
+    appendBuffer(`--${boundary}\r\n`);
+    appendBuffer(
+      `Content-Disposition: form-data; name="${sanitizeMultipartDispositionValue(file && file.fieldName, `file${index + 1}`)}"; filename="${sanitizeMultipartDispositionValue(file && file.filename, `upload-${index + 1}.bin`)}"\r\n`
+    );
+    appendBuffer(`Content-Type: ${toText(file && file.mimeType) || "application/octet-stream"}\r\n\r\n`);
+    appendBuffer(buffer);
+    appendBuffer("\r\n");
+  });
+  appendBuffer(`--${boundary}--\r\n`);
+  return {
+    boundary,
+    body: Buffer.concat(chunks),
+  };
+}
+
+function sendTelegramMultipartRequestWithToken(botToken, method, fields = {}, files = []) {
+  return new Promise((resolve) => {
+    const token = toText(botToken).trim();
+    if (!token) {
+      resolve({
+        ok: false,
+        statusCode: 0,
+        body: "missing telegram bot token",
+      });
+      return;
+    }
+    const { boundary, body } = buildMultipartBody(fields, files);
+    const req = https.request(
+      {
+        hostname: "api.telegram.org",
+        path: `/bot${encodeURIComponent(token)}/${method}`,
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": body.length,
+        },
+        timeout: 10000,
+      },
+      (res) => {
+        let responseBody = "";
+        res.on("data", (chunk) => {
+          responseBody += String(chunk || "");
+        });
+        res.on("end", () =>
+          resolve({
+            ok: Boolean(res.statusCode >= 200 && res.statusCode < 300),
+            statusCode: Number(res.statusCode || 0),
+            body: String(responseBody || ""),
+          })
+        );
+      }
+    );
+    req.on("error", (err) =>
+      resolve({
+        ok: false,
+        statusCode: 0,
+        body: err instanceof Error ? err.message : String(err || ""),
+      })
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({
+        ok: false,
+        statusCode: 0,
+        body: "request timeout",
+      });
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
 function sendTelegramRequest(method, payload) {
   return sendTelegramRequestWithToken(TELEGRAM_BOT_TOKEN, method, payload);
 }
@@ -3329,6 +3429,71 @@ function sendTelegramMessageToChat(chatId, text, photoUrl = "", botToken = TELEG
       resolve({
         ok: Boolean(result && result.ok),
         chatId: toText(chatId),
+        messageId,
+        statusCode: Number(result && result.statusCode) || 0,
+        body: toText(result && result.body),
+      });
+    });
+  });
+}
+
+function sendTelegramPhotoBufferToChat(
+  chatId,
+  photoBuffer,
+  options = {}
+) {
+  return new Promise((resolve) => {
+    const normalizedChatId = toText(chatId);
+    const buffer = Buffer.isBuffer(photoBuffer)
+      ? photoBuffer
+      : Buffer.from(photoBuffer ? photoBuffer : "");
+    const caption =
+      options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "caption")
+        ? toText(options.caption).slice(0, 1024)
+        : "";
+    const parseMode =
+      options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "parseMode")
+        ? toText(options.parseMode)
+        : "";
+    const filename =
+      options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "filename")
+        ? toText(options.filename)
+        : "telegram-preview.png";
+    const mimeType =
+      options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "mimeType")
+        ? toText(options.mimeType)
+        : "image/png";
+    const botToken =
+      options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "botToken")
+        ? toText(options.botToken)
+        : TELEGRAM_BOT_TOKEN;
+    if (!normalizedChatId || !buffer.length) {
+      resolve({ ok: false, chatId: normalizedChatId, statusCode: 0, body: "" });
+      return;
+    }
+    const fields = {
+      chat_id: normalizedChatId,
+      ...(caption ? { caption } : {}),
+      ...(parseMode ? { parse_mode: parseMode } : {}),
+    };
+    sendTelegramMultipartRequestWithToken(botToken, "sendPhoto", fields, [
+      {
+        fieldName: "photo",
+        filename,
+        mimeType,
+        buffer,
+      },
+    ]).then((result) => {
+      let messageId = 0;
+      try {
+        const parsed = JSON.parse(toText(result && result.body));
+        messageId = Number(parsed && parsed.result && parsed.result.message_id) || 0;
+      } catch {
+        messageId = 0;
+      }
+      resolve({
+        ok: Boolean(result && result.ok),
+        chatId: normalizedChatId,
         messageId,
         statusCode: Number(result && result.statusCode) || 0,
         body: toText(result && result.body),
@@ -3478,6 +3643,45 @@ async function sendTelegramMessageToChatWithRetry(
     if (plainText && plainText !== toText(text)) {
       last = await sendTelegramMessageToChat(chatId, plainText, photoUrl, botToken, "");
       if (last.ok) return last;
+    }
+  }
+  return last;
+}
+
+async function sendTelegramPhotoBufferToChatWithRetry(
+  chatId,
+  photoBuffer,
+  options = {}
+) {
+  const attempts =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "attempts")
+      ? Math.max(1, Number(options.attempts) || 1)
+      : 3;
+  const parseMode =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "parseMode")
+      ? toText(options.parseMode)
+      : "";
+  const caption =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "caption")
+      ? toText(options.caption)
+      : "";
+  let last = { ok: false, chatId: toText(chatId), statusCode: 0, body: "" };
+  for (let i = 0; i < attempts; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    last = await sendTelegramPhotoBufferToChat(chatId, photoBuffer, options);
+    if (last.ok) return last;
+    if (!shouldRetryTelegramResult(last) || i === attempts - 1) break;
+    // eslint-disable-next-line no-await-in-loop
+    await waitMs(300 * (i + 1));
+  }
+  if (parseMode) {
+    const plainCaption = stripTelegramHtml(caption);
+    if (plainCaption && plainCaption !== caption) {
+      last = await sendTelegramPhotoBufferToChat(chatId, photoBuffer, {
+        ...options,
+        caption: plainCaption,
+        parseMode: "",
+      });
     }
   }
   return last;
@@ -3732,6 +3936,116 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
   return successCount > 0;
 }
 
+async function sendTelegramMaintenancePhotoBuffer(photoBuffer, options = {}) {
+  const caption =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "caption")
+      ? toText(options.caption)
+      : "";
+  if (
+    !TELEGRAM_ALERT_ENABLED ||
+    (!TELEGRAM_MAINTENANCE_BOT_TOKEN && !TELEGRAM_BOT_TOKEN) ||
+    !Buffer.isBuffer(photoBuffer) ||
+    !photoBuffer.length
+  ) {
+    telegramMaintenanceLastSendReport = {
+      at: new Date().toISOString(),
+      ok: false,
+      successCount: 0,
+      targetCount: 0,
+      targets: [],
+      errors: ["maintenance telegram disabled, token missing, or empty photo buffer"],
+    };
+    return false;
+  }
+  const db = options && typeof options === "object" ? options.db : null;
+  const explicitChatIds =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
+      ? options.chatIds
+      : [];
+  const includeResults =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
+      ? Boolean(options.includeResults)
+      : false;
+  const parseMode =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "parseMode")
+      ? toText(options.parseMode)
+      : "";
+  const filename =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoFileName")
+      ? toText(options.photoFileName)
+      : "maintenance-alert-card.png";
+  const mimeType =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoMimeType")
+      ? toText(options.photoMimeType)
+      : "image/png";
+  const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
+  const discoveredChats =
+    TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
+      ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
+      : [];
+  telegramMaintenanceLastDiscoveredChats = discoveredChats;
+  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
+  const targets = configuredTargets.length
+    ? Array.from(new Set(configuredTargets))
+    : Array.from(new Set(discoveredTargets));
+  if (!targets.length) return false;
+  const results = [];
+  const primaryToken = TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
+  for (const chatId of targets) {
+    // eslint-disable-next-line no-await-in-loop
+    results.push(
+      await sendTelegramPhotoBufferToChatWithRetry(chatId, photoBuffer, {
+        attempts: 3,
+        botToken: primaryToken,
+        caption,
+        parseMode,
+        filename,
+        mimeType,
+      })
+    );
+  }
+  let successCount = results.filter((row) => row.ok).length;
+  if (!successCount && TELEGRAM_BOT_TOKEN && TELEGRAM_BOT_TOKEN !== primaryToken) {
+    for (const chatId of targets) {
+      // eslint-disable-next-line no-await-in-loop
+      results.push(
+        await sendTelegramPhotoBufferToChatWithRetry(chatId, photoBuffer, {
+          attempts: 2,
+          botToken: TELEGRAM_BOT_TOKEN,
+          caption,
+          parseMode,
+          filename,
+          mimeType,
+        })
+      );
+    }
+    successCount = results.filter((row) => row.ok).length;
+  }
+  telegramMaintenanceLastSendReport = {
+    at: new Date().toISOString(),
+    ok: successCount > 0,
+    successCount,
+    targetCount: Array.from(new Set(results.map((row) => toText(row.chatId)).filter(Boolean))).length,
+    targets: Array.from(new Set(results.map((row) => toText(row.chatId)).filter(Boolean))),
+    errors: results
+      .filter((row) => !row.ok)
+      .map((row) => `chat ${row.chatId}: ${row.statusCode || 0} ${toText(row.body).slice(0, 160)}`),
+  };
+  if (!successCount) {
+    console.warn(
+      "[MAINTENANCE ALERT] Telegram photo send failed for all targets:",
+      results.map((row) => ({ chatId: row.chatId, statusCode: row.statusCode, body: row.body.slice(0, 160) }))
+    );
+  }
+  if (includeResults) {
+    return {
+      ok: successCount > 0,
+      results,
+    };
+  }
+  return successCount > 0;
+}
+
 async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) {
   const normalizedMedia = Array.isArray(mediaItems)
     ? mediaItems
@@ -3964,6 +4278,7 @@ function escapeSvgText(value) {
 const TELEGRAM_PREVIEW_FONT_PATH = path.join(__dirname, "assets", "fonts", "NotoSansKhmer-Regular.ttf");
 const TELEGRAM_PREVIEW_FONT_FAMILY = "TelegramPreviewKhmer";
 const TELEGRAM_PREVIEW_FONT_STACK = `'${TELEGRAM_PREVIEW_FONT_FAMILY}', 'Noto Sans Khmer', 'Khmer OS Battambang', sans-serif`;
+const TELEGRAM_PREVIEW_PANGO_FONT = "Noto Sans Khmer";
 let telegramPreviewFontCssCache = null;
 
 async function buildTelegramPreviewFontCss() {
@@ -3992,6 +4307,326 @@ async function buildTelegramPreviewFontCss() {
       </style>`;
   }
   return telegramPreviewFontCssCache;
+}
+
+function escapePangoText(value) {
+  return toText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+async function buildTelegramComparePhotoBuffer(photoPath, width = 280, height = 250) {
+  const sharpLib = getSharp();
+  if (!sharpLib) return null;
+  const absolutePath = resolveUploadedAbsolutePath(photoPath);
+  if (!absolutePath || !(await fileExists(absolutePath))) return null;
+  try {
+    return await sharpLib(absolutePath)
+      .rotate()
+      .resize(width, height, {
+        fit: "cover",
+        position: "centre",
+      })
+      .png()
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+function buildTelegramTextComposite(text, {
+  left = 0,
+  top = 0,
+  width = 200,
+  fontSize = 20,
+  color = "#1a1a1a",
+  align = "left",
+  weight = "normal",
+  underline = false,
+} = {}) {
+  const escaped = escapePangoText(text);
+  const markup = `<span foreground="${color}" weight="${weight}"${underline ? ' underline="single"' : ""}>${escaped}</span>`;
+  return {
+    input: {
+      text: {
+        text: markup,
+        font: `${TELEGRAM_PREVIEW_PANGO_FONT} ${fontSize}`,
+        fontfile: TELEGRAM_PREVIEW_FONT_PATH,
+        width,
+        rgba: true,
+        dpi: 196,
+        align,
+      },
+    },
+    left,
+    top,
+  };
+}
+
+async function renderTelegramWhiteCompareCardPng({
+  firstPhotoPath = "",
+  secondPhotoPath = "",
+  firstLabel = "Previous Photo",
+  secondLabel = "Current Photo",
+  textLines = [],
+  iconColor = "blue",
+} = {}) {
+  const sharpLib = getSharp();
+  if (!sharpLib) return null;
+  const normalizedLines = Array.isArray(textLines) ? textLines.filter(Boolean) : [];
+  const headerLineHeight = 30;
+  const bodyLineHeight = 32;
+  const textStartY = 410;
+  let currentY = textStartY;
+  normalizedLines.forEach((_, index) => {
+    currentY += index < 2 ? headerLineHeight : bodyLineHeight;
+  });
+  const totalHeight = Math.max(760, currentY + 44);
+  const iconGradientId = iconColor === "green" ? "compareIconGreen" : "compareIconBlue";
+  const iconStops =
+    iconColor === "green"
+      ? `<stop offset="0%" stop-color="#58dd55" /><stop offset="100%" stop-color="#189f26" />`
+      : `<stop offset="0%" stop-color="#4f8dff" /><stop offset="100%" stop-color="#1d5fdd" />`;
+  const backgroundSvg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="${totalHeight}" viewBox="0 0 760 ${totalHeight}">
+  <defs>
+    <linearGradient id="${iconGradientId}" x1="0%" y1="0%" x2="0%" y2="100%">
+      ${iconStops}
+    </linearGradient>
+  </defs>
+  <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#fbf8f1" stroke="#d9cfbf" stroke-width="2"/>
+  <rect x="18" y="18" width="724" height="${totalHeight - 36}" rx="28" ry="28" fill="#f7efdf" stroke="#d9cfbf" stroke-width="1.5"/>
+  <rect x="24" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
+  <rect x="388" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
+  <line x1="74" y1="34" x2="154" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <line x1="226" y1="34" x2="306" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <line x1="438" y1="34" x2="518" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <line x1="590" y1="34" x2="670" y2="34" stroke="#3e3428" stroke-width="1.5" />
+  <rect x="42" y="66" width="300" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
+  <rect x="418" y="66" width="300" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
+  <rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="82" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="124" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="40" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="82" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="124" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
+</svg>`;
+  const composites = [
+    {
+      input: Buffer.from(backgroundSvg),
+      left: 0,
+      top: 0,
+    },
+  ];
+  const firstPhoto = await buildTelegramComparePhotoBuffer(firstPhotoPath);
+  const secondPhoto = await buildTelegramComparePhotoBuffer(secondPhotoPath);
+  if (firstPhoto) {
+    composites.push({ input: firstPhoto, left: 42, top: 66 });
+  } else {
+    composites.push(
+      buildTelegramTextComposite("NO PHOTO", {
+        left: 88,
+        top: 188,
+        width: 208,
+        fontSize: 22,
+        color: "#8b7359",
+        align: "center",
+        weight: "bold",
+      })
+    );
+  }
+  if (secondPhoto) {
+    composites.push({ input: secondPhoto, left: 418, top: 66 });
+  } else {
+    composites.push(
+      buildTelegramTextComposite("NO PHOTO", {
+        left: 464,
+        top: 188,
+        width: 208,
+        fontSize: 22,
+        color: "#8b7359",
+        align: "center",
+        weight: "bold",
+      })
+    );
+  }
+  composites.push(
+    buildTelegramTextComposite(firstLabel, {
+      left: 88,
+      top: 14,
+      width: 204,
+      fontSize: 18,
+      color: "#3e3428",
+      align: "center",
+      weight: "bold",
+    }),
+    buildTelegramTextComposite(secondLabel, {
+      left: 452,
+      top: 14,
+      width: 204,
+      fontSize: 18,
+      color: "#3e3428",
+      align: "center",
+      weight: "bold",
+    })
+  );
+  let textY = textStartY;
+  normalizedLines.forEach((line, index) => {
+    let fontSize = 21;
+    let weight = "normal";
+    let underline = false;
+    if (index < 2) {
+      fontSize = 24;
+      weight = "bold";
+    } else if (/^Asset:/i.test(line) || /^ការងារទូទៅ:/i.test(line)) {
+      fontSize = 22;
+      weight = "bold";
+      underline = true;
+    } else if (/^(សាខា:|ទីតាំង:|កាលបរិច្ឆេទ|ប្រភេទការងារ:|អ្នកអនុវត្ត:|ការងារដែលបានធ្វើ:|ចំណាំបន្ថែម:|ពិនិត្យដោយ:|តម្លៃ:|Ticket:|Task)/.test(line)) {
+      fontSize = 20;
+      weight = "bold";
+    }
+    composites.push(
+      buildTelegramTextComposite(line, {
+        left: 164,
+        top: textY,
+        width: 540,
+        fontSize,
+        color: "#1a1a1a",
+        align: "left",
+        weight,
+        underline,
+      })
+    );
+    textY += index < 2 ? headerLineHeight : bodyLineHeight;
+  });
+  try {
+    return await sharpLib({
+      create: {
+        width: 760,
+        height: totalHeight,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 0 },
+      },
+    })
+      .composite(composites)
+      .png()
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+async function renderTelegramWhiteSinglePhotoCardPng({
+  photoPath = "",
+  textLines = [],
+  iconColor = "blue",
+} = {}) {
+  const sharpLib = getSharp();
+  if (!sharpLib) return null;
+  const normalizedLines = Array.isArray(textLines) ? textLines.filter(Boolean) : [];
+  const headerLineHeight = 30;
+  const bodyLineHeight = 32;
+  const textStartY = 410;
+  let currentY = textStartY;
+  normalizedLines.forEach((_, index) => {
+    currentY += index < 2 ? headerLineHeight : bodyLineHeight;
+  });
+  const totalHeight = Math.max(760, currentY + 44);
+  const iconGradientId = iconColor === "green" ? "singleIconGreen" : "singleIconBlue";
+  const iconStops =
+    iconColor === "green"
+      ? `<stop offset="0%" stop-color="#58dd55" /><stop offset="100%" stop-color="#189f26" />`
+      : `<stop offset="0%" stop-color="#4f8dff" /><stop offset="100%" stop-color="#1d5fdd" />`;
+  const backgroundSvg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="${totalHeight}" viewBox="0 0 760 ${totalHeight}">
+  <defs>
+    <linearGradient id="${iconGradientId}" x1="0%" y1="0%" x2="0%" y2="100%">
+      ${iconStops}
+    </linearGradient>
+  </defs>
+  <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#fbf8f1" stroke="#d9cfbf" stroke-width="2"/>
+  <rect x="18" y="18" width="724" height="${totalHeight - 36}" rx="28" ry="28" fill="#f7efdf" stroke="#d9cfbf" stroke-width="1.5"/>
+  <rect x="24" y="48" width="712" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
+  <rect x="42" y="66" width="676" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
+  <rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="82" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="124" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="40" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="82" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="124" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
+</svg>`;
+  const composites = [
+    {
+      input: Buffer.from(backgroundSvg),
+      left: 0,
+      top: 0,
+    },
+  ];
+  const topPhoto = await buildTelegramComparePhotoBuffer(photoPath, 676, 276);
+  if (topPhoto) {
+    composites.push({ input: topPhoto, left: 42, top: 66 });
+  } else {
+    composites.push(
+      buildTelegramTextComposite("NO PHOTO", {
+        left: 254,
+        top: 188,
+        width: 252,
+        fontSize: 22,
+        color: "#8b7359",
+        align: "center",
+        weight: "bold",
+      })
+    );
+  }
+  let textY = textStartY;
+  normalizedLines.forEach((line, index) => {
+    let fontSize = 21;
+    let weight = "normal";
+    let underline = false;
+    if (index < 2) {
+      fontSize = 24;
+      weight = "bold";
+    } else if (/^Asset:/i.test(line) || /^ការងារទូទៅ:/i.test(line)) {
+      fontSize = 22;
+      weight = "bold";
+      underline = true;
+    } else if (/^(សាខា:|ទីតាំង:|កាលបរិច្ឆេទ|ប្រភេទការងារ:|អ្នកអនុវត្ត:|ការងារដែលបានធ្វើ:|ចំណាំបន្ថែម:|ពិនិត្យដោយ:|តម្លៃ:|Ticket:|Task)/.test(line)) {
+      fontSize = 20;
+      weight = "bold";
+    }
+    composites.push(
+      buildTelegramTextComposite(line, {
+        left: 164,
+        top: textY,
+        width: 540,
+        fontSize,
+        color: "#1a1a1a",
+        align: "left",
+        weight,
+        underline,
+      })
+    );
+    textY += index < 2 ? headerLineHeight : bodyLineHeight;
+  });
+  try {
+    return await sharpLib({
+      create: {
+        width: 760,
+        height: totalHeight,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 0 },
+      },
+    })
+      .composite(composites)
+      .png()
+      .toBuffer();
+  } catch {
+    return null;
+  }
 }
 
 function buildMaintenanceTelegramPreviewUrl(assetId, options = {}) {
@@ -4218,6 +4853,30 @@ async function buildToolTelegramPreviewSvg(source, text = "") {
 </svg>`;
 }
 
+async function buildToolTelegramPreviewPng(source, text = "") {
+  if (!source || typeof source !== "object") return null;
+  const previousPhotoPath = toText(source.previousPhoto);
+  const currentPhotoPath = toText(source.photo);
+  const itemCode = toText(source.itemCode || source.code) || "-";
+  const itemName = toText(source.itemName) || "Tool";
+  const campus = formatTelegramCampusKhmer(source.campus);
+  const location = toText(source.location) || "-";
+  const firstPhoto = previousPhotoPath || currentPhotoPath;
+  const secondPhoto = currentPhotoPath && currentPhotoPath !== previousPhotoPath ? currentPhotoPath : "";
+  const bodyLines = wrapTelegramPreviewText(text, 34).slice(0, 14);
+  const textLines = bodyLines.length
+    ? bodyLines
+    : wrapTelegramPreviewText(`Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`, 34);
+  return renderTelegramWhiteCompareCardPng({
+    firstPhotoPath: firstPhoto,
+    secondPhotoPath: secondPhoto,
+    firstLabel: "Previous Photo",
+    secondLabel: "Current Photo",
+    textLines,
+    iconColor: "blue",
+  });
+}
+
 function buildMaintenanceRecordTelegramPreviewUrl(asset, entry, text = "") {
   if (!PUBLIC_APP_URL || !asset || !entry) return "";
   const url = new URL(`${PUBLIC_APP_URL}/api/alerts/telegram/maintenance-record-preview`);
@@ -4232,6 +4891,7 @@ function buildMaintenanceRecordTelegramPreviewUrl(asset, entry, text = "") {
   setIfPresent("location", asset.location);
   setIfPresent("beforePhoto", (entry.beforePhotos || [])[0] || "");
   setIfPresent("afterPhoto", (entry.afterPhotos || [])[0] || entry.photo || "");
+  setIfPresent("telegramPhoto", entry.telegramPhoto || "");
   return url.toString();
 }
 
@@ -4337,6 +4997,38 @@ async function buildMaintenanceRecordTelegramPreviewSvg(source, text = "") {
   <rect x="124" y="446" width="34" height="34" fill="url(#maintenanceBlue)" />
   ${textSvgParts.join("")}
 </svg>`;
+}
+
+async function buildMaintenanceRecordTelegramPreviewPng(source, text = "") {
+  if (!source || typeof source !== "object") return null;
+  const beforePhotoPath = toText(source.beforePhoto);
+  const afterPhotoPath = toText(source.afterPhoto);
+  const telegramPhotoPath = toText(source.telegramPhoto);
+  const itemCode = toText(source.assetId) || "-";
+  const itemName = toText(source.itemName) || "General Maintenance Task";
+  const campus = formatTelegramCampusKhmer(source.campus);
+  const location = toText(source.location) || "-";
+  const firstPhoto = beforePhotoPath || afterPhotoPath;
+  const secondPhoto = afterPhotoPath && afterPhotoPath !== beforePhotoPath ? afterPhotoPath : "";
+  const textLines = wrapTelegramPreviewText(
+    telegramHtmlToPreviewText(text) || `Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`,
+    34
+  ).slice(0, 14);
+  if (telegramPhotoPath) {
+    return renderTelegramWhiteSinglePhotoCardPng({
+      photoPath: telegramPhotoPath,
+      textLines,
+      iconColor: "blue",
+    });
+  }
+  return renderTelegramWhiteCompareCardPng({
+    firstPhotoPath: firstPhoto,
+    secondPhotoPath: secondPhoto,
+    firstLabel: "Previous Photo",
+    secondLabel: "Current Photo",
+    textLines,
+    iconColor: "blue",
+  });
 }
 
 async function buildMaintenanceTelegramPreviewSvg(asset, options = {}) {
@@ -5142,6 +5834,15 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   const telegramPhoto = resolveTelegramPhotoUrl(toText(entry.telegramPhoto || ""));
   const beforePhoto = resolveTelegramPhotoUrl(toText((entry.beforePhotos || [])[0] || ""));
   const afterPhoto = resolveTelegramPhotoUrl(toText((entry.afterPhotos || [])[0] || entry.photo || ""));
+  if (telegramPhoto) {
+    return [
+      {
+        type: "photo",
+        media: telegramPhoto,
+        caption: `Before Photo | Current Photo\n${baseLabel}`,
+      },
+    ];
+  }
   const alerts = [];
   if (beforePhoto) {
     alerts.push({
@@ -5156,16 +5857,6 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
       media: afterPhoto,
       caption: `Current Photo\n${baseLabel}`,
     });
-  }
-  if (alerts.length) return alerts;
-  if (telegramPhoto) {
-    return [
-      {
-        type: "photo",
-        media: telegramPhoto,
-        caption: `Before Photo | Current Photo\n${baseLabel}`,
-      },
-    ];
   }
   return alerts;
 }
@@ -5189,6 +5880,11 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       ...sendOptions,
       db,
     });
+  const sendMaintenancePhotoBuffer = (photoBuffer, sendOptions = {}) =>
+    sendTelegramMaintenancePhotoBuffer(photoBuffer, {
+      ...sendOptions,
+      db,
+    });
   const sendMaintenanceAlbum = (mediaItems, sendOptions = {}) =>
     sendTelegramMediaGroup(mediaItems, {
       ...sendOptions,
@@ -5196,6 +5892,15 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       kind: "maintenance",
     });
   try {
+    const previewSource = {
+      assetId: toText(asset && asset.assetId),
+      itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
+      campus: toText(asset && asset.campus),
+      location: toText(asset && asset.location),
+      beforePhoto: toText((entry.beforePhotos || [])[0] || ""),
+      afterPhoto: toText((entry.afterPhotos || [])[0] || entry.photo || ""),
+      telegramPhoto: toText(entry.telegramPhoto || ""),
+    };
     const previewUrl = buildMaintenanceRecordTelegramPreviewUrl(asset, entry, message);
     if (previewUrl) {
       const report = await sendMaintenancePhoto("", {
@@ -5204,6 +5909,19 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
       });
       if (report && report.ok) {
         telegramAlertSent = true;
+      }
+    }
+    if (!telegramAlertSent) {
+      const previewPng = await buildMaintenanceRecordTelegramPreviewPng(previewSource, message);
+      if (previewPng) {
+        const report = await sendMaintenancePhotoBuffer(previewPng, {
+          includeResults: true,
+          photoFileName: "maintenance-alert-card.png",
+          photoMimeType: "image/png",
+        });
+        if (report && report.ok) {
+          telegramAlertSent = true;
+        }
       }
     }
 
@@ -8759,16 +9477,35 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/alerts/telegram/tool-preview") {
+      const source = {
+        itemCode: toText(url.searchParams.get("itemCode")),
+        itemName: toText(url.searchParams.get("itemName")),
+        campus: toText(url.searchParams.get("campus")),
+        location: toText(url.searchParams.get("location")),
+        photo: toText(url.searchParams.get("photo")),
+        previousPhoto: toText(url.searchParams.get("previousPhoto")),
+      };
+      const previewText = toText(url.searchParams.get("text"));
+      const png = await buildToolTelegramPreviewPng(source, previewText);
+      if (png) {
+        res.writeHead(200, {
+          "Content-Type": "image/png",
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        });
+        if (req.method === "HEAD") {
+          res.end();
+          return;
+        }
+        res.end(png);
+        return;
+      }
       const svg = await buildToolTelegramPreviewSvg(
         {
-          itemCode: toText(url.searchParams.get("itemCode")),
-          itemName: toText(url.searchParams.get("itemName")),
-          campus: toText(url.searchParams.get("campus")),
-          location: toText(url.searchParams.get("location")),
-          photo: toText(url.searchParams.get("photo")),
-          previousPhoto: toText(url.searchParams.get("previousPhoto")),
+          ...source,
         },
-        toText(url.searchParams.get("text"))
+        previewText
       );
       if (!svg) {
         sendJson(res, 404, { error: "Preview unavailable" });
@@ -8794,16 +9531,34 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/alerts/telegram/maintenance-record-preview") {
+      const source = {
+        assetId: toText(url.searchParams.get("assetId")),
+        itemName: toText(url.searchParams.get("itemName")),
+        campus: toText(url.searchParams.get("campus")),
+        location: toText(url.searchParams.get("location")),
+        beforePhoto: toText(url.searchParams.get("beforePhoto")),
+        afterPhoto: toText(url.searchParams.get("afterPhoto")),
+        telegramPhoto: toText(url.searchParams.get("telegramPhoto")),
+      };
+      const previewText = toText(url.searchParams.get("text"));
+      const png = await buildMaintenanceRecordTelegramPreviewPng(source, previewText);
+      if (png) {
+        res.writeHead(200, {
+          "Content-Type": "image/png",
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        });
+        if (req.method === "HEAD") {
+          res.end();
+          return;
+        }
+        res.end(png);
+        return;
+      }
       const svg = await buildMaintenanceRecordTelegramPreviewSvg(
-        {
-          assetId: toText(url.searchParams.get("assetId")),
-          itemName: toText(url.searchParams.get("itemName")),
-          campus: toText(url.searchParams.get("campus")),
-          location: toText(url.searchParams.get("location")),
-          beforePhoto: toText(url.searchParams.get("beforePhoto")),
-          afterPhoto: toText(url.searchParams.get("afterPhoto")),
-        },
-        toText(url.searchParams.get("text"))
+        source,
+        previewText
       );
       if (!svg) {
         sendJson(res, 404, { error: "Preview unavailable" });
