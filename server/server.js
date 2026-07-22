@@ -3772,38 +3772,24 @@ async function sendTelegramMessage(text, options = {}) {
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, kind);
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS && botToken ? await discoverTelegramChatIds(botToken) : [];
   telegramLastDiscoveredChats = discoveredChats;
-  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  if (kind === "tools" && !configuredTargets.length) {
+  const targets = Array.from(new Set(configuredTargets));
+  if (!targets.length) {
+    telegramLastSendReport = {
+      at: new Date().toISOString(),
+      ok: false,
+      successCount: 0,
+      targetCount: 0,
+      targets: [],
+      errors: ["no configured telegram chat_id target for this alert kind"],
+    };
     return includeResults ? { ok: false, results: [] } : false;
   }
-  const targets = configuredTargets.length
-    ? Array.from(new Set(configuredTargets))
-    : Array.from(new Set(discoveredTargets));
-  if (!targets.length) return false;
   const results = [];
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
     results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, botToken, parseMode));
   }
   let successCount = results.filter((row) => row.ok).length;
-  if (!successCount && TELEGRAM_DISCOVER_CHAT_IDS && !configuredTargets.length) {
-    const retryTargets = Array.from(
-      new Set(
-        [
-          ...targets,
-          ...(await discoverTelegramChatIds(botToken)),
-        ]
-          .map((row) => toText(row).trim())
-          .filter(Boolean)
-      )
-    );
-    for (const chatId of retryTargets) {
-      if (results.some((row) => row.ok && row.chatId === chatId)) continue;
-      // eslint-disable-next-line no-await-in-loop
-      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 2, botToken, parseMode));
-    }
-    successCount = results.filter((row) => row.ok).length;
-  }
   telegramLastSendReport = {
     at: new Date().toISOString(),
     ok: successCount > 0,
@@ -3860,37 +3846,14 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, kind);
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS && botToken ? await discoverTelegramChatIds(botToken) : [];
   telegramLastDiscoveredChats = discoveredChats;
-  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  if (kind === "tools" && !configuredTargets.length) {
-    return includeResults ? { ok: false, results: [] } : false;
-  }
-  const targets = configuredTargets.length
-    ? Array.from(new Set(configuredTargets))
-    : Array.from(new Set(discoveredTargets));
-  if (!targets.length) return false;
+  const targets = Array.from(new Set(configuredTargets));
+  if (!targets.length) return includeResults ? { ok: false, results: [] } : false;
   const results = [];
   for (const chatId of targets) {
     // eslint-disable-next-line no-await-in-loop
     results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 3, botToken));
   }
   if (results.some((row) => row.ok)) return true;
-  if (TELEGRAM_DISCOVER_CHAT_IDS) {
-    const retryTargets = Array.from(
-      new Set(
-        [
-          ...targets,
-          ...(await discoverTelegramChatIds(botToken)),
-        ]
-          .map((row) => toText(row).trim())
-          .filter(Boolean)
-      )
-    );
-    for (const chatId of retryTargets) {
-      if (results.some((row) => row.ok && row.chatId === chatId)) continue;
-      // eslint-disable-next-line no-await-in-loop
-      results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 2, botToken));
-    }
-  }
   if (includeResults) {
     return {
       ok: results.some((row) => row.ok),
@@ -3939,11 +3902,18 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
       ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
       : [];
   telegramMaintenanceLastDiscoveredChats = discoveredChats;
-  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  const targets = configuredTargets.length
-    ? Array.from(new Set(configuredTargets))
-    : Array.from(new Set(discoveredTargets));
-  if (!targets.length) return false;
+  const targets = Array.from(new Set(configuredTargets));
+  if (!targets.length) {
+    telegramMaintenanceLastSendReport = {
+      at: new Date().toISOString(),
+      ok: false,
+      successCount: 0,
+      targetCount: 0,
+      targets: [],
+      errors: ["no configured telegram chat_id target for maintenance alerts"],
+    };
+    return includeResults ? { ok: false, results: [] } : false;
+  }
   const results = [];
   const primaryToken = TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   for (const chatId of targets) {
@@ -4035,11 +4005,18 @@ async function sendTelegramMaintenancePhotoBuffer(photoBuffer, options = {}) {
       ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
       : [];
   telegramMaintenanceLastDiscoveredChats = discoveredChats;
-  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  const targets = configuredTargets.length
-    ? Array.from(new Set(configuredTargets))
-    : Array.from(new Set(discoveredTargets));
-  if (!targets.length) return false;
+  const targets = Array.from(new Set(configuredTargets));
+  if (!targets.length) {
+    telegramMaintenanceLastSendReport = {
+      at: new Date().toISOString(),
+      ok: false,
+      successCount: 0,
+      targetCount: 0,
+      targets: [],
+      errors: ["no configured telegram chat_id target for maintenance alerts"],
+    };
+    return includeResults ? { ok: false, results: [] } : false;
+  }
   const results = [];
   const primaryToken = TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   for (const chatId of targets) {
@@ -4126,11 +4103,8 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
       ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
       : [];
   telegramMaintenanceLastDiscoveredChats = discoveredChats;
-  const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
-  const targets = configuredTargets.length
-    ? Array.from(new Set(configuredTargets))
-    : Array.from(new Set(discoveredTargets));
-  if (!targets.length) return false;
+  const targets = Array.from(new Set(configuredTargets));
+  if (!targets.length) return includeResults ? { ok: false, results: [] } : false;
   const results = [];
   const primaryToken = TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   for (const chatId of targets) {

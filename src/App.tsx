@@ -14518,6 +14518,9 @@ export default function App() {
   const [scheduleListMonthFilter, setScheduleListMonthFilter] = useState("ALL");
   const [scheduleListCampusFilter, setScheduleListCampusFilter] = useState("ALL");
   const [scheduleListLocationFilter, setScheduleListLocationFilter] = useState("ALL");
+  const [scheduleListStatusFilter, setScheduleListStatusFilter] = useState<
+    "ACTIVE" | "ALL" | "COMPLETED" | "NEXT_DUE" | "OVERDUE"
+  >("ACTIVE");
   const [overdueMonthFilter, setOverdueMonthFilter] = useState("ALL");
   const [overdueCampusFilter, setOverdueCampusFilter] = useState("ALL");
   const [overdueLocationFilter, setOverdueLocationFilter] = useState("ALL");
@@ -40471,13 +40474,20 @@ export default function App() {
         if (scheduleGroupFilter !== "ALL" && row.serviceType !== scheduleGroupFilter) return false;
         return true;
       });
-    return [...assetRows, ...serviceRows]
+    const allRows = [...assetRows, ...serviceRows]
       .sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         if (a.completed !== b.completed) return a.completed ? -1 : 1;
         if (a.kind !== b.kind) return a.kind === "service" ? -1 : 1;
         return a.title.localeCompare(b.title);
       });
+    return allRows.filter((row) => {
+      if (scheduleListStatusFilter === "ALL") return true;
+      if (scheduleListStatusFilter === "COMPLETED") return row.statusKind === "completed";
+      if (scheduleListStatusFilter === "NEXT_DUE") return row.statusKind === "upcoming";
+      if (scheduleListStatusFilter === "OVERDUE") return row.statusKind === "overdue";
+      return row.statusKind === "overdue" || row.statusKind === "upcoming";
+    });
   }, [
     assetItemName,
     assetScheduleGroupLabel,
@@ -40491,6 +40501,7 @@ export default function App() {
     completedScheduleAssetKeys,
     completedScheduleServiceKeys,
     scheduleGroupFilter,
+    scheduleListStatusFilter,
     scheduleListRows,
     t.allCampuses,
   ]);
@@ -63619,6 +63630,45 @@ function formatTicketRequestSource(value?: string) {
               <h4 className="section-title" style={{ marginTop: 12 }}>
                 {lang === "km" ? "បញ្ជីកាលវិភាគទាំងអស់" : "All Scheduled List"}
               </h4>
+              <div className="form-grid maintenance-schedule-filter-row" style={{ marginTop: 12, marginBottom: 12 }}>
+                <label className="field">
+                  <span>{lang === "km" ? "តម្រងស្ថានភាព" : "List Filter"}</span>
+                  <LocationPicker
+                    value={scheduleListStatusFilter}
+                    options={[
+                      {
+                        value: "ACTIVE",
+                        label: lang === "km" ? "លើសកំណត់ + កាលវិភាគបន្ទាប់" : "Over + Next Due",
+                      },
+                      {
+                        value: "ALL",
+                        label: lang === "km" ? "បញ្ជីកាលវិភាគទាំងអស់" : "All schedule list",
+                      },
+                      {
+                        value: "COMPLETED",
+                        label: lang === "km" ? "បានបញ្ចប់" : "Completed",
+                      },
+                      {
+                        value: "NEXT_DUE",
+                        label: lang === "km" ? "កាលវិភាគបន្ទាប់" : "Next due",
+                      },
+                      {
+                        value: "OVERDUE",
+                        label: lang === "km" ? "លើសកំណត់" : "Over",
+                      },
+                    ]}
+                    onChange={(value) =>
+                      setScheduleListStatusFilter(
+                        value as "ACTIVE" | "ALL" | "COMPLETED" | "NEXT_DUE" | "OVERDUE"
+                      )
+                    }
+                    className="report-campus-picker picker-template-list-asset-light"
+                    placeholder={lang === "km" ? "ជ្រើសតម្រង" : "Select filter"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកតម្រង..." : "Search filter..."}
+                    emptyText={lang === "km" ? "រកមិនឃើញតម្រងទេ។" : "No filter found."}
+                  />
+                </label>
+              </div>
               {isPhoneView ? (
                 <div className="schedule-mobile-card-list" style={{ marginTop: 12 }}>
                   {filteredScheduleCalendarRows.length ? (
@@ -75525,6 +75575,11 @@ function formatTicketRequestSource(value?: string) {
               </div>
               <div className="tiny" style={{ marginTop: 6 }}>
                 {lang === "km"
+                  ? "Bot គ្រាន់តែជាអ្នកផ្ញើប៉ុណ្ណោះ។ ក្រុមដែលទទួលការជូនដំណឹងពិតប្រាកដ គឺ chat ID ដែលបានរក្សាទុកខាងលើ។ បើគ្រាន់តែ add bot ចូល group ថ្មី តែ​មិនរក្សាទុក chat ID ថ្មី នោះ alert នឹងមិនផ្ញើទៅ group នោះទេ។"
+                  : "A bot is only the sender. The real Telegram destination is the saved group chat ID above. If you only add the bot to another group but do not save that new chat ID here, alerts will not send to that group."}
+              </div>
+              <div className="tiny" style={{ marginTop: 6 }}>
+                {lang === "km"
                   ? "Maintenance schedule Telegram reminder នឹងប្រើ bot ថែទាំ ចាប់ពី 7 ថ្ងៃមុន ហើយបន្តផ្ញើរៀងរាល់ថ្ងៃ រហូតដល់ការងារត្រូវបានកត់ត្រាថា Done។ Server ពិនិត្យស្វ័យប្រវត្តិរៀងរាល់ម៉ោង។"
                   : "Maintenance schedule Telegram reminders use the maintenance bot starting 7 days before due date, then continue every day until the task is recorded as Done. The server checks automatically every hour."}
               </div>
@@ -75549,6 +75604,11 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                   <div className="tiny">
                     {lang === "km" ? "Configured targets (tools)" : "Configured targets (tools)"}: {telegramStatus.toolConfiguredTargets?.length ? telegramStatus.toolConfiguredTargets.join(", ") : "-"}
+                  </div>
+                  <div className="tiny" style={{ marginTop: 8 }}>
+                    {lang === "km"
+                      ? "សម្គាល់៖ Discovered chats ខាងក្រោម គឺសម្រាប់មើល chat ID ប៉ុណ្ណោះ។ ប្រព័ន្ធនឹងផ្ញើ alert តែទៅ configured targets ដែលបានរក្សាទុក។"
+                      : "Note: discovered chats below are for checking available chat IDs only. Alerts now send only to the configured saved targets."}
                   </div>
                   <div className="tiny">
                     {lang === "km" ? "Discovered chats (normal)" : "Discovered chats (normal)"}: {telegramStatus.discoveredTargets.length ? "" : "-"}
@@ -76764,8 +76824,8 @@ function formatTicketRequestSource(value?: string) {
                 <div className="utility-history-mobile-empty" style={{ marginTop: 12 }}>{t.noLocationsYet}</div>
               )
             ) : (
-              <div className="table-wrap" style={{ marginTop: 12 }}>
-                <table>
+              <div className="table-wrap setup-location-table-wrap" style={{ marginTop: 12 }}>
+                <table className="setup-location-table">
                   <thead>
                     <tr>
                       <th>{t.campus}</th>

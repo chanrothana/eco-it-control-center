@@ -8134,11 +8134,13 @@ h2 {
 /* Template: List Asset light desktop picker
    Use `picker-template-list-asset-light` on searchable picker controls
    whenever you want this white popup + rounded light filter style. */
-.maintenance-filter-row .picker-template-list-asset-light {
+.maintenance-filter-row .picker-template-list-asset-light,
+.maintenance-schedule-filter-row .picker-template-list-asset-light {
   min-width: 0;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-trigger.input {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-trigger.input,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-trigger.input {
   min-height: 56px;
   padding: 10px 18px;
   border-radius: 22px;
@@ -8153,12 +8155,17 @@ h2 {
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected > span:last-child,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-placeholder,
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-caret {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-caret,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-selected,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-selected > span:last-child,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-placeholder,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-caret {
   color: #223a5c;
   -webkit-text-fill-color: #223a5c;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-selected {
   font-size: 16px;
   font-weight: 500;
   line-height: 1.2;
@@ -8167,13 +8174,18 @@ h2 {
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected > span:last-child,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-placeholder,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-option-title,
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-selected-content {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-selected-content,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-selected > span:last-child,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-placeholder,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-option-title,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-selected .parent-asset-picker-selected-content {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-menu {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-menu,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-menu {
   left: 0;
   right: auto;
   min-width: 100%;
@@ -8188,11 +8200,13 @@ h2 {
     0 18px 36px rgba(36, 52, 82, 0.16);
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .type-code-picker-search-wrap {
+.maintenance-filter-row .picker-template-list-asset-light .type-code-picker-search-wrap,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .type-code-picker-search-wrap {
   margin-bottom: 8px;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-search {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-search,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-search {
   min-height: 42px;
   margin-bottom: 0;
   padding-left: 42px !important;
@@ -8207,17 +8221,20 @@ h2 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-search::placeholder {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-search::placeholder,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-search::placeholder {
   color: #6a7f9f;
   -webkit-text-fill-color: #6a7f9f;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .type-code-picker-search-icon {
+.maintenance-filter-row .picker-template-list-asset-light .type-code-picker-search-icon,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .type-code-picker-search-icon {
   left: 13px;
   color: #6e85a7;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-list {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-list,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-list {
   display: grid;
   gap: 4px;
   max-height: 320px;
@@ -8225,7 +8242,9 @@ h2 {
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option,
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option {
   min-height: 40px;
   padding: 5px 10px;
   border-radius: 12px;
@@ -8236,20 +8255,26 @@ h2 {
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option:hover,
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option:hover {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option:hover,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option:hover,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option:hover {
   background: #f7fbff;
   border-color: #cbdcf2;
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option-active,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option:has(input[type="checkbox"]:checked),
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option:has(input[type="checkbox"]:checked) {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option:has(input[type="checkbox"]:checked),
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option-active,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option:has(input[type="checkbox"]:checked),
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option.searchable-multi-option:has(input[type="checkbox"]:checked) {
   background: #ffffff;
   border-color: #c6d7f1;
   box-shadow: 0 0 0 2px rgba(198, 215, 241, 0.35);
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"] {
+.maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"],
+.maintenance-schedule-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"] {
   width: 15px;
   height: 15px;
   min-width: 15px;
@@ -8257,7 +8282,8 @@ h2 {
   accent-color: #2f7cf6;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option-checkbox {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option-checkbox,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option-checkbox {
   width: 15px;
   height: 15px;
   min-width: 15px;
@@ -8268,28 +8294,35 @@ h2 {
   box-shadow: none;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option-checkbox-checked {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option-checkbox-checked,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option-checkbox-checked {
   background: #2f7cf6;
   border-color: #2f7cf6;
   color: #ffffff;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]::after {
+.maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]::after,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]::after {
   content: none;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]:checked {
+.maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]:checked,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]:checked {
   background: unset;
   border-color: unset;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]:checked::after {
+.maintenance-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]:checked::after,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .searchable-multi-option input[type="checkbox"]:checked::after {
   content: none;
 }
 
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option-label,
 .maintenance-filter-row .picker-template-list-asset-light .asset-picker-option > span:last-child,
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option .parent-asset-picker-option-title {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-option .parent-asset-picker-option-title,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option-label,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option > span:last-child,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-option .parent-asset-picker-option-title {
   color: #1c2f52;
   font-size: 13px;
   font-weight: 700;
@@ -8299,7 +8332,8 @@ h2 {
   text-overflow: unset;
 }
 
-.maintenance-filter-row .picker-template-list-asset-light .asset-picker-empty {
+.maintenance-filter-row .picker-template-list-asset-light .asset-picker-empty,
+.maintenance-schedule-filter-row .picker-template-list-asset-light .asset-picker-empty {
   padding: 10px 6px;
   color: #6a7f9f;
   font-weight: 700;
@@ -24219,6 +24253,106 @@ tr:hover td {
 .table-wrap tbody tr.row-asset-retired td,
 .table-wrap tbody tr.row-asset-retired:hover td {
   background: #ffe8ec !important;
+}
+
+.setup-location-table-wrap {
+  max-width: 100%;
+  max-height: min(62vh, 680px);
+  overflow-x: auto;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+}
+
+.setup-location-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.setup-location-table thead th {
+  top: 0;
+  z-index: 4;
+}
+
+.setup-location-table th,
+.setup-location-table td {
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.setup-location-table th:nth-child(1),
+.setup-location-table td:nth-child(1) {
+  width: 16%;
+}
+
+.setup-location-table th:nth-child(2),
+.setup-location-table td:nth-child(2) {
+  width: 18%;
+}
+
+.setup-location-table th:nth-child(3),
+.setup-location-table td:nth-child(3) {
+  width: 9%;
+}
+
+.setup-location-table th:nth-child(4),
+.setup-location-table td:nth-child(4) {
+  width: 8%;
+  text-align: center;
+}
+
+.setup-location-table th:nth-child(5),
+.setup-location-table td:nth-child(5) {
+  width: 12%;
+}
+
+.setup-location-table th:nth-child(6),
+.setup-location-table td:nth-child(6) {
+  width: 25%;
+}
+
+.setup-location-table th:nth-child(7),
+.setup-location-table td:nth-child(7) {
+  width: 7%;
+  text-align: center;
+}
+
+.setup-location-table th:nth-child(8),
+.setup-location-table td:nth-child(8) {
+  width: 5%;
+  text-align: center;
+}
+
+.setup-location-table td:nth-child(1),
+.setup-location-table td:nth-child(2),
+.setup-location-table td:nth-child(6) {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.setup-location-table td:nth-child(3),
+.setup-location-table td:nth-child(5),
+.setup-location-table td:nth-child(7),
+.setup-location-table td:nth-child(8) {
+  white-space: nowrap;
+}
+
+.setup-location-table td:nth-child(4) .table-photo,
+.setup-location-table td:nth-child(4) .photo-placeholder {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto;
+}
+
+.setup-location-table td:nth-child(7) .tab {
+  min-width: 82px;
+}
+
+.setup-location-table td:nth-child(8) .btn-danger {
+  min-width: 46px;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 tr.row-asset-maintenance td {
