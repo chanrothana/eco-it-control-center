@@ -3615,13 +3615,21 @@ function resolveTelegramConfiguredChatIds(db, overrideChatIds = [], kind = "defa
         ? []
         : []
     : [];
+  if (explicitTargets.length) {
+    return Array.from(new Set(explicitTargets));
+  }
+  if (primarySettingsTargets.length || fallbackSettingsTargets.length) {
+    return Array.from(
+      new Set([
+        ...primarySettingsTargets,
+        ...fallbackSettingsTargets,
+      ])
+    );
+  }
   return Array.from(
     new Set([
-      ...explicitTargets,
       ...primaryEnvTargets,
       ...fallbackEnvTargets,
-      ...primarySettingsTargets,
-      ...fallbackSettingsTargets,
     ])
   );
 }
@@ -9540,6 +9548,10 @@ const server = http.createServer(async (req, res) => {
         TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
           ? await discoverTelegramChatIds(TELEGRAM_MAINTENANCE_BOT_TOKEN)
           : [];
+      const toolDiscoveredTargets =
+        TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_TOOL_BOT_TOKEN
+          ? await discoverTelegramChatIds(TELEGRAM_TOOL_BOT_TOKEN)
+          : [];
       telegramLastDiscoveredChats = discoveredTargets;
       telegramMaintenanceLastDiscoveredChats = maintenanceDiscoveredTargets;
       const db = await readDb();
@@ -9555,6 +9567,7 @@ const server = http.createServer(async (req, res) => {
         discoverEnabled: TELEGRAM_DISCOVER_CHAT_IDS,
         discoveredTargets,
         maintenanceDiscoveredTargets,
+        toolDiscoveredTargets,
         lastSend: telegramLastSendReport,
         maintenanceLastSend: telegramMaintenanceLastSendReport,
       });

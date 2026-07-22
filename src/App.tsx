@@ -1077,12 +1077,14 @@ type TelegramStatus = {
   enabled: boolean;
   hasBotToken: boolean;
   hasMaintenanceBotToken?: boolean;
+  hasToolBotToken?: boolean;
   configuredTargets: string[];
   maintenanceConfiguredTargets?: string[];
   toolConfiguredTargets?: string[];
   discoverEnabled: boolean;
   discoveredTargets: TelegramDiscoveredChat[];
   maintenanceDiscoveredTargets?: TelegramDiscoveredChat[];
+  toolDiscoveredTargets?: TelegramDiscoveredChat[];
   lastSend?: {
     at?: string;
     ok?: boolean;
@@ -17577,12 +17579,40 @@ export default function App() {
   const toolReviewExistingEntry = useMemo(
     () =>
       toolReviewForm.itemId
-        ? toolReviewReports.find(
-            (row) => row.month === toolReviewMonth && String(row.itemId) === String(toolReviewForm.itemId)
-          ) || null
+        ? toolReviewReports.find((row) => {
+            if (String(row.itemId) !== String(toolReviewForm.itemId)) return false;
+            const stamp = String(row.updated || row.created || "").trim();
+            if (!stamp) return false;
+            const parsed = new Date(stamp);
+            if (Number.isNaN(parsed.getTime())) return false;
+            return toYmd(parsed) === todayYmd;
+          }) || null
         : null,
-    [toolReviewReports, toolReviewMonth, toolReviewForm.itemId]
+    [todayYmd, toolReviewReports, toolReviewForm.itemId]
   );
+  const toolReviewTodayEntry = useMemo(() => {
+    if (!toolReviewForm.itemId) return null;
+    const matchingEntries = toolReviewReports
+      .filter((row) => String(row.itemId) === String(toolReviewForm.itemId))
+      .filter((row) => {
+        const stamp = String(row.updated || row.created || "").trim();
+        if (!stamp) return false;
+        const parsed = new Date(stamp);
+        if (Number.isNaN(parsed.getTime())) return false;
+        return toYmd(parsed) === todayYmd;
+      })
+      .sort((a, b) =>
+        String(b.updated || b.created || "").localeCompare(String(a.updated || a.created || ""))
+      );
+    return matchingEntries[0] || null;
+  }, [toolReviewForm.itemId, toolReviewReports, todayYmd]);
+  const toolReviewTodayLockedMessage = useMemo(() => {
+    if (!toolReviewTodayEntry) return "";
+    const completedAt = formatDateTime(toolReviewTodayEntry.updated || toolReviewTodayEntry.created || "-");
+    return lang === "km"
+      ? `បានពិនិត្យរួចហើយថ្ងៃនេះ នៅម៉ោង ${completedAt}`
+      : `Verification already completed today at ${completedAt}`;
+  }, [lang, toolReviewTodayEntry]);
   const toolReviewPreviousEntry = useMemo(() => {
     if (!toolReviewForm.itemId) return null;
     let previous: ToolReviewReport | null = null;
@@ -23102,7 +23132,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate,
               warrantyUntil: draft.warrantyUntil,
               vendor: draft.vendor,
-              notes: draft.notes || `Auto-created from set pack: ${created.asset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               scheduleNote: "",
               photo: packPhotos[0] || "",
@@ -23133,7 +23163,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created laptop accessory for ${created.asset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               scheduleNote: "",
               photo: accessoryPhotos[0] || "",
@@ -23164,7 +23194,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created camera component for ${created.asset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               scheduleNote: "",
               photo: componentPhotos[0] || "",
@@ -23195,7 +23225,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created projector component for ${created.asset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               scheduleNote: "",
               photo: componentPhotos[0] || "",
@@ -23228,7 +23258,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created microphone component for ${created.asset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               scheduleNote: "",
               photo: componentPhotos[0] || "",
@@ -23262,7 +23292,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created keyboard piano component for ${created.asset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               scheduleNote: "",
               photo: componentPhotos[0] || "",
@@ -23357,7 +23387,7 @@ export default function App() {
             purchaseDate: assetForm.purchaseDate,
             warrantyUntil: assetForm.warrantyUntil,
             vendor: assetForm.vendor,
-            notes: `Auto-created tablet charger for ${created.asset.assetId}`,
+            notes: "",
             nextMaintenanceDate: "",
             scheduleNote: "",
             photo: createTabletChargerPhoto,
@@ -23385,9 +23415,7 @@ export default function App() {
             purchaseDate: assetForm.purchaseDate,
             warrantyUntil: assetForm.warrantyUntil,
             vendor: assetForm.vendor,
-            notes:
-              String(assetForm.walkieChargerDetail || "").trim() ||
-              `Auto-created walkie charger for ${created.asset.assetId}`,
+            notes: String(assetForm.walkieChargerDetail || "").trim(),
             nextMaintenanceDate: "",
             scheduleNote: "",
             photo: createWalkieChargerPhotos[0] || "",
@@ -23672,7 +23700,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate,
               warrantyUntil: draft.warrantyUntil,
               vendor: draft.vendor,
-              notes: draft.notes || `Auto-created from set pack: ${newAsset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               nextVerificationDate: "",
               verificationFrequency: "NONE",
@@ -23726,7 +23754,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created laptop accessory for ${newAsset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               nextVerificationDate: "",
               verificationFrequency: "NONE",
@@ -23780,7 +23808,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created camera component for ${newAsset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               nextVerificationDate: "",
               verificationFrequency: "NONE",
@@ -23834,7 +23862,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created projector component for ${newAsset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               nextVerificationDate: "",
               verificationFrequency: "NONE",
@@ -23891,7 +23919,7 @@ export default function App() {
               purchaseDate: draft.purchaseDate || assetForm.purchaseDate,
               warrantyUntil: draft.warrantyUntil || assetForm.warrantyUntil,
               vendor: draft.vendor || assetForm.vendor,
-              notes: draft.notes || `Auto-created microphone component for ${newAsset.assetId}`,
+              notes: String(draft.notes || "").trim(),
               nextMaintenanceDate: "",
               nextVerificationDate: "",
               verificationFrequency: "NONE",
@@ -24055,7 +24083,7 @@ export default function App() {
             purchaseDate: assetForm.purchaseDate,
             warrantyUntil: assetForm.warrantyUntil,
             vendor: assetForm.vendor,
-            notes: `Auto-created tablet charger for ${newAsset.assetId}`,
+            notes: "",
             nextMaintenanceDate: "",
             nextVerificationDate: "",
             verificationFrequency: "NONE",
@@ -24106,9 +24134,7 @@ export default function App() {
             purchaseDate: assetForm.purchaseDate,
             warrantyUntil: assetForm.warrantyUntil,
             vendor: assetForm.vendor,
-            notes:
-              String(assetForm.walkieChargerDetail || "").trim() ||
-              `Auto-created walkie charger for ${newAsset.assetId}`,
+            notes: String(assetForm.walkieChargerDetail || "").trim(),
             nextMaintenanceDate: "",
             nextVerificationDate: "",
             verificationFrequency: "NONE",
@@ -28736,6 +28762,13 @@ export default function App() {
       setError("Please select a tool item for the monthly review.");
       return;
     }
+    if (toolReviewTodayEntry) {
+      const lockedMessage =
+        toolReviewTodayLockedMessage || "Verification already completed today.";
+      setError(lockedMessage);
+      window.alert(lockedMessage);
+      return;
+    }
     const countedQty = Number(toolReviewForm.countedQty || 0);
     const adjustQty = Math.max(0, Number(toolReviewForm.adjustQty || 0));
     const reviewedBy = String(toolReviewForm.reviewedBy || "").trim();
@@ -32456,7 +32489,7 @@ export default function App() {
       purchaseDate: "",
       warrantyUntil: "",
       vendor: "",
-      notes: `Linked projector component to ${editingAsset.assetId}`,
+      notes: "",
       nextMaintenanceDate: "",
       scheduleNote: "",
       photo: "",
@@ -32580,7 +32613,7 @@ export default function App() {
       purchaseDate: "",
       warrantyUntil: "",
       vendor: "",
-      notes: `Linked microphone component to ${editingAsset.assetId}`,
+      notes: "",
       nextMaintenanceDate: "",
       scheduleNote: "",
       photo: "",
@@ -33001,7 +33034,7 @@ export default function App() {
             purchaseDate: payload.purchaseDate,
             warrantyUntil: payload.warrantyUntil,
             vendor: payload.vendor,
-            notes: `Auto-created tablet charger for ${editingAsset.assetId}`,
+            notes: "",
             photo: tabletChargerPhoto,
             photos: tabletChargerPhoto ? [tabletChargerPhoto] : [],
             status: payload.status,
@@ -33117,9 +33150,7 @@ export default function App() {
         const activeCharger = chargerChildren[0] || null;
         const extraChargers = chargerChildren.slice(1);
         if (assetEditForm.walkieHasCharger) {
-          const chargerNotes =
-            String(assetEditForm.walkieChargerDetail || "").trim() ||
-            `Auto-created walkie charger for ${editingAsset.assetId}`;
+          const chargerNotes = String(assetEditForm.walkieChargerDetail || "").trim();
           if (activeCharger) {
             const updatedCharger: Asset = {
               ...activeCharger,
@@ -75479,11 +75510,11 @@ function formatTicketRequestSource(value?: string) {
                     ? "Telegram Chat ID(s) - Tools Verification Alerts"
                     : "Telegram Chat ID(s) - Tools Verification Alerts"}
                 </span>
-                <input
+                  <input
                   className="input"
                   value={telegramToolChatIdsText}
                   onChange={(e) => setTelegramToolChatIdsText(e.target.value)}
-                  placeholder="-5533753338"
+                  placeholder="-1001234567890"
                   disabled={!isAdmin || busy}
                 />
               </label>
@@ -75538,6 +75569,18 @@ function formatTicketRequestSource(value?: string) {
                     <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
                       {telegramStatus.maintenanceDiscoveredTargets.map((chat) => (
                         <div key={`telegram-maintenance-chat-${chat.id}`} className="tiny" style={{ marginBottom: 6 }}>
+                          <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="tiny" style={{ marginTop: 8 }}>
+                    {lang === "km" ? "Discovered chats (tools)" : "Discovered chats (tools)"}: {telegramStatus.toolDiscoveredTargets?.length ? "" : "-"}
+                  </div>
+                  {telegramStatus.toolDiscoveredTargets?.length ? (
+                    <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
+                      {telegramStatus.toolDiscoveredTargets.map((chat) => (
+                        <div key={`telegram-tools-chat-${chat.id}`} className="tiny" style={{ marginBottom: 6 }}>
                           <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
                         </div>
                       ))}
@@ -80757,9 +80800,9 @@ function formatTicketRequestSource(value?: string) {
                       <small>{lang === "km" ? "ចំនួន" : "Amount"}</small>
                       <strong>{Number(toolReviewSelectedItem.currentStock || 0)} {toolReviewSelectedItem.unit || "pcs"}</strong>
                     </div>
-                    <div className={`tool-review-selected-side-card tool-review-selected-side-card-status ${toolReviewExistingEntry ? "is-done" : "is-pending"}`}>
+                    <div className={`tool-review-selected-side-card tool-review-selected-side-card-status ${toolReviewTodayEntry || toolReviewExistingEntry ? "is-done" : "is-pending"}`}>
                       <small>{lang === "km" ? "ស្ថានភាព" : "Status"}</small>
-                      <strong>{toolReviewExistingEntry ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}</strong>
+                      <strong>{toolReviewTodayEntry || toolReviewExistingEntry ? (lang === "km" ? "រួចរាល់" : "Done") : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Pending")}</strong>
                     </div>
                   </div>
                 </div>
@@ -80982,13 +81025,21 @@ function formatTicketRequestSource(value?: string) {
                 </label>
 
                 <div className="asset-actions tool-review-modal-actions">
-                  <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId} onClick={() => void saveToolReviewReport()}>
-                    {toolReviewExistingEntry ? (lang === "km" ? "កែប្រែការផ្ទៀងផ្ទាត់" : "Update Verification") : (lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់" : "Submit Verification")}
+                  <button className="btn-primary" disabled={!isAdmin || busy || !toolReviewForm.itemId || Boolean(toolReviewTodayEntry)} onClick={() => void saveToolReviewReport()}>
+                    {toolReviewTodayEntry
+                      ? (lang === "km" ? "បានពិនិត្យរួចថ្ងៃនេះ" : "Completed Today")
+                      : toolReviewExistingEntry
+                        ? (lang === "km" ? "កែប្រែការផ្ទៀងផ្ទាត់" : "Update Verification")
+                        : (lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់" : "Submit Verification")}
                   </button>
                 </div>
               </div>
               <div className="tiny tool-review-submit-helper">
-                {lang === "km" ? "ដាក់ស្នើការផ្ទៀងផ្ទាត់ប្រចាំខែ សម្រាប់ឧបករណ៍ដែលបានជ្រើស។" : "Submit this month verification for the selected tool."}
+                {toolReviewTodayEntry
+                  ? toolReviewTodayLockedMessage
+                  : (lang === "km"
+                      ? "អាចផ្ទៀងផ្ទាត់បានតែ ១ ដងក្នុងមួយថ្ងៃ សម្រាប់ឧបករណ៍ដែលបានជ្រើស។"
+                      : "Only 1 verification per day is allowed for the selected tool.")}
               </div>
                 </>
               ) : (
