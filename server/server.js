@@ -3535,9 +3535,23 @@ function sendTelegramMediaGroupToChat(chatId, mediaItems = [], botToken = TELEGR
       chat_id: normalizedChatId,
       media: normalizedMedia,
     }).then((result) => {
+      let messageRefs = [];
+      try {
+        const parsed = JSON.parse(toText(result && result.body));
+        const rows = Array.isArray(parsed && parsed.result) ? parsed.result : [];
+        messageRefs = rows
+          .map((row) => ({
+            chatId: normalizedChatId,
+            messageId: Number(row && row.message_id) || 0,
+          }))
+          .filter((row) => row.chatId && row.messageId);
+      } catch {
+        messageRefs = [];
+      }
       resolve({
         ok: Boolean(result && result.ok),
         chatId: normalizedChatId,
+        messageRefs,
         statusCode: Number(result && result.statusCode) || 0,
         body: toText(result && result.body),
       });
@@ -3823,6 +3837,10 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
       : [];
+  const includeResults =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
+      ? Boolean(options.includeResults)
+      : false;
   const kind =
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "kind")
       ? toText(options.kind).trim().toLowerCase() || "default"
@@ -3858,6 +3876,12 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
       // eslint-disable-next-line no-await-in-loop
       results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 2, botToken));
     }
+  }
+  if (includeResults) {
+    return {
+      ok: results.some((row) => row.ok),
+      results,
+    };
   }
   return results.some((row) => row.ok);
 }
@@ -5145,6 +5169,10 @@ function isInventoryToolCategoryForTelegram(category) {
   );
 }
 
+function isCleaningSupplyCategoryForTelegram(category) {
+  return toUpper(category) === "SUPPLY";
+}
+
 function buildToolReviewTelegramPhotoAlerts(source) {
   if (!source || typeof source !== "object") return [];
   const previousPhoto = resolveTelegramPhotoUrl(toText(source.previousPhoto));
@@ -5177,34 +5205,31 @@ function buildToolReviewTelegramPhotoAlerts(source) {
 }
 
 async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) {
-  const previewUrl = buildToolTelegramPreviewUrl(source, text);
-  if (previewUrl) {
-    const report = await sendTelegramMessage("", {
-      db,
-      photoUrl: previewUrl,
-      includeResults: true,
-      kind: "tools",
-    });
-    if (report && report.ok) {
-      return {
-        ok: true,
-        messageRefs: normalizeTelegramMessageRefs(report && report.results),
-      };
-    }
-  }
   const photoAlerts = buildToolReviewTelegramPhotoAlerts(source);
   let report = null;
   let sent = false;
+  const normalizedText = toText(text).trim();
   if (photoAlerts.length <= 1) {
-    report = await sendTelegramMessage(text, {
+    report = await sendTelegramMessage(normalizedText, {
       db,
       photoUrl: photoAlerts[0] ? photoAlerts[0].media : "",
       includeResults: true,
       kind: "tools",
     });
     sent = Boolean(report && report.ok);
+  } else if (normalizedText && normalizedText.length <= 1024) {
+    const albumItems = photoAlerts.map((item, index) => ({
+      ...item,
+      caption: index === 0 ? normalizedText : "",
+    }));
+    report = await sendTelegramMediaGroup(albumItems, {
+      db,
+      kind: "tools",
+      includeResults: true,
+    });
+    sent = Boolean(report && report.ok);
   } else {
-    report = await sendTelegramMessage(text, {
+    report = await sendTelegramMessage(normalizedText, {
       db,
       includeResults: true,
       kind: "tools",
@@ -5219,7 +5244,11 @@ async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) 
   }
   return {
     ok: sent,
-    messageRefs: normalizeTelegramMessageRefs(report && report.results),
+    messageRefs: normalizeTelegramMessageRefs(
+      Array.isArray(report && report.results)
+        ? report.results.flatMap((row) => (Array.isArray(row && row.messageRefs) ? row.messageRefs : [row]))
+        : []
+    ),
   };
 }
 
@@ -5633,6 +5662,7 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
   const txns = normalizeInventoryTxns(settings.inventoryTxns);
   const item = items.find((row) => Number(row.id) === Number(txn.itemId));
   const isToolItem = isInventoryToolCategoryForTelegram(item && item.category);
+  const isCleaningSupplyItem = isCleaningSupplyCategoryForTelegram(item && item.category);
   const remainingStock = item ? calcInventoryCurrentStock(item, txns) : null;
   const stockUnit = toText(item && item.unit) || "";
   if (txnType === "BORROW_OUT" || txnType === "BORROW_CONSUME") {
@@ -5705,7 +5735,7 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  if (isToolItem) {
+  if (isToolItem || isCleaningSupplyItem) {
     return sendToolReviewTelegramMessageWithPhotos(
       lines.join("\n"),
       {
