@@ -75521,17 +75521,17 @@ function formatTicketRequestSource(value?: string) {
                 <h3 className="section-title">{lang === "km" ? "Telegram Alert Target" : "Telegram Alert Target"}</h3>
                 <span className="tiny">
                   {lang === "km"
-                    ? "រក្សាទុក group chat ID ដាច់ដោយឡែកសម្រាប់ bot ធម្មតា, bot ថែទាំ និង bot សម្រាប់ tools verification។"
-                    : "Save separate group chat IDs for the normal alert bot, the maintenance alert bot, and the tools verification route."}
+                    ? "រក្សាទុក group chat ID ដាច់ដោយឡែកសម្រាប់ bot សារជូនដំណឹងសម្ភារៈ, bot ថែទាំ និង bot សម្រាប់ tools verification។"
+                    : "Save separate group chat IDs for the supply alert bot, the maintenance alert bot, and the tools verification route."}
                 </span>
               </div>
               <div className="tiny" style={{ marginBottom: 8 }}>
                 {lang === "km"
-                  ? "Normal alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot | Tools route: Tools group"
-                  : "Normal alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot | Tools route: Tools group"}
+                  ? "Supply alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot | Tools route: Tools group"
+                  : "Supply alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot | Tools route: Tools group"}
               </div>
               <label className="field">
-                <span>{lang === "km" ? "Telegram Chat ID(s) - Normal Alerts" : "Telegram Chat ID(s) - Normal Alerts"}</span>
+                <span>{lang === "km" ? "Telegram Chat ID(s) - Supply Alerts" : "Telegram Chat ID(s) - Supply Alerts"}</span>
                 <input
                   className="input"
                   value={telegramChatIdsText}
@@ -75597,7 +75597,7 @@ function formatTicketRequestSource(value?: string) {
               {telegramStatus ? (
                 <div style={{ marginTop: 12 }}>
                   <div className="tiny">
-                    {lang === "km" ? "Configured targets (normal)" : "Configured targets (normal)"}: {telegramStatus.configuredTargets.length ? telegramStatus.configuredTargets.join(", ") : "-"}
+                    {lang === "km" ? "Configured targets (supply)" : "Configured targets (supply alert)"}: {telegramStatus.configuredTargets.length ? telegramStatus.configuredTargets.join(", ") : "-"}
                   </div>
                   <div className="tiny">
                     {lang === "km" ? "Configured targets (maintenance)" : "Configured targets (maintenance)"}: {telegramStatus.maintenanceConfiguredTargets?.length ? telegramStatus.maintenanceConfiguredTargets.join(", ") : "-"}
@@ -75611,7 +75611,7 @@ function formatTicketRequestSource(value?: string) {
                       : "Note: discovered chats below are for checking available chat IDs only. Alerts now send only to the configured saved targets."}
                   </div>
                   <div className="tiny">
-                    {lang === "km" ? "Discovered chats (normal)" : "Discovered chats (normal)"}: {telegramStatus.discoveredTargets.length ? "" : "-"}
+                    {lang === "km" ? "Discovered chats (supply)" : "Discovered chats (supply alert)"}: {telegramStatus.discoveredTargets.length ? "" : "-"}
                   </div>
                   {telegramStatus.discoveredTargets.length ? (
                     <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
@@ -75647,7 +75647,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                   ) : null}
                   <div className="tiny" style={{ marginTop: 8 }}>
-                    {lang === "km" ? "Last send (normal)" : "Last send (normal)"}: {telegramStatus.lastSend?.at || "-"}
+                    {lang === "km" ? "Last send (supply)" : "Last send (supply alert)"}: {telegramStatus.lastSend?.at || "-"}
                   </div>
                   {telegramStatus.lastSend?.errors?.length ? (
                     <div className="alert" style={{ marginTop: 8 }}>
