@@ -4102,6 +4102,10 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "chatIds")
       ? options.chatIds
       : [];
+  const includeResults =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "includeResults")
+      ? Boolean(options.includeResults)
+      : false;
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, "maintenance");
   const discoveredChats =
     TELEGRAM_DISCOVER_CHAT_IDS && TELEGRAM_MAINTENANCE_BOT_TOKEN
@@ -4125,6 +4129,12 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
       // eslint-disable-next-line no-await-in-loop
       results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 2, TELEGRAM_BOT_TOKEN));
     }
+  }
+  if (includeResults) {
+    return {
+      ok: results.some((row) => row.ok),
+      results,
+    };
   }
   return results.some((row) => row.ok);
 }
@@ -5204,6 +5214,65 @@ function buildToolReviewTelegramPhotoAlerts(source) {
   return alerts;
 }
 
+async function sendCleaningSupplyTelegramMessageWithPhotos(text, source, db = null) {
+  const photoAlerts = buildToolReviewTelegramPhotoAlerts(source);
+  const normalizedText = toText(text).trim();
+  let report = null;
+  let sent = false;
+  if (photoAlerts.length <= 1) {
+    report = await sendTelegramMaintenanceMessage(normalizedText, {
+      db,
+      photoUrl: photoAlerts[0] ? photoAlerts[0].media : "",
+      includeResults: true,
+    });
+    sent = Boolean(report && report.ok);
+  } else if (normalizedText && normalizedText.length <= 1024) {
+    const albumItems = photoAlerts.map((item, index) => ({
+      ...item,
+      caption: index === 0 ? normalizedText : "",
+    }));
+    report = await sendTelegramMaintenanceMediaGroup(albumItems, {
+      db,
+      includeResults: true,
+    });
+    sent = Boolean(report && report.ok);
+  } else {
+    report = await sendTelegramMaintenanceMessage(normalizedText, {
+      db,
+      includeResults: true,
+    });
+    sent = Boolean(report && report.ok);
+    const mediaReport = await sendTelegramMaintenanceMediaGroup(
+      photoAlerts.map((item) => ({
+        ...item,
+        caption: "",
+      })),
+      {
+        db,
+        includeResults: true,
+      }
+    );
+    sent = Boolean(mediaReport && mediaReport.ok) || sent;
+    if (mediaReport && Array.isArray(mediaReport.results)) {
+      report = {
+        ok: sent,
+        results: [
+          ...(Array.isArray(report && report.results) ? report.results : []),
+          ...mediaReport.results,
+        ],
+      };
+    }
+  }
+  return {
+    ok: sent,
+    messageRefs: normalizeTelegramMessageRefs(
+      Array.isArray(report && report.results)
+        ? report.results.flatMap((row) => (Array.isArray(row && row.messageRefs) ? row.messageRefs : [row]))
+        : []
+    ),
+  };
+}
+
 async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) {
   const photoAlerts = buildToolReviewTelegramPhotoAlerts(source);
   let report = null;
@@ -5571,6 +5640,12 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], 
   const approvers = Array.isArray(approverTargets)
     ? approverTargets.map((row) => toText(row).toLowerCase()).filter(Boolean)
     : [];
+  const settings =
+    db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+      ? db.settings
+      : {};
+  const items = normalizeInventoryItems(settings.inventoryItems);
+  const item = items.find((row) => Number(row.id) === Number(txn.itemId));
   const lines = [
     "ជូនដំណឹង ECO IT - ស្តុក",
     "សំណើរចេញស្តុក កំពុងរង់ចាំអនុម័ត",
@@ -5585,7 +5660,10 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], 
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  return sendToolReviewTelegramMessageWithPhotos(
+  const sender = isCleaningSupplyCategoryForTelegram(item && item.category)
+    ? sendCleaningSupplyTelegramMessageWithPhotos
+    : sendToolReviewTelegramMessageWithPhotos;
+  return sender(
     lines.join("\n"),
     {
       ...txn,
@@ -5614,6 +5692,7 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   const items = normalizeInventoryItems(settings.inventoryItems);
   const txns = normalizeInventoryTxns(settings.inventoryTxns);
   const item = items.find((row) => Number(row.id) === Number(txn.itemId));
+  const isCleaningSupplyItem = isCleaningSupplyCategoryForTelegram(item && item.category);
   const remainingStock = item ? calcInventoryCurrentStock(item, txns) : null;
   const stockUnit = toText(item && item.unit) || "";
   const lines = [
@@ -5631,7 +5710,10 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   if (reason) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
-  return sendToolReviewTelegramMessageWithPhotos(
+  const sender = isCleaningSupplyItem
+    ? sendCleaningSupplyTelegramMessageWithPhotos
+    : sendToolReviewTelegramMessageWithPhotos;
+  return sender(
     lines.join("\n"),
     {
       ...txn,
@@ -5736,7 +5818,10 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
     lines.push(`មូលហេតុ: ${reason}`);
   }
   if (isToolItem || isCleaningSupplyItem) {
-    return sendToolReviewTelegramMessageWithPhotos(
+    const sender = isCleaningSupplyItem
+      ? sendCleaningSupplyTelegramMessageWithPhotos
+      : sendToolReviewTelegramMessageWithPhotos;
+    return sender(
       lines.join("\n"),
       {
         ...txn,
