@@ -11981,6 +11981,39 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (
+      req.method === "GET" &&
+      url.pathname.startsWith("/api/assets/") &&
+      !url.pathname.endsWith("/status") &&
+      !url.pathname.endsWith("/history") &&
+      !url.pathname.includes("/history/")
+    ) {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      const id = Number(url.pathname.replace("/api/assets/", ""));
+      if (!id) {
+        sendJson(res, 400, { error: "Invalid ID" });
+        return;
+      }
+      const detail = toText(url.searchParams.get("detail")).toLowerCase() === "summary" ? "summary" : "full";
+      const db = await readDb();
+      const visibleAssets = filterByCampusPermission(db.assets, user, (a) => a.campus);
+      const asset = visibleAssets.find((row) => Number(row.id) === id);
+      if (!asset) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+      const normalizedAssets = await normalizeAssetsForResponse([asset], {
+        includeHistory: detail !== "summary",
+        compact: false,
+      });
+      sendJson(res, 200, { asset: normalizedAssets[0] || null });
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/api/assets") {
       const admin = requireAdmin(req, res);
       if (!admin) return;

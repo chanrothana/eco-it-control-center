@@ -11877,6 +11877,7 @@ export default function App() {
   const [maintenanceRecordLocationFilter, setMaintenanceRecordLocationFilter] = useState("ALL");
   const [maintenanceRecordCampusFilter, setMaintenanceRecordCampusFilter] = useState("ALL");
   const [maintenanceRecordScheduleJumpMode, setMaintenanceRecordScheduleJumpMode] = useState(false);
+  const [maintenanceRecordAssetDetailLoadingId, setMaintenanceRecordAssetDetailLoadingId] = useState<number | null>(null);
   const [verificationRecordCategoryFilter, setVerificationRecordCategoryFilter] = useState("ALL");
   const [verificationRecordItemFilter, setVerificationRecordItemFilter] = useState("ALL");
   const [verificationRecordLocationFilter, setVerificationRecordLocationFilter] = useState("ALL");
@@ -12201,6 +12202,7 @@ export default function App() {
   const [appVersionBadge, setAppVersionBadge] = useState(APP_VERSION);
   const [assetDataLoaded, setAssetDataLoaded] = useState(false);
   const [assetDataDetailLevel, setAssetDataDetailLevel] = useState<"summary" | "full">("summary");
+  const [assetFullDetailIds, setAssetFullDetailIds] = useState<number[]>([]);
   const hasPrimaryDataLoaded =
     assets.length > 0 ||
     tickets.length > 0 ||
@@ -12208,6 +12210,63 @@ export default function App() {
     stats.totalAssets > 0 ||
     stats.openTickets > 0;
   const showLoadingBanner = loading && !hasPrimaryDataLoaded;
+  const loadingStatusTitle = lang === "km" ? "កំពុងរៀបចំប្រព័ន្ធ" : "Preparing your workspace";
+  const loadingStatusMessage =
+    lang === "km"
+      ? "ប្រព័ន្ធកំពុងទាញយកទិន្នន័យសំខាន់ៗ ដូចជា Asset, Ticket, Location និងស្ថិតិ។ សូមរង់ចាំបន្តិច។"
+      : "The system is loading your main data like assets, tickets, locations, and dashboard stats. Please wait a moment.";
+  const loadingStatusSteps =
+    lang === "km"
+      ? ["ភ្ជាប់ទៅម៉ាស៊ីនមេ", "ទាញយកទិន្នន័យសំខាន់", "រៀបចំផ្ទាំងការងារ"]
+      : ["Connecting to server", "Loading essential data", "Preparing dashboard"];
+  const appLoadingState = (
+    <section className="panel app-loading-state" aria-live="polite" aria-busy="true">
+      <div className="app-loading-hero">
+        <div className="app-loading-badge">{t.loading}</div>
+        <h2>{loadingStatusTitle}</h2>
+        <p>{loadingStatusMessage}</p>
+      </div>
+      <div className="app-loading-step-grid">
+        {loadingStatusSteps.map((step, index) => (
+          <article key={`loading-step-${index}`} className="app-loading-step-card">
+            <span className="app-loading-step-number">{index + 1}</span>
+            <strong>{step}</strong>
+            <div className="app-loading-line app-loading-line-short" />
+            <div className="app-loading-line" />
+          </article>
+        ))}
+      </div>
+      <div className="app-loading-preview-grid" aria-hidden={true}>
+        <div className="app-loading-preview-card app-loading-preview-card-wide">
+          <div className="app-loading-line app-loading-line-title" />
+          <div className="app-loading-line" />
+          <div className="app-loading-line app-loading-line-medium" />
+        </div>
+        <div className="app-loading-preview-card">
+          <div className="app-loading-dot-row">
+            <span className="app-loading-dot" />
+            <span className="app-loading-dot" />
+            <span className="app-loading-dot" />
+          </div>
+          <div className="app-loading-line app-loading-line-medium" />
+          <div className="app-loading-line app-loading-line-short" />
+        </div>
+      </div>
+    </section>
+  );
+  const shouldUseFullAssetDetail = useCallback(
+    (targetTab: NavModule) => {
+      if (targetTab === "maintenance" && maintenanceView === "record") {
+        return false;
+      }
+      return tabNeedsFullAssetDetail(targetTab);
+    },
+    [maintenanceView]
+  );
+  const hasFullAssetDetailForId = useCallback(
+    (assetId: number) => assetDataDetailLevel === "full" || assetFullDetailIds.includes(assetId),
+    [assetDataDetailLevel, assetFullDetailIds]
+  );
 
   const [assetForm, setAssetForm] = useState({
     campus: CAMPUS_LIST[0],
@@ -17427,6 +17486,11 @@ export default function App() {
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
   }, [inventoryBalanceRows, inventoryDashboardGroup, inventoryItemFilterCampus]);
+  const inventoryToolListAreaAddsValue = useMemo(() => {
+    if (!inventoryToolListAreaOptions.length) return false;
+    if (inventoryToolListAreaOptions.length !== inventoryToolListLocationOptions.length) return true;
+    return inventoryToolListAreaOptions.some((area, index) => area !== inventoryToolListLocationOptions[index]);
+  }, [inventoryToolListAreaOptions, inventoryToolListLocationOptions]);
   const toolReviewAreaOptions = useMemo(() => {
     const values = new Set<string>();
     for (const row of inventoryBalanceRows) {
@@ -17496,6 +17560,41 @@ export default function App() {
       return true;
     });
   }, [inventoryItemRows, inventoryToolListAreaFilter, inventoryToolListLocationFilter, inventoryToolListStatusFilter]);
+  const inventoryToolListSummary = useMemo(() => {
+    let ready = 0;
+    let low = 0;
+    let zero = 0;
+    for (const row of inventoryToolListRows) {
+      if (row.currentStock <= 0) {
+        zero += 1;
+      } else if (row.currentStock <= Number(row.minStock || 0)) {
+        low += 1;
+      } else {
+        ready += 1;
+      }
+    }
+    return {
+      total: inventoryToolListRows.length,
+      ready,
+      low,
+      zero,
+    };
+  }, [inventoryToolListRows]);
+  useEffect(() => {
+    if (!inventoryToolListAreaAddsValue && inventoryToolListAreaFilter !== "ALL") {
+      setInventoryToolListAreaFilter("ALL");
+    }
+  }, [inventoryToolListAreaAddsValue, inventoryToolListAreaFilter]);
+  useEffect(() => {
+    if (inventoryToolListAreaFilter !== "ALL" && !inventoryToolListAreaOptions.includes(inventoryToolListAreaFilter)) {
+      setInventoryToolListAreaFilter("ALL");
+    }
+  }, [inventoryToolListAreaFilter, inventoryToolListAreaOptions]);
+  useEffect(() => {
+    if (inventoryToolListLocationFilter !== "ALL" && !inventoryToolListLocationOptions.includes(inventoryToolListLocationFilter)) {
+      setInventoryToolListLocationFilter("ALL");
+    }
+  }, [inventoryToolListLocationFilter, inventoryToolListLocationOptions]);
   const latestToolReviewByItemId = useMemo(() => {
     const map = new Map<number, ToolReviewReport>();
     for (const row of toolReviewReports) {
@@ -22103,7 +22202,7 @@ export default function App() {
       }
       const detail =
         requestedDetail === "full" ||
-        tabNeedsFullAssetDetail(tabRef.current) ||
+        shouldUseFullAssetDetail(tabRef.current) ||
         assetDataDetailLevelRef.current === "full"
           ? "full"
           : "summary";
@@ -22150,6 +22249,7 @@ export default function App() {
       }
       setAssetDataLoaded(true);
       setAssetDataDetailLevel(detail);
+      setAssetFullDetailIds(detail === "full" ? serverAssets.map((asset) => Number(asset.id) || 0).filter((id) => id > 0) : []);
     } catch (err) {
       if (
         isApiUnavailableError(err) ||
@@ -22161,12 +22261,13 @@ export default function App() {
           setAssets(fallbackAssets);
           setAssetDataLoaded(true);
           setAssetDataDetailLevel("full");
+          setAssetFullDetailIds(fallbackAssets.map((asset) => Number(asset.id) || 0).filter((id) => id > 0));
         }
         return;
       }
       console.warn("Failed to load assets dataset", err);
     }
-  }, [campusFilter]);
+  }, [campusFilter, shouldUseFullAssetDetail]);
 
   const loadData = useCallback(async (options?: { includeAssets?: boolean }) => {
     setLoading(true);
@@ -22177,7 +22278,7 @@ export default function App() {
       if (campusFilter !== "ALL") params.set("campus", campusFilter);
       const shouldIncludeAssets =
         options?.includeAssets ?? (tabNeedsAssetDataset(activeTab) || assetDataLoadedRef.current);
-      const assetDetail = tabNeedsFullAssetDetail(activeTab) ? "full" : "summary";
+      const assetDetail = shouldUseFullAssetDetail(activeTab) ? "full" : "summary";
       params.set("include", shouldIncludeAssets ? "assets,tickets,stats,locations" : "tickets,stats,locations");
       if (shouldIncludeAssets) {
         params.set("asset_scope", "all");
@@ -22222,6 +22323,11 @@ export default function App() {
         }
         setAssetDataLoaded(true);
         setAssetDataDetailLevel(assetDetail);
+        setAssetFullDetailIds(
+          assetDetail === "full"
+            ? serverAssets.map((asset) => Number(asset.id) || 0).filter((id) => id > 0)
+            : []
+        );
       }
 
       setTickets(normalizeArray<Ticket>(bootstrapRes.tickets));
@@ -22603,7 +22709,36 @@ export default function App() {
     inventoryTxns,
     campusFilter,
     defaultCalendarEvents,
+    shouldUseFullAssetDetail,
   ]);
+
+  const loadSingleAssetDetail = useCallback(async (assetId: number) => {
+    if (!assetId || hasFullAssetDetailForId(assetId)) return;
+    setMaintenanceRecordAssetDetailLoadingId(assetId);
+    try {
+      const params = new URLSearchParams();
+      params.set("detail", "full");
+      const res = await requestJson<{ asset?: Asset }>(`/api/assets/${assetId}?${params.toString()}`, {
+        timeoutMs: ASSET_DATA_REQUEST_TIMEOUT_MS,
+      });
+      const detailedAsset = res.asset ? normalizeAssetForUi(res.asset) : null;
+      if (!detailedAsset) return;
+      setAssets((current) => {
+        const exists = current.some((asset) => Number(asset.id) === Number(detailedAsset.id));
+        if (!exists) return current;
+        const nextAssets = current.map((asset) => (Number(asset.id) === Number(detailedAsset.id) ? detailedAsset : asset));
+        writeAssetFallback(nextAssets);
+        return nextAssets;
+      });
+      setAssetFullDetailIds((current) =>
+        current.includes(assetId) ? current : [...current, assetId]
+      );
+    } catch (err) {
+      console.warn("Failed to load single asset detail", err);
+    } finally {
+      setMaintenanceRecordAssetDetailLoadingId((current) => (current === assetId ? null : current));
+    }
+  }, [hasFullAssetDetailForId]);
 
   useEffect(() => {
     void loadData({ includeAssets: false });
@@ -22613,23 +22748,47 @@ export default function App() {
     if (!authUser) {
       setAssetDataLoaded(false);
       setAssetDataDetailLevel("summary");
+      setAssetFullDetailIds([]);
       setAssets([]);
       settingsSnapshotLoadedRef.current = false;
       settingsSnapshotLoadedAtRef.current = 0;
       return;
     }
     const needsAssetDataset = tabNeedsAssetDataset(tab);
-    const needsFullAssetDetail = tabNeedsFullAssetDetail(tab);
+    const needsFullAssetDetail = shouldUseFullAssetDetail(tab);
     const hasRequiredAssetDetail =
       assetDataLoaded && (!needsFullAssetDetail || assetDataDetailLevel === "full");
     if (!needsAssetDataset || hasRequiredAssetDetail) return;
     void loadAssetsDataset();
-  }, [authUser, tab, assetDataLoaded, assetDataDetailLevel, loadAssetsDataset]);
+  }, [authUser, tab, assetDataLoaded, assetDataDetailLevel, loadAssetsDataset, shouldUseFullAssetDetail]);
 
   useEffect(() => {
     if (!authUser) return;
     void loadStaffUsers();
   }, [authUser, loadStaffUsers]);
+
+  useEffect(() => {
+    const selectedAssetId = Number(maintenanceRecordForm.assetId || 0);
+    if (
+      !authUser ||
+      tab !== "maintenance" ||
+      maintenanceView !== "record" ||
+      maintenanceQuickGeneralTask ||
+      !selectedAssetId ||
+      hasFullAssetDetailForId(selectedAssetId)
+    ) {
+      return;
+    }
+    void loadSingleAssetDetail(selectedAssetId);
+  }, [
+    authUser,
+    tab,
+    maintenanceView,
+    maintenanceQuickGeneralTask,
+    maintenanceRecordForm.assetId,
+    hasFullAssetDetailForId,
+    loadSingleAssetDetail,
+  ]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -34291,6 +34450,18 @@ export default function App() {
     const isQuickGeneralTask = (maintenanceQuickMode || scheduleMaintenanceUsesGeneralTask) && maintenanceQuickGeneralTask;
     if (!assetId && !isQuickGeneralTask) return false;
     if (
+      assetId &&
+      !isQuickGeneralTask &&
+      !hasFullAssetDetailForId(assetId)
+    ) {
+      setError(
+        lang === "km"
+          ? "កំពុងទាញប្រវត្តិ Asset នេះ។ សូមរង់ចាំបន្តិច មុនពេលរក្សាទុក។"
+          : "This asset history is still loading. Please wait a moment before saving."
+      );
+      return false;
+    }
+    if (
       !maintenanceRecordForm.date ||
       !maintenanceRecordForm.type.trim()
     ) {
@@ -36648,6 +36819,13 @@ export default function App() {
     () => resolvedAssets.find((a) => String(a.id) === String(maintenanceRecordForm.assetId || "")) || null,
     [resolvedAssets, maintenanceRecordForm.assetId]
   );
+  const maintenanceRecordSelectedAssetId = Number(maintenanceRecordSelectedAsset?.id || 0);
+  const maintenanceRecordSelectedAssetDetailReady =
+    maintenanceRecordSelectedAssetId > 0 && hasFullAssetDetailForId(maintenanceRecordSelectedAssetId);
+  const maintenanceRecordSelectedAssetDetailLoading =
+    maintenanceRecordSelectedAssetId > 0 &&
+    !maintenanceRecordSelectedAssetDetailReady &&
+    maintenanceRecordAssetDetailLoadingId === maintenanceRecordSelectedAssetId;
   const maintenanceRecordGeneralTaskAsset = useMemo(() => {
     if (!scheduleMaintenanceGeneralContext || !maintenanceQuickGeneralTask) return null;
     const campus = String(scheduleMaintenanceGeneralContext?.campus || "").trim();
@@ -49851,7 +50029,7 @@ function formatTicketRequestSource(value?: string) {
         <section className="app-card">
           <p className="eyebrow">{t.school}</p>
           <h1>{t.title}</h1>
-          <p className="alert">{t.loading}</p>
+          {appLoadingState}
         </section>
       </main>
     );
@@ -50787,7 +50965,7 @@ function formatTicketRequestSource(value?: string) {
             ) : null}
             {error ? <p className="alert alert-error">{error}</p> : null}
             {!isAdmin && !(maintenanceQuickMode && canAccessMenu("maintenance.record", "maintenance")) ? <p className="alert">{t.viewerMode}</p> : null}
-            {showLoadingBanner ? <p className="alert">{t.loading}</p> : null}
+            {showLoadingBanner ? appLoadingState : null}
 
         {tab === "dashboard" && (
           <section className="panel dashboard-panel">
@@ -59674,22 +59852,50 @@ function formatTicketRequestSource(value?: string) {
 
             {!maintenanceQuickMode && inventoryDashboardGroup !== "SUPPLY" && inventoryView === "list" && (
               <section className="panel inventory-tool-list-panel">
-                <div className="panel-row">
-                  <div>
-                    <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} List</h2>
-                    <p className="tiny inventory-tool-list-subhead">
-                      {inventoryDashboardGroup === "CLEAN_TOOL"
-                        ? "Operational view for all cleaning tools, with school or provider ownership inside the same list."
-                        : inventoryDashboardGroup === "MAINT_TOOL"
-                          ? "Operational view for maintenance tool readiness, storage, and monthly review follow-up."
-                          : inventoryDashboardGroup === "GARDEN_TOOL"
-                            ? "Operational view for garden tool availability, storage, and review follow-up."
-                            : "Operational view for tool availability, storage, and review follow-up."}
-                    </p>
+                <div className={`panel-row inventory-tool-list-head ${isPhoneView ? "inventory-tool-list-head-phone" : ""}`}>
+                  <div className={`inventory-tool-list-hero ${isPhoneView ? "inventory-tool-list-hero-phone" : ""}`}>
+                    <div className="inventory-tool-list-hero-copy">
+                      <p className="inventory-tool-list-kicker">
+                        {lang === "km" ? "Tool Control" : "Tool Control"}
+                      </p>
+                      <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} List</h2>
+                      <p className="tiny inventory-tool-list-subhead">
+                        {inventoryDashboardGroup === "CLEAN_TOOL"
+                          ? "Operational view for all cleaning tools, with school or provider ownership inside the same list."
+                          : inventoryDashboardGroup === "MAINT_TOOL"
+                            ? "Operational view for maintenance tool readiness, storage, and monthly review follow-up."
+                            : inventoryDashboardGroup === "GARDEN_TOOL"
+                              ? "Operational view for garden tool availability, storage, and review follow-up."
+                              : "Operational view for tool availability, storage, and review follow-up."}
+                      </p>
+                    </div>
+                    <div className="inventory-tool-list-hero-badge">
+                      <span>{lang === "km" ? "Showing" : "Showing"}</span>
+                      <strong>{inventoryToolListSummary.total}</strong>
+                    </div>
                   </div>
                 </div>
 
-                <div className="panel-filters inventory-tool-list-filter-bar">
+                <div className={`inventory-tool-list-summary-grid ${isPhoneView ? "inventory-tool-list-summary-grid-phone" : ""}`}>
+                  <article className="inventory-tool-list-summary-card">
+                    <span>{lang === "km" ? "សរុប" : "Total"}</span>
+                    <strong>{inventoryToolListSummary.total}</strong>
+                  </article>
+                  <article className="inventory-tool-list-summary-card inventory-tool-list-summary-card-ready">
+                    <span>{lang === "km" ? "រួចរាល់" : "Ready"}</span>
+                    <strong>{inventoryToolListSummary.ready}</strong>
+                  </article>
+                  <article className="inventory-tool-list-summary-card inventory-tool-list-summary-card-low">
+                    <span>{lang === "km" ? "ស្តុកទាប" : "Low"}</span>
+                    <strong>{inventoryToolListSummary.low}</strong>
+                  </article>
+                  <article className="inventory-tool-list-summary-card inventory-tool-list-summary-card-zero">
+                    <span>{lang === "km" ? "អស់ស្តុក" : "Zero"}</span>
+                    <strong>{inventoryToolListSummary.zero}</strong>
+                  </article>
+                </div>
+
+                <div className={`panel-filters inventory-tool-list-filter-bar ${isPhoneView ? "inventory-tool-list-filter-bar-phone" : ""}`}>
                   <label className="field">
                     <span>{t.campus}</span>
                     <LocationPicker
@@ -59707,35 +59913,59 @@ function formatTicketRequestSource(value?: string) {
                       emptyText={lang === "km" ? "រកមិនឃើញសាខា។" : "No campus found."}
                     />
                   </label>
+                  {inventoryToolListAreaAddsValue ? (
+                    <label className="field">
+                      <span>{lang === "km" ? "តំបន់" : "Area"}</span>
+                      <LocationPicker
+                        value={inventoryToolListAreaFilter}
+                        onChange={setInventoryToolListAreaFilter}
+                        options={[
+                          { value: "ALL", label: lang === "km" ? "គ្រប់តំបន់" : "All Areas" },
+                          ...inventoryToolListAreaOptions.map((area) => ({
+                            value: area,
+                            label: area,
+                          })),
+                        ]}
+                        placeholder={lang === "km" ? "គ្រប់តំបន់" : "All Areas"}
+                        searchPlaceholder={lang === "km" ? "ស្វែងរកតំបន់..." : "Search area..."}
+                        emptyText={lang === "km" ? "មិនមានតំបន់" : "No area found."}
+                      />
+                    </label>
+                  ) : null}
                   <label className="field">
                     <span>{t.location}</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={inventoryToolListLocationFilter}
-                      onChange={(e) => setInventoryToolListLocationFilter(e.target.value)}
-                    >
-                      <option value="ALL">All Locations</option>
-                      {inventoryToolListLocationOptions.map((location) => (
-                        <option key={`inventory-tool-list-location-${location}`} value={location}>
-                          {location}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setInventoryToolListLocationFilter}
+                      options={[
+                        { value: "ALL", label: lang === "km" ? "គ្រប់ទីតាំង" : "All Locations" },
+                        ...inventoryToolListLocationOptions.map((location) => ({
+                          value: location,
+                          label: location,
+                        })),
+                      ]}
+                      placeholder={lang === "km" ? "គ្រប់ទីតាំង" : "All Locations"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                      emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                    />
                   </label>
                   <label className="field">
                     <span>Status</span>
-                    <select
-                      className="input"
+                    <LocationPicker
                       value={inventoryToolListStatusFilter}
-                      onChange={(e) => setInventoryToolListStatusFilter(e.target.value as "ALL" | "READY" | "LOW" | "ZERO")}
-                    >
-                      <option value="ALL">All Status</option>
-                      <option value="READY">Ready</option>
-                      <option value="LOW">Low Coverage</option>
-                      <option value="ZERO">Zero Available</option>
-                    </select>
+                      onChange={(value) => setInventoryToolListStatusFilter(value as "ALL" | "READY" | "LOW" | "ZERO")}
+                      options={[
+                        { value: "ALL", label: lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status" },
+                        { value: "READY", label: lang === "km" ? "រួចរាល់" : "Ready" },
+                        { value: "LOW", label: lang === "km" ? "ស្តុកទាប" : "Low Coverage" },
+                        { value: "ZERO", label: lang === "km" ? "អស់ស្តុក" : "Zero Available" },
+                      ]}
+                      placeholder={lang === "km" ? "គ្រប់ស្ថានភាព" : "All Status"}
+                      searchPlaceholder={lang === "km" ? "ស្វែងរកស្ថានភាព..." : "Search status..."}
+                      emptyText={lang === "km" ? "មិនមានស្ថានភាព" : "No status found."}
+                    />
                   </label>
-                  <label className="field">
+                  <label className="field inventory-tool-list-search-field">
                     <span>Search</span>
                     <input
                       className="input"
@@ -59744,45 +59974,65 @@ function formatTicketRequestSource(value?: string) {
                       onChange={(e) => setInventoryItemFilterQuery(e.target.value)}
                     />
                   </label>
+                  <div className="inventory-tool-list-filter-actions">
+                    <button
+                      type="button"
+                      className="tab inventory-tool-list-filter-reset"
+                      title={lang === "km" ? "សម្អាត Filter" : "Clear Filters"}
+                      aria-label={lang === "km" ? "សម្អាត Filter" : "Clear Filters"}
+                      onClick={() => {
+                        setInventoryItemFilterCampus("ALL");
+                        setInventoryToolListAreaFilter("ALL");
+                        setInventoryToolListLocationFilter("ALL");
+                        setInventoryToolListStatusFilter("ALL");
+                        setInventoryItemFilterQuery("");
+                      }}
+                    >
+                      {lang === "km" ? "សម្អាត" : "Reset"}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="inventory-tool-list-cards">
-                  {inventoryToolListRows.length ? (
-                    inventoryToolListRows.map((row) => {
-                      const status =
-                        row.currentStock <= 0 ? "ZERO" : row.currentStock <= Number(row.minStock || 0) ? "LOW" : "READY";
-                      const statusLabel =
-                        status === "ZERO" ? "Zero Available" : status === "LOW" ? "Low Coverage" : "Ready";
-                      return (
-                        <article key={`inventory-tool-card-${row.id}`} className={`inventory-tool-card inventory-tool-card-${status.toLowerCase()}`}>
-                          <div className="inventory-tool-card-photo">
-                            {renderAssetPhoto(row.photo || "", row.itemCode)}
-                          </div>
-                          <div className="inventory-tool-card-main">
-                            <div className="inventory-tool-card-head">
-                              <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
-                              <span className={`inventory-tool-card-status inventory-tool-card-status-${status.toLowerCase()}`}>{statusLabel}</span>
+                {inventoryToolListRows.length ? (
+                  isPhoneView ? (
+                    <div className="inventory-tool-mobile-list">
+                      {inventoryToolListRows.map((row) => {
+                        const status =
+                          row.currentStock <= 0 ? "ZERO" : row.currentStock <= Number(row.minStock || 0) ? "LOW" : "READY";
+                        const statusLabel =
+                          status === "ZERO" ? "Zero Available" : status === "LOW" ? "Low Coverage" : "Ready";
+                        return (
+                          <article
+                            key={`inventory-tool-mobile-row-${row.id}`}
+                            className={`inventory-tool-mobile-row inventory-tool-mobile-row-${status.toLowerCase()}`}
+                          >
+                            <div className="inventory-tool-mobile-row-top">
+                              <div className="inventory-tool-mobile-row-photo">
+                                {renderAssetPhoto(row.photo || "", row.itemCode)}
+                              </div>
+                              <div className="inventory-tool-mobile-row-main">
+                                <div className="inventory-tool-mobile-row-head">
+                                  <div className="inventory-tool-mobile-row-title">
+                                    <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                    <span>{row.itemCode}</span>
+                                  </div>
+                                  <span className={`inventory-tool-card-status inventory-tool-card-status-${status.toLowerCase()}`}>{statusLabel}</span>
+                                </div>
+                                <div className="inventory-tool-mobile-row-line">
+                                  <strong>{t.campus}:</strong> {inventoryCampusLabel(row.campus)}
+                                </div>
+                                <div className="inventory-tool-mobile-row-line">
+                                  <strong>{t.location}:</strong> {row.area ? `${row.area} | ` : ""}{row.location || "-"}
+                                </div>
+                              </div>
                             </div>
-                            <div className="inventory-tool-card-meta">
-                              <span><strong>Code:</strong> {row.itemCode}</span>
-                              <span><strong>Campus:</strong> {inventoryCampusLabel(row.campus)}</span>
-                              <span><strong>Location:</strong> {row.location || "-"}</span>
+                            <div className="inventory-tool-mobile-row-meta">
+                              <span><strong>Current:</strong> {row.currentStock}</span>
+                              <span><strong>Min:</strong> {row.minStock}</span>
                               <span><strong>Unit:</strong> {row.unit || "-"}</span>
-                              <span><strong>Property:</strong> {ownerTypeLabel(row.ownerType)}</span>
-                              <span><strong>Vendor:</strong> {row.vendor || "-"}</span>
-                              <span><strong>{isProviderToolOwnerType(row.ownerType) ? "Provider Company" : "Responsible"}:</strong> {row.responsibleParty || "-"}</span>
+                              <span><strong>Responsible:</strong> {row.responsibleParty || "-"}</span>
                             </div>
-                          </div>
-                          <div className="inventory-tool-card-side">
-                            <div className="inventory-tool-card-qty">
-                              <span>Current</span>
-                              <strong>{row.currentStock}</strong>
-                            </div>
-                            <div className="inventory-tool-card-qty inventory-tool-card-qty-min">
-                              <span>Min</span>
-                              <strong>{row.minStock}</strong>
-                            </div>
-                            <div className="inventory-tool-card-actions">
+                            <div className="inventory-tool-mobile-row-actions">
                               <button
                                 className="btn-icon-edit"
                                 disabled={!isAdmin}
@@ -59802,18 +60052,104 @@ function formatTicketRequestSource(value?: string) {
                                 <Trash2 size={16} strokeWidth={2.2} />
                               </button>
                             </div>
-                          </div>
-                        </article>
-                      );
-                    })
-                  ) : (
-                    <div className="panel-note">
-                      {inventoryBalanceRows.length
-                        ? "No tools match the current filters."
-                        : "No tools recorded yet."}
+                          </article>
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
+                  ) : (
+                    <div className="inventory-tool-list-table-wrap">
+                      <table className="inventory-tool-list-table">
+                        <thead>
+                          <tr>
+                            <th>Photo</th>
+                            <th>Code / Name</th>
+                            <th>{t.campus}</th>
+                            <th>{t.location}</th>
+                            <th>Status</th>
+                            <th>Current</th>
+                            <th>Min</th>
+                            <th>Responsible</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inventoryToolListRows.map((row) => {
+                            const status =
+                              row.currentStock <= 0 ? "ZERO" : row.currentStock <= Number(row.minStock || 0) ? "LOW" : "READY";
+                            const statusLabel =
+                              status === "ZERO" ? "Zero Available" : status === "LOW" ? "Low Coverage" : "Ready";
+                            return (
+                              <tr key={`inventory-tool-row-${row.id}`}>
+                                <td className="inventory-tool-list-photo-cell">
+                                  <div className="inventory-tool-list-photo-frame">
+                                    {renderAssetPhoto(row.photo || "", row.itemCode)}
+                                  </div>
+                                </td>
+                                <td>
+                                  <div className="inventory-tool-list-name-cell">
+                                    <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                                    <span>{row.itemCode}</span>
+                                    <small>
+                                      {ownerTypeLabel(row.ownerType)}
+                                      {row.vendor ? ` | ${row.vendor}` : ""}
+                                    </small>
+                                  </div>
+                                </td>
+                                <td>{inventoryCampusLabel(row.campus)}</td>
+                                <td>
+                                  <div className="inventory-tool-list-location-cell">
+                                    {row.area ? <strong>{row.area}</strong> : null}
+                                    <span>{row.location || "-"}</span>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span className={`inventory-tool-card-status inventory-tool-card-status-${status.toLowerCase()}`}>{statusLabel}</span>
+                                </td>
+                                <td>
+                                  <span className="inventory-tool-list-number-badge">{row.currentStock}</span>
+                                </td>
+                                <td>
+                                  <span className="inventory-tool-list-number-badge inventory-tool-list-number-badge-min">{row.minStock}</span>
+                                </td>
+                                <td className="inventory-tool-list-responsible-cell">
+                                  {row.responsibleParty || "-"}
+                                </td>
+                                <td>
+                                  <div className="inventory-tool-list-actions">
+                                    <button
+                                      className="btn-icon-edit"
+                                      disabled={!isAdmin}
+                                      title="Edit Setup"
+                                      aria-label="Edit Setup"
+                                      onClick={() => startEditInventoryItem(row)}
+                                    >
+                                      <Pencil size={16} strokeWidth={2.2} />
+                                    </button>
+                                    <button
+                                      className="btn-danger"
+                                      disabled={busy || !isAdmin}
+                                      title="Delete"
+                                      aria-label="Delete"
+                                      onClick={() => void deleteInventoryItem(row)}
+                                    >
+                                      <Trash2 size={16} strokeWidth={2.2} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                ) : (
+                  <div className="panel-note">
+                    {inventoryBalanceRows.length
+                      ? "No tools match the current filters."
+                      : "No tools recorded yet."}
+                  </div>
+                )}
               </section>
             )}
 
@@ -66280,6 +66616,13 @@ function formatTicketRequestSource(value?: string) {
                         </span>
                       ) : null}
                     </div>
+                    {maintenanceRecordSelectedAssetDetailLoading ? (
+                      <div className="tiny maintenance-latest-service-warning-text">
+                        {lang === "km"
+                          ? "កំពុងទាញប្រវត្តិថែទាំចុងក្រោយរបស់ Asset នេះ..."
+                          : "Loading latest maintenance history for this asset..."}
+                      </div>
+                    ) : null}
                     {maintenanceRecordSameDayEntries.length ? (
                       <div className="tiny maintenance-latest-service-warning-text">
                         {lang === "km"
@@ -66314,6 +66657,10 @@ function formatTicketRequestSource(value?: string) {
                           <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
                           <span>{maintenanceRecordLatestEntry.note || "-"}</span>
                         </div>
+                      </div>
+                    ) : maintenanceRecordSelectedAssetDetailLoading ? (
+                      <div className="tiny">
+                        {lang === "km" ? "សូមរង់ចាំប្រព័ន្ធកំពុងទាញទិន្នន័យ..." : "Please wait while the system loads the asset record..."}
                       </div>
                     ) : (
                       <div className="tiny">
@@ -79092,6 +79439,13 @@ function formatTicketRequestSource(value?: string) {
                                   </span>
                                 ) : null}
                               </div>
+                              {maintenanceRecordSelectedAssetDetailLoading ? (
+                                <div className="tiny maintenance-latest-service-warning-text">
+                                  {lang === "km"
+                                    ? "កំពុងទាញប្រវត្តិថែទាំចុងក្រោយរបស់ Asset នេះ..."
+                                    : "Loading latest maintenance history for this asset..."}
+                                </div>
+                              ) : null}
                               {maintenanceRecordSameDayEntries.length ? (
                                 <div className="tiny maintenance-latest-service-warning-text">
                                   {lang === "km"
@@ -79122,6 +79476,10 @@ function formatTicketRequestSource(value?: string) {
                                     <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
                                     <span>{maintenanceRecordLatestEntry.note || "-"}</span>
                                   </div>
+                                </div>
+                              ) : maintenanceRecordSelectedAssetDetailLoading ? (
+                                <div className="tiny">
+                                  {lang === "km" ? "សូមរង់ចាំប្រព័ន្ធកំពុងទាញទិន្នន័យ..." : "Please wait while the system loads the asset record..."}
                                 </div>
                               ) : (
 	                                <div className="tiny">
