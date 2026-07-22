@@ -2888,6 +2888,7 @@ const DEFAULT_ASSET_MASTER_COLUMN_WIDTHS = {
   category: 8,
   campus: 14,
   itemDescription: 24,
+  note: 16,
   location: 12,
   purchaseDate: 9,
   lastServiceDate: 9,
@@ -10365,6 +10366,7 @@ export default function App() {
     | "category"
     | "campus"
     | "itemDescription"
+    | "note"
     | "location"
     | "purchaseDate"
     | "lastServiceDate"
@@ -42670,6 +42672,7 @@ export default function App() {
           pcType: asset.pcType || "",
           itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
           itemDescription: toItemDescription(asset),
+          note: String(asset.notes || "").trim(),
           acType: isAirconAsset(asset.category, asset.type) ? parseAirconSpecs(asset.specs || "").acType : "",
           acCapacity: isAirconAsset(asset.category, asset.type) ? parseAirconSpecs(asset.specs || "").acHp : "",
           acTypeCapacity: isAirconAsset(asset.category, asset.type)
@@ -42932,6 +42935,7 @@ export default function App() {
       { key: "linkedTo", label: "Link to Main Asset", sortable: true },
       { key: "category", label: t.category, sortable: true },
       { key: "itemDescription", label: "Item Description (Specification)", sortable: true },
+      { key: "note", label: lang === "km" ? "កំណត់ចំណាំ" : "Note", sortable: true },
       { key: "campus", label: t.campus, sortable: true },
       { key: "location", label: t.location, sortable: true },
       { key: "purchaseDate", label: "Purchase Date", sortable: true },
@@ -42939,7 +42943,7 @@ export default function App() {
       { key: "assignedTo", label: "Assigned To", sortable: true },
       { key: "status", label: t.status, sortable: true },
     ],
-    [t.photo, t.assetId, t.category, t.campus, t.location, t.status]
+    [lang, t.photo, t.assetId, t.category, t.campus, t.location, t.status]
   );
   const visibleAssetMasterColumns = useMemo(
     () => assetMasterColumnDefs.filter((column) => assetMasterVisibleColumns.includes(column.key)),
@@ -71817,6 +71821,13 @@ function formatTicketRequestSource(value?: string) {
                                     return (
                                       <td key={`${row.key}-itemDescription`} className="report-item-description" title={row.itemDescription || "-"}>
                                         <div className="report-item-description-text">{row.itemDescription || "-"}</div>
+                                      </td>
+                                    );
+                                  }
+                                  if (column.key === "note") {
+                                    return (
+                                      <td key={`${row.key}-note`} className="report-item-description" title={row.note || "-"}>
+                                        <div className="report-item-description-text">{row.note || "-"}</div>
                                       </td>
                                     );
                                   }

@@ -3765,6 +3765,9 @@ async function sendTelegramMessage(text, options = {}) {
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS && botToken ? await discoverTelegramChatIds(botToken) : [];
   telegramLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
+  if (kind === "tools" && !configuredTargets.length) {
+    return includeResults ? { ok: false, results: [] } : false;
+  }
   const targets = configuredTargets.length
     ? Array.from(new Set(configuredTargets))
     : Array.from(new Set(discoveredTargets));
@@ -3850,6 +3853,9 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS && botToken ? await discoverTelegramChatIds(botToken) : [];
   telegramLastDiscoveredChats = discoveredChats;
   const discoveredTargets = discoveredChats.map((row) => toText(row.id)).filter(Boolean);
+  if (kind === "tools" && !configuredTargets.length) {
+    return includeResults ? { ok: false, results: [] } : false;
+  }
   const targets = configuredTargets.length
     ? Array.from(new Set(configuredTargets))
     : Array.from(new Set(discoveredTargets));
