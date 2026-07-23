@@ -352,8 +352,17 @@ let telegramMaintenanceLastSendReport = {
   targets: [],
   errors: [],
 };
+let telegramToolLastSendReport = {
+  at: "",
+  ok: false,
+  successCount: 0,
+  targetCount: 0,
+  targets: [],
+  errors: [],
+};
 let telegramLastDiscoveredChats = [];
 let telegramMaintenanceLastDiscoveredChats = [];
+let telegramToolLastDiscoveredChats = [];
 let maintenanceAlertSweepTimer = null;
 let maintenanceAlertSweepRunning = false;
 const PUBLIC_APP_URL = String(
@@ -3768,13 +3777,18 @@ async function sendTelegramMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "kind")
       ? toText(options.kind).trim().toLowerCase() || "default"
       : "default";
+  const reportRef = kind === "tools" ? "tools" : "default";
   const botToken = resolveTelegramBotTokenForKind(kind);
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, kind);
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS && botToken ? await discoverTelegramChatIds(botToken) : [];
-  telegramLastDiscoveredChats = discoveredChats;
+  if (reportRef === "tools") {
+    telegramToolLastDiscoveredChats = discoveredChats;
+  } else {
+    telegramLastDiscoveredChats = discoveredChats;
+  }
   const targets = Array.from(new Set(configuredTargets));
   if (!targets.length) {
-    telegramLastSendReport = {
+    const nextReport = {
       at: new Date().toISOString(),
       ok: false,
       successCount: 0,
@@ -3782,6 +3796,11 @@ async function sendTelegramMessage(text, options = {}) {
       targets: [],
       errors: ["no configured telegram chat_id target for this alert kind"],
     };
+    if (reportRef === "tools") {
+      telegramToolLastSendReport = nextReport;
+    } else {
+      telegramLastSendReport = nextReport;
+    }
     return includeResults ? { ok: false, results: [] } : false;
   }
   const results = [];
@@ -3790,7 +3809,7 @@ async function sendTelegramMessage(text, options = {}) {
     results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, botToken, parseMode));
   }
   let successCount = results.filter((row) => row.ok).length;
-  telegramLastSendReport = {
+  const nextReport = {
     at: new Date().toISOString(),
     ok: successCount > 0,
     successCount,
@@ -3800,6 +3819,11 @@ async function sendTelegramMessage(text, options = {}) {
       .filter((row) => !row.ok)
       .map((row) => `chat ${row.chatId}: ${row.statusCode || 0} ${toText(row.body).slice(0, 160)}`),
   };
+  if (reportRef === "tools") {
+    telegramToolLastSendReport = nextReport;
+  } else {
+    telegramLastSendReport = nextReport;
+  }
   if (!successCount) {
     console.warn(
       "[ALERT] Telegram send failed for all targets:",
@@ -9528,6 +9552,7 @@ const server = http.createServer(async (req, res) => {
           : [];
       telegramLastDiscoveredChats = discoveredTargets;
       telegramMaintenanceLastDiscoveredChats = maintenanceDiscoveredTargets;
+      telegramToolLastDiscoveredChats = toolDiscoveredTargets;
       const db = await readDb();
       sendJson(res, 200, {
         ok: true,
@@ -9544,6 +9569,7 @@ const server = http.createServer(async (req, res) => {
         toolDiscoveredTargets,
         lastSend: telegramLastSendReport,
         maintenanceLastSend: telegramMaintenanceLastSendReport,
+        toolLastSend: telegramToolLastSendReport,
       });
       return;
     }
@@ -9559,11 +9585,16 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const body = await parseBody(req);
-      const kind = toText(body && body.kind).toLowerCase() === "maintenance" ? "maintenance" : "normal";
+      const requestedKind = toText(body && body.kind).trim().toLowerCase();
+      const kind = requestedKind === "maintenance" ? "maintenance" : requestedKind === "tools" ? "tools" : "normal";
       const text =
         toText(body && body.text) ||
         `${
-          kind === "maintenance" ? "ECO Maintenance Telegram test" : "ECO IT Telegram test"
+          kind === "maintenance"
+            ? "ECO Maintenance Telegram test"
+            : kind === "tools"
+              ? "ECO Tools Telegram test"
+              : "ECO IT Telegram test"
         }\nTime: ${new Date().toISOString()}\nBy: ${toText(user.displayName) || toText(user.username) || "staff"}`;
       const db = await readDb();
       const requestedAssetId = toText(body && body.assetId).trim();
@@ -9575,14 +9606,18 @@ const server = http.createServer(async (req, res) => {
       const ok =
         kind === "maintenance"
           ? await sendTelegramMaintenanceMessage(text, { db, photoUrl, parseMode: "HTML" })
-          : await sendTelegramMessage(text, { db, photoUrl, parseMode: "HTML" });
+          : await sendTelegramMessage(text, { db, photoUrl, parseMode: "HTML", kind: kind === "tools" ? "tools" : "default" });
       sendJson(res, 200, {
         ok,
         enabled: TELEGRAM_ALERT_ENABLED,
         kind,
         assetId: requestedAssetId || toText(matchedAsset && matchedAsset.assetId),
         photoAttached: Boolean(photoUrl),
-        chatTargets: resolveTelegramConfiguredChatIds(db, [], kind === "maintenance" ? "maintenance" : "default"),
+        chatTargets: resolveTelegramConfiguredChatIds(
+          db,
+          [],
+          kind === "maintenance" ? "maintenance" : kind === "tools" ? "tools" : "default"
+        ),
       });
       return;
     }

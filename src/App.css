@@ -20015,15 +20015,24 @@ label.backup-action-btn {
 }
 
 .inventory-tool-list-name-cell,
+.inventory-tool-list-campus-cell,
 .inventory-tool-list-location-cell {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
 
+.inventory-tool-list-campus-cell {
+  line-height: 1.25;
+}
+
 .inventory-tool-list-name-cell strong,
+.inventory-tool-list-campus-cell strong,
 .inventory-tool-list-location-cell strong {
   color: #20395f;
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .inventory-tool-list-name-cell span {
@@ -20035,10 +20044,14 @@ label.backup-action-btn {
 }
 
 .inventory-tool-list-name-cell small,
+.inventory-tool-list-campus-cell span,
 .inventory-tool-list-location-cell span,
 .inventory-tool-list-responsible-cell {
   color: #5f79a2;
   font-size: 13px;
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .inventory-tool-list-number-badge {

@@ -1101,6 +1101,14 @@ type TelegramStatus = {
     targets?: string[];
     errors?: string[];
   };
+  toolLastSend?: {
+    at?: string;
+    ok?: boolean;
+    successCount?: number;
+    targetCount?: number;
+    targets?: string[];
+    errors?: string[];
+  };
 };
 type ServerSettings = {
   campusNames?: Record<string, string>;
@@ -24762,18 +24770,26 @@ export default function App() {
     }
   }
 
-  async function sendTelegramTestAlert() {
+  async function sendTelegramTestAlert(kind: "maintenance" | "tools" = "maintenance") {
     if (!requireAdminAction()) return;
     try {
       const res = await requestJson<{ ok: boolean; enabled: boolean; kind: string; chatTargets: string[] }>("/api/alerts/telegram/test", {
         method: "POST",
-        body: JSON.stringify({ kind: "maintenance" }),
+        body: JSON.stringify({ kind }),
       });
       await loadTelegramStatus();
       setSetupMessage(
         res.ok
-          ? (lang === "km" ? "បានផ្ញើ Maintenance Telegram test រួចរាល់។" : "Maintenance Telegram test sent.")
-          : (lang === "km" ? "Maintenance Telegram test មិនបានផ្ញើ។" : "Maintenance Telegram test failed to send.")
+          ? (
+            kind === "tools"
+              ? (lang === "km" ? "បានផ្ញើ Tools Telegram test រួចរាល់។" : "Tools Telegram test sent.")
+              : (lang === "km" ? "បានផ្ញើ Maintenance Telegram test រួចរាល់។" : "Maintenance Telegram test sent.")
+          )
+          : (
+            kind === "tools"
+              ? (lang === "km" ? "Tools Telegram test មិនបានផ្ញើ។" : "Tools Telegram test failed to send.")
+              : (lang === "km" ? "Maintenance Telegram test មិនបានផ្ញើ។" : "Maintenance Telegram test failed to send.")
+          )
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send Telegram test.");
@@ -60190,7 +60206,12 @@ function formatTicketRequestSource(value?: string) {
                                     </small>
                                   </div>
                                 </td>
-                                <td>{inventoryCampusLabel(row.campus)}</td>
+                                <td>
+                                  <div className="inventory-tool-list-campus-cell">
+                                    <strong>{inventoryCampusLabel(row.campus)}</strong>
+                                    <span>{inventoryRecordCampusCode(row.campus) || "-"}</span>
+                                  </div>
+                                </td>
                                 <td>
                                   <div className="inventory-tool-list-location-cell">
                                     {row.area ? <strong>{row.area}</strong> : null}
@@ -76059,8 +76080,11 @@ function formatTicketRequestSource(value?: string) {
                 <button className="btn-primary btn-small" disabled={!isAdmin || busy} onClick={() => void saveTelegramAlertTargets()}>
                   {lang === "km" ? "រក្សាទុក Chat ID" : "Save Chat IDs"}
                 </button>
-                <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void sendTelegramTestAlert()}>
+                <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void sendTelegramTestAlert("maintenance")}>
                   {lang === "km" ? "ផ្ញើ Test" : "Send Test"}
+                </button>
+                <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void sendTelegramTestAlert("tools")}>
+                  {lang === "km" ? "ផ្ញើ Tools Test" : "Send Tools Test"}
                 </button>
                 <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void loadTelegramStatus()}>
                   {lang === "km" ? "Refresh Status" : "Refresh Status"}
@@ -76218,6 +76242,14 @@ function formatTicketRequestSource(value?: string) {
                   {telegramStatus.maintenanceLastSend?.errors?.length ? (
                     <div className="alert" style={{ marginTop: 8 }}>
                       {telegramStatus.maintenanceLastSend.errors.join(" | ")}
+                    </div>
+                  ) : null}
+                  <div className="tiny" style={{ marginTop: 8 }}>
+                    {lang === "km" ? "Last send (tools)" : "Last send (tools)"}: {telegramStatus.toolLastSend?.at || "-"}
+                  </div>
+                  {telegramStatus.toolLastSend?.errors?.length ? (
+                    <div className="alert" style={{ marginTop: 8 }}>
+                      {telegramStatus.toolLastSend.errors.join(" | ")}
                     </div>
                   ) : null}
                 </div>
