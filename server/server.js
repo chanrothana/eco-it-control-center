@@ -295,9 +295,7 @@ const TELEGRAM_BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_MAINTENANCE_BOT_TOKEN = String(
   process.env.TELEGRAM_MAINTENANCE_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || ""
 ).trim();
-const TELEGRAM_TOOL_BOT_TOKEN = String(
-  process.env.TELEGRAM_TOOL_BOT_TOKEN || process.env.TELEGRAM_MAINTENANCE_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || ""
-).trim();
+const TELEGRAM_TOOL_BOT_TOKEN = String(process.env.TELEGRAM_TOOL_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "").trim();
 const TELEGRAM_MAINTENANCE_CHAT_ID = String(process.env.TELEGRAM_MAINTENANCE_CHAT_ID || "").trim();
 const TELEGRAM_TOOL_CHAT_ID = String(process.env.TELEGRAM_TOOL_CHAT_ID || "").trim();
@@ -3660,7 +3658,7 @@ function resolveTelegramBotTokenForKind(kind = "default") {
     return TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   }
   if (normalizedKind === "tools") {
-    return TELEGRAM_TOOL_BOT_TOKEN || TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
+    return TELEGRAM_TOOL_BOT_TOKEN;
   }
   return TELEGRAM_BOT_TOKEN;
 }
@@ -3779,6 +3777,17 @@ async function sendTelegramMessage(text, options = {}) {
       : "default";
   const reportRef = kind === "tools" ? "tools" : "default";
   const botToken = resolveTelegramBotTokenForKind(kind);
+  if (reportRef === "tools" && !botToken) {
+    telegramToolLastSendReport = {
+      at: new Date().toISOString(),
+      ok: false,
+      successCount: 0,
+      targetCount: 0,
+      targets: [],
+      errors: ["tools telegram bot token is missing"],
+    };
+    return includeResults ? { ok: false, results: [] } : false;
+  }
   const configuredTargets = resolveTelegramConfiguredChatIds(db, explicitChatIds, kind);
   const discoveredChats = TELEGRAM_DISCOVER_CHAT_IDS && botToken ? await discoverTelegramChatIds(botToken) : [];
   if (reportRef === "tools") {

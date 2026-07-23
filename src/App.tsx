@@ -47386,7 +47386,19 @@ export default function App() {
       <head>
         <title>${escapeHtml(title)}</title>
         <style>
-          :root { color-scheme: light; }
+          :root {
+            color-scheme: light;
+            --preview-cell-padding-y: 8px;
+            --preview-cell-padding-x: 8px;
+            --preview-cell-font-size: 11px;
+            --preview-header-font-size: 13px;
+            --preview-photo-size: 54px;
+            --preview-photo-radius: 8px;
+            --preview-row-gap: 6px;
+            --preview-divider-width: 62px;
+            --preview-amount-label-size: 9px;
+            --preview-empty-label-size: 11px;
+          }
           body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f5f1e7; }
           .preview-toolbar {
             position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -47394,9 +47406,35 @@ export default function App() {
           }
           .preview-toolbar-note { font-size: 13px; color: #6b5a40; }
           .preview-toolbar-actions { display: flex; align-items: center; gap: 10px; }
+          .preview-toolbar-density {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px;
+            border: 1px solid #d9c39f;
+            border-radius: 999px;
+            background: rgba(255, 250, 241, 0.96);
+          }
+          .preview-toolbar-density-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #7a6444;
+            padding: 0 4px 0 8px;
+            white-space: nowrap;
+          }
           .preview-btn {
             appearance: none; border: 1px solid #caa468; background: #fffaf1; color: #6c4824; border-radius: 999px;
             padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer;
+          }
+          .preview-btn-density {
+            padding: 8px 12px;
+            font-size: 12px;
+            min-width: 0;
+          }
+          .preview-btn-density.is-active {
+            background: #f26f21;
+            color: #fff;
+            border-color: #f26f21;
           }
           .preview-btn-primary { background: #f26f21; color: #fff; border-color: #f26f21; }
           .preview-shell { padding: 20px; }
@@ -47696,7 +47734,13 @@ export default function App() {
           }
           .preview-table-wrap { width: 100%; overflow-x: auto; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: auto; background: #fff; }
-          th, td { border: 1px solid #cfded0; padding: 8px; font-size: 11px; text-align: left; vertical-align: top; }
+          th, td {
+            border: 1px solid #cfded0;
+            padding: var(--preview-cell-padding-y) var(--preview-cell-padding-x);
+            font-size: var(--preview-cell-font-size);
+            text-align: left;
+            vertical-align: top;
+          }
           th {
             background: #eef5ee;
             text-transform: uppercase;
@@ -47728,12 +47772,12 @@ export default function App() {
           .preview-report-table-inventory th {
             text-align: center;
             vertical-align: middle;
-            font-size: 13px;
+            font-size: var(--preview-header-font-size);
             font-weight: 800;
             letter-spacing: 0.03em;
             line-height: 1.2;
-            padding-top: 10px;
-            padding-bottom: 10px;
+            padding-top: calc(var(--preview-cell-padding-y) + 2px);
+            padding-bottom: calc(var(--preview-cell-padding-y) + 2px);
           }
           .preview-report-table-inventory td {
             vertical-align: middle;
@@ -47754,22 +47798,22 @@ export default function App() {
             text-align: center;
             font-weight: 800;
             color: #27405e;
-            padding: 10px 6px;
+            padding: calc(var(--preview-cell-padding-y) + 2px) 6px;
           }
           .compare-stock-print-card {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
+            gap: var(--preview-row-gap);
             width: 100%;
           }
           .compare-stock-print-photo {
             display: inline-grid;
             place-items: center;
-            width: 54px;
-            height: 54px;
+            width: var(--preview-photo-size);
+            height: var(--preview-photo-size);
             object-fit: cover;
-            border-radius: 8px;
+            border-radius: var(--preview-photo-radius);
             border: 1px solid #cfded0;
             overflow: hidden;
             background: rgba(255,255,255,0.7);
@@ -47784,7 +47828,7 @@ export default function App() {
           }
           .compare-stock-print-divider {
             width: 100%;
-            max-width: 62px;
+            max-width: var(--preview-divider-width);
             height: 1px;
             background: rgba(120, 140, 166, 0.42);
           }
@@ -47795,17 +47839,73 @@ export default function App() {
             gap: 2px;
           }
           .compare-stock-print-amount-label {
-            font-size: 9px;
+            font-size: var(--preview-amount-label-size);
             font-weight: 700;
             letter-spacing: 0.04em;
             text-transform: uppercase;
             color: #6b7c91;
           }
           .compare-stock-print-empty-label {
-            font-size: 11px;
+            font-size: var(--preview-empty-label-size);
             font-weight: 800;
             letter-spacing: 0.02em;
             color: #b85a5a;
+          }
+          body.preview-density-compact {
+            --preview-cell-padding-y: 5px;
+            --preview-cell-padding-x: 6px;
+            --preview-cell-font-size: 10px;
+            --preview-header-font-size: 11px;
+            --preview-photo-size: 42px;
+            --preview-photo-radius: 6px;
+            --preview-row-gap: 4px;
+            --preview-divider-width: 48px;
+            --preview-amount-label-size: 8px;
+            --preview-empty-label-size: 10px;
+          }
+          body.preview-density-compact .report-document-shell {
+            padding-bottom: 18px;
+          }
+          body.preview-density-compact .report-summary-grid {
+            gap: 8px;
+          }
+          body.preview-density-compact .report-summary-card {
+            padding: 8px 10px;
+          }
+          body.preview-density-compact .report-summary-card-label {
+            margin-bottom: 3px;
+            font-size: 9px;
+          }
+          body.preview-density-compact .report-summary-card-value {
+            font-size: 12px;
+          }
+          body.preview-density-tight {
+            --preview-cell-padding-y: 3px;
+            --preview-cell-padding-x: 5px;
+            --preview-cell-font-size: 9px;
+            --preview-header-font-size: 10px;
+            --preview-photo-size: 34px;
+            --preview-photo-radius: 5px;
+            --preview-row-gap: 3px;
+            --preview-divider-width: 42px;
+            --preview-amount-label-size: 7px;
+            --preview-empty-label-size: 9px;
+          }
+          body.preview-density-tight .report-document-shell {
+            padding-bottom: 16px;
+          }
+          body.preview-density-tight .report-summary-grid {
+            gap: 6px;
+          }
+          body.preview-density-tight .report-summary-card {
+            padding: 6px 8px;
+          }
+          body.preview-density-tight .report-summary-card-label {
+            margin-bottom: 2px;
+            font-size: 8px;
+          }
+          body.preview-density-tight .report-summary-card-value {
+            font-size: 11px;
           }
           .compare-stock-print-cell.is-zero {
             background: rgba(226, 92, 92, 0.12);
@@ -48203,6 +48303,18 @@ export default function App() {
             ${
               reportType === "qr_labels"
                 ? ""
+                : `<div class="preview-toolbar-density" role="group" aria-label="${escapeHtml(
+                    lang === "km" ? "ទំហំជួរដេក" : "Row Size"
+                  )}">
+                    <span class="preview-toolbar-density-label">${escapeHtml(lang === "km" ? "Row Size" : "Row Size")}</span>
+                    <button type="button" class="preview-btn preview-btn-density is-active" data-density="normal">${escapeHtml(lang === "km" ? "ធម្មតា" : "Normal")}</button>
+                    <button type="button" class="preview-btn preview-btn-density" data-density="compact">${escapeHtml(lang === "km" ? "តូច" : "Compact")}</button>
+                    <button type="button" class="preview-btn preview-btn-density" data-density="tight">${escapeHtml(lang === "km" ? "តឹង" : "Tight")}</button>
+                  </div>`
+            }
+            ${
+              reportType === "qr_labels"
+                ? ""
                 : `<button type="button" class="preview-btn" id="reset-widths-btn">${escapeHtml(lang === "km" ? "កំណត់ទំហំឡើងវិញ" : "Reset Widths")}</button>`
             }
             <button type="button" class="preview-btn" id="close-preview-btn">${escapeHtml(t.close)}</button>
@@ -48240,8 +48352,25 @@ export default function App() {
             const printBtn = document.getElementById("print-now-btn");
             const closeBtn = document.getElementById("close-preview-btn");
             const resetBtn = document.getElementById("reset-widths-btn");
+            const densityButtons = Array.from(document.querySelectorAll("[data-density]"));
             if (printBtn) printBtn.addEventListener("click", () => window.print());
             if (closeBtn) closeBtn.addEventListener("click", () => window.close());
+
+            const applyDensity = (density) => {
+              document.body.classList.remove("preview-density-compact", "preview-density-tight");
+              if (density === "compact") document.body.classList.add("preview-density-compact");
+              if (density === "tight") document.body.classList.add("preview-density-tight");
+              densityButtons.forEach((button) => {
+                const active = button.getAttribute("data-density") === density;
+                button.classList.toggle("is-active", active);
+              });
+            };
+
+            densityButtons.forEach((button) => {
+              button.addEventListener("click", () => {
+                applyDensity(button.getAttribute("data-density") || "normal");
+              });
+            });
 
             if (resetBtn) {
               resetBtn.addEventListener("click", () => {
