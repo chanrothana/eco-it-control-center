@@ -29092,27 +29092,29 @@ export default function App() {
       created: toolReviewExistingEntry?.created || timestamp,
       updated: timestamp,
     };
-    const nextReports = toolReviewExistingEntry
-      ? toolReviewReports.map((row) => (row.id === toolReviewExistingEntry.id ? nextEntry : row))
-      : [nextEntry, ...toolReviewReports];
     setBusy(true);
     setError("");
     try {
-      setToolReviewReports(nextReports);
-      await requestJson<{ ok: boolean; report?: ToolReviewReport }>("/api/tool-review-reports", {
+      const res = await requestJson<{ ok: boolean; report?: ToolReviewReport }>("/api/tool-review-reports", {
         method: "POST",
+        timeoutMs: 45000,
         body: JSON.stringify({
           report: nextEntry,
         }),
       });
+      const savedReport = res.report ? normalizeToolReviewReportsClient([res.report])[0] || nextEntry : nextEntry;
+      const nextReports = toolReviewExistingEntry
+        ? toolReviewReports.map((row) => (row.id === toolReviewExistingEntry.id ? savedReport : row))
+        : [savedReport, ...toolReviewReports];
+      setToolReviewReports(nextReports);
       appendUiAudit(
         toolReviewExistingEntry ? "UPDATE" : "CREATE",
         "tool_review_report",
-        nextEntry.itemCode,
-        `${nextEntry.month} | ${nextEntry.condition} | ${nextEntry.reviewedBy}`
+        savedReport.itemCode,
+        `${savedReport.month} | ${savedReport.condition} | ${savedReport.reviewedBy}`
       );
       try {
-        await saveToolReviewStockAdjustment(selectedItem, nextEntry);
+        await saveToolReviewStockAdjustment(selectedItem, savedReport);
       } catch (stockErr) {
         setError(
           stockErr instanceof Error
@@ -47429,11 +47431,12 @@ export default function App() {
             text-align: center;
             align-items: start;
             margin-bottom: 12px;
-            min-height: 124px;
-            padding-top: 18px;
+            min-height: 138px;
+            padding: 18px 228px 0 0;
+            overflow: visible;
           }
           .report-head-left {
-            width: calc(100% - 240px);
+            width: 100%;
             max-width: 1100px;
             margin: 0 auto;
             padding-right: 0;
@@ -47441,11 +47444,13 @@ export default function App() {
           }
           .report-head-logo {
             position: absolute;
-            right: 0;
-            top: -8px;
+            right: 8px;
+            top: 2px;
             transform: none;
-            width: 200px;
-            max-width: 28vw;
+            width: 190px;
+            max-width: 24vw;
+            max-height: 72px;
+            object-position: right top;
           }
           .report-head h1 {
             font-size: 18px;
@@ -47692,7 +47697,16 @@ export default function App() {
           .preview-table-wrap { width: 100%; overflow-x: auto; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: auto; background: #fff; }
           th, td { border: 1px solid #cfded0; padding: 8px; font-size: 11px; text-align: left; vertical-align: top; }
-          th { background: #eef5ee; text-transform: uppercase; letter-spacing: 0.04em; position: relative; }
+          th {
+            background: #eef5ee;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            position: relative;
+            border-color: #bccfbe;
+            border-bottom: 1.4px solid #aebfae;
+            box-shadow: inset -1px 0 0 #c7d5c8, inset 0 -1px 0 #aebfae;
+            background-clip: padding-box;
+          }
           .preview-report-table th,
           .preview-report-table td { word-break: normal; overflow-wrap: break-word; hyphens: auto; }
           .preview-report-table-maintenance {
@@ -47717,6 +47731,9 @@ export default function App() {
             font-size: 13px;
             font-weight: 800;
             letter-spacing: 0.03em;
+            line-height: 1.2;
+            padding-top: 10px;
+            padding-bottom: 10px;
           }
           .preview-report-table-inventory td {
             vertical-align: middle;
