@@ -5208,7 +5208,7 @@ async function sendCleaningSupplyTelegramMessageWithPhotos(text, source, db = nu
   let report = null;
   let sent = false;
   if (photoAlerts.length <= 1) {
-    report = await sendTelegramMaintenanceMessage(normalizedText, {
+    report = await sendTelegramMessage(normalizedText, {
       db,
       photoUrl: photoAlerts[0] ? photoAlerts[0].media : "",
       includeResults: true,
@@ -5219,18 +5219,18 @@ async function sendCleaningSupplyTelegramMessageWithPhotos(text, source, db = nu
       ...item,
       caption: index === 0 ? normalizedText : "",
     }));
-    report = await sendTelegramMaintenanceMediaGroup(albumItems, {
+    report = await sendTelegramMediaGroup(albumItems, {
       db,
       includeResults: true,
     });
     sent = Boolean(report && report.ok);
   } else {
-    report = await sendTelegramMaintenanceMessage(normalizedText, {
+    report = await sendTelegramMessage(normalizedText, {
       db,
       includeResults: true,
     });
     sent = Boolean(report && report.ok);
-    const mediaReport = await sendTelegramMaintenanceMediaGroup(
+    const mediaReport = await sendTelegramMediaGroup(
       photoAlerts.map((item) => ({
         ...item,
         caption: "",

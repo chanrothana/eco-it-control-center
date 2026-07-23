@@ -24594,6 +24594,17 @@ export default function App() {
     );
   }
 
+  function addTelegramChatIdToText(currentValue: string, chatId: string) {
+    return parseTelegramChatIds(`${currentValue},${String(chatId || "").trim()}`).join(", ");
+  }
+
+  function removeTelegramChatIdFromText(currentValue: string, chatId: string) {
+    const normalizedChatId = String(chatId || "").trim();
+    return parseTelegramChatIds(currentValue)
+      .filter((entry) => entry !== normalizedChatId)
+      .join(", ");
+  }
+
   async function saveTelegramChatIdsToServer(
     nextChatIds: string[],
     nextMaintenanceChatIds: string[],
@@ -59390,7 +59401,7 @@ function formatTicketRequestSource(value?: string) {
             ) : null}
 
             {!maintenanceQuickMode && inventoryView === "items" && (
-              <section className="panel">
+              <section className="panel inventory-item-create-panel">
                 <h2>{inventoryDashboardGroup === "TONER" ? "Printer Toner Setup" : "Create Inventory Item"}</h2>
                 {inventoryDashboardGroup !== "TONER" ? (
                 <>
@@ -59536,7 +59547,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                   </label>
                 </div>
-                <div className="asset-actions">
+                <div className="asset-actions inventory-item-create-actions">
                   <div className="tiny">Add operational supplies and tool master records with owner/team responsibility.</div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
@@ -70506,7 +70517,7 @@ function formatTicketRequestSource(value?: string) {
 
         {editingInventoryItemRow ? (
           <div className="modal-backdrop" onClick={cancelInventoryItemEdit}>
-            <section className="panel modal-panel inventory-item-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <section className="panel modal-panel inventory-item-edit-modal inventory-item-create-panel" onClick={(e) => e.stopPropagation()}>
               <div className="panel-row">
                 <div>
                   <h2>Edit Inventory Item - {editingInventoryItemRow.itemCode}</h2>
@@ -70879,7 +70890,7 @@ function formatTicketRequestSource(value?: string) {
                         {isPhoneView ? (
                           <span>
                             {reportMobileFiltersOpen
-                              ? (lang === "km" ? "បិទតម្រង" : "Close Filters")
+                              ? (lang === "km" ? "តម្រងកំពុងបើក" : "Filters Open")
                               : (lang === "km" ? "តម្រង" : "Filters")}
                           </span>
                         ) : reportType === "it_vault" ? (
@@ -70934,11 +70945,6 @@ function formatTicketRequestSource(value?: string) {
                           {reportType === "it_vault" ? <span>{lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}</span> : null}
                         </button>
                       ) : null}
-                      {isPhoneView ? (
-                        <button type="button" className="tab report-mobile-filter-reset-btn" onClick={resetReportFilters}>
-                          {lang === "km" ? "កំណត់តម្រងឡើងវិញ" : "Reset Filters"}
-                        </button>
-                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -70964,9 +70970,14 @@ function formatTicketRequestSource(value?: string) {
                   >
                     <div className="report-mobile-filter-head">
                       <strong>{lang === "km" ? "តម្រងរបាយការណ៍" : "Report Filters"}</strong>
-                      <button type="button" className="tab" onClick={() => setReportMobileFiltersOpen(false)}>
-                        {lang === "km" ? "រួចរាល់" : "Done"}
-                      </button>
+                      <div className="report-mobile-filter-head-actions">
+                        <button type="button" className="tab report-mobile-filter-head-reset" onClick={resetReportFilters}>
+                          {lang === "km" ? "កំណត់ឡើងវិញ" : "Reset"}
+                        </button>
+                        <button type="button" className="tab report-mobile-filter-head-done" onClick={() => setReportMobileFiltersOpen(false)}>
+                          {lang === "km" ? "រួចរាល់" : "Done"}
+                        </button>
+                      </div>
                     </div>
                     <div className={`report-filters-shell ${reportType === "maintenance_completion" ? "report-filters-shell-maintenance" : ""}`}>
                       <div
@@ -75874,8 +75885,13 @@ function formatTicketRequestSource(value?: string) {
               </div>
               <div className="tiny" style={{ marginBottom: 8 }}>
                 {lang === "km"
-                  ? "Supply alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot | Tools route: Tools group"
-                  : "Supply alert bot: eco_it_alert_bot | Maintenance alert bot: @eco_maintenance_alert_bot | Tools route: Tools group"}
+                  ? "Supply alerts ប្រើ main alert route | Maintenance alerts ប្រើ maintenance route | Tools verification alerts ប្រើ tools route"
+                  : "Supply alerts use the main alert route | Maintenance alerts use the maintenance route | Tools verification alerts use the tools route"}
+              </div>
+              <div className="tiny" style={{ marginBottom: 10 }}>
+                {lang === "km"
+                  ? "របៀបដក group ខុសចេញ៖ 1) លុប chat ID ខុសពីប្រអប់ខាងក្រោម ឬចុច Clear 2) ចុច Save Chat IDs 3) ចុច Refresh Status។ បើ group ខុសនៅតែបង្ហាញក្នុង Discovered chats វាមិនអីទេ ព្រោះវាគ្រាន់តែជាបញ្ជី chat ដែល bot ធ្លាប់ឃើញ មិនមែនជាគោលដៅផ្ញើទេ។"
+                  : "To remove a wrong group: 1) delete the wrong chat ID below or press Clear, 2) press Save Chat IDs, 3) press Refresh Status. If the wrong group still appears in Discovered chats, that is okay because it is only a seen-chat list, not an active send target."}
               </div>
               <label className="field">
                 <span>{lang === "km" ? "Telegram Chat ID(s) - Supply Alerts" : "Telegram Chat ID(s) - Supply Alerts"}</span>
@@ -75886,6 +75902,11 @@ function formatTicketRequestSource(value?: string) {
                   placeholder="-1001234567890, -1009876543210"
                   disabled={!isAdmin || busy}
                 />
+                <div className="row-actions" style={{ marginTop: 8 }}>
+                  <button type="button" className="tab btn-small" disabled={!isAdmin || busy || !telegramChatIdsText.trim()} onClick={() => setTelegramChatIdsText("")}>
+                    {lang === "km" ? "Clear Supply" : "Clear Supply"}
+                  </button>
+                </div>
               </label>
               <label className="field" style={{ marginTop: 10 }}>
                 <span>
@@ -75900,6 +75921,16 @@ function formatTicketRequestSource(value?: string) {
                   placeholder="-1001234567890"
                   disabled={!isAdmin || busy}
                 />
+                <div className="row-actions" style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    disabled={!isAdmin || busy || !telegramMaintenanceChatIdsText.trim()}
+                    onClick={() => setTelegramMaintenanceChatIdsText("")}
+                  >
+                    {lang === "km" ? "Clear Maintenance" : "Clear Maintenance"}
+                  </button>
+                </div>
               </label>
               <label className="field" style={{ marginTop: 10 }}>
                 <span>
@@ -75914,6 +75945,16 @@ function formatTicketRequestSource(value?: string) {
                   placeholder="-1001234567890"
                   disabled={!isAdmin || busy}
                 />
+                <div className="row-actions" style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="tab btn-small"
+                    disabled={!isAdmin || busy || !telegramToolChatIdsText.trim()}
+                    onClick={() => setTelegramToolChatIdsText("")}
+                  >
+                    {lang === "km" ? "Clear Tools" : "Clear Tools"}
+                  </button>
+                </div>
               </label>
               <div className="tiny" style={{ marginTop: 6 }}>
                 {lang === "km"
@@ -75957,14 +75998,46 @@ function formatTicketRequestSource(value?: string) {
                       ? "សម្គាល់៖ Discovered chats ខាងក្រោម គឺសម្រាប់មើល chat ID ប៉ុណ្ណោះ។ ប្រព័ន្ធនឹងផ្ញើ alert តែទៅ configured targets ដែលបានរក្សាទុក។"
                       : "Note: discovered chats below are for checking available chat IDs only. Alerts now send only to the configured saved targets."}
                   </div>
+                  <div className="tiny" style={{ marginTop: 6 }}>
+                    {lang === "km"
+                      ? "បើឃើញ group ខុសនៅទីនេះ វាមិនមានន័យថាប្រព័ន្ធកំពុងផ្ញើទៅ group នោះទេ។ សូមពិនិត្យតែ Configured targets ខាងលើ។"
+                      : "If you still see a wrong group here, it does not mean the system is sending there. Only the Configured targets above are active."}
+                  </div>
                   <div className="tiny">
                     {lang === "km" ? "Discovered chats (supply)" : "Discovered chats (supply alert)"}: {telegramStatus.discoveredTargets.length ? "" : "-"}
                   </div>
                   {telegramStatus.discoveredTargets.length ? (
                     <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
                       {telegramStatus.discoveredTargets.map((chat) => (
-                        <div key={`telegram-chat-${chat.id}`} className="tiny" style={{ marginBottom: 6 }}>
-                          <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                        <div key={`telegram-chat-${chat.id}`} className="tiny" style={{ marginBottom: 10 }}>
+                          <div>
+                            <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                          </div>
+                          <div style={{ marginTop: 4 }}>
+                            <strong>
+                              {telegramStatus.configuredTargets.includes(chat.id)
+                                ? (lang === "km" ? "កំពុងផ្ញើទៅ group នេះ" : "Active send target")
+                                : (lang === "km" ? "មើលឃើញតែប៉ុណ្ណោះ" : "Seen only, not active")}
+                            </strong>
+                          </div>
+                          <div className="row-actions" style={{ marginTop: 6 }}>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              disabled={!isAdmin || busy || telegramStatus.configuredTargets.includes(chat.id)}
+                              onClick={() => setTelegramChatIdsText((current) => addTelegramChatIdToText(current, chat.id))}
+                            >
+                              {lang === "km" ? "ប្រើសម្រាប់ Supply" : "Use for Supply"}
+                            </button>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              disabled={!isAdmin || busy || !telegramStatus.configuredTargets.includes(chat.id)}
+                              onClick={() => setTelegramChatIdsText((current) => removeTelegramChatIdFromText(current, chat.id))}
+                            >
+                              {lang === "km" ? "ដកចេញពី Supply" : "Remove from Supply"}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -75975,8 +76048,35 @@ function formatTicketRequestSource(value?: string) {
                   {telegramStatus.maintenanceDiscoveredTargets?.length ? (
                     <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
                       {telegramStatus.maintenanceDiscoveredTargets.map((chat) => (
-                        <div key={`telegram-maintenance-chat-${chat.id}`} className="tiny" style={{ marginBottom: 6 }}>
-                          <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                        <div key={`telegram-maintenance-chat-${chat.id}`} className="tiny" style={{ marginBottom: 10 }}>
+                          <div>
+                            <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                          </div>
+                          <div style={{ marginTop: 4 }}>
+                            <strong>
+                              {telegramStatus.maintenanceConfiguredTargets?.includes(chat.id)
+                                ? (lang === "km" ? "កំពុងផ្ញើទៅ group នេះ" : "Active send target")
+                                : (lang === "km" ? "មើលឃើញតែប៉ុណ្ណោះ" : "Seen only, not active")}
+                            </strong>
+                          </div>
+                          <div className="row-actions" style={{ marginTop: 6 }}>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              disabled={!isAdmin || busy || Boolean(telegramStatus.maintenanceConfiguredTargets?.includes(chat.id))}
+                              onClick={() => setTelegramMaintenanceChatIdsText((current) => addTelegramChatIdToText(current, chat.id))}
+                            >
+                              {lang === "km" ? "ប្រើសម្រាប់ Maintenance" : "Use for Maintenance"}
+                            </button>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              disabled={!isAdmin || busy || !telegramStatus.maintenanceConfiguredTargets?.includes(chat.id)}
+                              onClick={() => setTelegramMaintenanceChatIdsText((current) => removeTelegramChatIdFromText(current, chat.id))}
+                            >
+                              {lang === "km" ? "ដកចេញពី Maintenance" : "Remove from Maintenance"}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -75987,8 +76087,35 @@ function formatTicketRequestSource(value?: string) {
                   {telegramStatus.toolDiscoveredTargets?.length ? (
                     <div className="permission-scroll-box permission-scroll-box-sm" style={{ marginTop: 8, padding: 8 }}>
                       {telegramStatus.toolDiscoveredTargets.map((chat) => (
-                        <div key={`telegram-tools-chat-${chat.id}`} className="tiny" style={{ marginBottom: 6 }}>
-                          <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                        <div key={`telegram-tools-chat-${chat.id}`} className="tiny" style={{ marginBottom: 10 }}>
+                          <div>
+                            <strong>{chat.title || chat.username || chat.id}</strong> [{chat.type || "chat"}] {chat.id}
+                          </div>
+                          <div style={{ marginTop: 4 }}>
+                            <strong>
+                              {telegramStatus.toolConfiguredTargets?.includes(chat.id)
+                                ? (lang === "km" ? "កំពុងផ្ញើទៅ group នេះ" : "Active send target")
+                                : (lang === "km" ? "មើលឃើញតែប៉ុណ្ណោះ" : "Seen only, not active")}
+                            </strong>
+                          </div>
+                          <div className="row-actions" style={{ marginTop: 6 }}>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              disabled={!isAdmin || busy || Boolean(telegramStatus.toolConfiguredTargets?.includes(chat.id))}
+                              onClick={() => setTelegramToolChatIdsText((current) => addTelegramChatIdToText(current, chat.id))}
+                            >
+                              {lang === "km" ? "ប្រើសម្រាប់ Tools" : "Use for Tools"}
+                            </button>
+                            <button
+                              type="button"
+                              className="tab btn-small"
+                              disabled={!isAdmin || busy || !telegramStatus.toolConfiguredTargets?.includes(chat.id)}
+                              onClick={() => setTelegramToolChatIdsText((current) => removeTelegramChatIdFromText(current, chat.id))}
+                            >
+                              {lang === "km" ? "ដកចេញពី Tools" : "Remove from Tools"}
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
