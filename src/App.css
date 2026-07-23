@@ -19959,7 +19959,7 @@ label.backup-action-btn {
 .inventory-tool-list-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 .inventory-tool-list-table thead th {
@@ -19976,6 +19976,18 @@ label.backup-action-btn {
   text-align: left;
   border-bottom: 1px solid #d2deef;
   box-shadow: inset 0 -1px 0 #d2deef;
+}
+
+.inventory-tool-list-table thead th:nth-child(8),
+.inventory-tool-list-table tbody td:nth-child(8) {
+  width: 150px;
+  min-width: 150px;
+}
+
+.inventory-tool-list-table thead th:nth-child(9),
+.inventory-tool-list-table tbody td:nth-child(9) {
+  width: 110px;
+  min-width: 110px;
 }
 
 .inventory-tool-list-table tbody td {
@@ -20074,8 +20086,9 @@ label.backup-action-btn {
 .inventory-tool-list-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .inventory-item-mobile-list {
@@ -22217,6 +22230,126 @@ label.backup-action-btn {
 
 .inventory-stock-edit-qty {
   min-width: 72px;
+}
+
+.inventory-daily-records-table-wrap {
+  overflow-x: hidden !important;
+}
+
+.inventory-daily-records-table {
+  width: 100%;
+  table-layout: fixed;
+  min-width: 0 !important;
+  max-width: 100%;
+}
+
+.inventory-daily-records-table th,
+.inventory-daily-records-table td {
+  font-size: 12px;
+}
+
+.inventory-daily-records-table th {
+  white-space: nowrap;
+}
+
+.inventory-daily-records-table td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inventory-daily-records-table-recent th:nth-child(1),
+.inventory-daily-records-table-recent td:nth-child(1) {
+  width: 10%;
+}
+
+.inventory-daily-records-table-recent th:nth-child(2),
+.inventory-daily-records-table-recent td:nth-child(2) {
+  width: 10%;
+}
+
+.inventory-daily-records-table-recent th:nth-child(3),
+.inventory-daily-records-table-recent td:nth-child(3) {
+  width: 24%;
+}
+
+.inventory-daily-records-table-recent th:nth-child(4),
+.inventory-daily-records-table-recent td:nth-child(4) {
+  width: 14%;
+}
+
+.inventory-daily-records-table-recent th:nth-child(5),
+.inventory-daily-records-table-recent td:nth-child(5) {
+  width: 6%;
+}
+
+.inventory-daily-records-table-recent th:nth-child(6),
+.inventory-daily-records-table-recent td:nth-child(6) {
+  width: 14%;
+}
+
+.inventory-daily-records-table-recent th:nth-child(7),
+.inventory-daily-records-table-recent td:nth-child(7) {
+  width: 22%;
+}
+
+.inventory-daily-records-table-full th:nth-child(1),
+.inventory-daily-records-table-full td:nth-child(1) {
+  width: 10%;
+}
+
+.inventory-daily-records-table-full th:nth-child(2),
+.inventory-daily-records-table-full td:nth-child(2) {
+  width: 9%;
+}
+
+.inventory-daily-records-table-full th:nth-child(3),
+.inventory-daily-records-table-full td:nth-child(3) {
+  width: 18%;
+}
+
+.inventory-daily-records-table-full th:nth-child(4),
+.inventory-daily-records-table-full td:nth-child(4) {
+  width: 18%;
+}
+
+.inventory-daily-records-table-full th:nth-child(5),
+.inventory-daily-records-table-full td:nth-child(5) {
+  width: 9%;
+}
+
+.inventory-daily-records-table-full th:nth-child(6),
+.inventory-daily-records-table-full td:nth-child(6) {
+  width: 5%;
+}
+
+.inventory-daily-records-table-full th:nth-child(7),
+.inventory-daily-records-table-full td:nth-child(7) {
+  width: 12%;
+}
+
+.inventory-daily-records-table-full th:nth-child(8),
+.inventory-daily-records-table-full td:nth-child(8) {
+  width: 18%;
+}
+
+.inventory-daily-records-table-recent td:nth-child(2),
+.inventory-daily-records-table-recent td:nth-child(4),
+.inventory-daily-records-table-recent td:nth-child(5),
+.inventory-daily-records-table-full td:nth-child(2),
+.inventory-daily-records-table-full td:nth-child(5),
+.inventory-daily-records-table-full td:nth-child(6) {
+  white-space: nowrap;
+}
+
+.workspace-main .inventory-daily-records-table-wrap,
+.workspace-main .inventory-daily-records-table-wrap.table-wrap {
+  overflow-x: hidden !important;
+}
+
+.workspace-main .inventory-daily-records-table-wrap .inventory-daily-records-table {
+  min-width: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 .inventory-stock-edit-by {

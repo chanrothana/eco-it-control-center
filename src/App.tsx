@@ -39860,6 +39860,7 @@ export default function App() {
         if (!table.tHead || !table.tHead.rows.length) return;
         if (table.closest(".modal-panel")) return;
         if (table.classList.contains("asset-list-table")) return;
+        if (table.classList.contains("no-generic-table-resize")) return;
         const headRow = table.tHead.rows[0];
         const headers = Array.from(headRow.cells).filter(
           (cell): cell is HTMLTableCellElement => cell.tagName === "TH"
@@ -63174,8 +63175,8 @@ function formatTicketRequestSource(value?: string) {
                       </div>
                     </div>
                   </div>
-                  <div className="table-wrap">
-                    <table>
+                  <div className="table-wrap inventory-daily-records-table-wrap inventory-daily-records-table-wrap-recent">
+                    <table className="inventory-daily-records-table inventory-daily-records-table-recent no-generic-table-resize">
                       <thead>
                         <tr>
                           <th>{t.date}</th>
@@ -63344,8 +63345,8 @@ function formatTicketRequestSource(value?: string) {
                       {lang === "km" ? "ថ្ងៃចាប់ផ្តើម មិនអាចធំជាង ថ្ងៃបញ្ចប់" : "Start date cannot be after end date."}
                     </div>
                   ) : null}
-                  <div className="table-wrap" style={{ marginTop: 10 }}>
-                    <table>
+                  <div className="table-wrap inventory-daily-records-table-wrap inventory-daily-records-table-wrap-full" style={{ marginTop: 10 }}>
+                    <table className="inventory-daily-records-table inventory-daily-records-table-full no-generic-table-resize">
                       <thead>
                         <tr>
                           <th>{t.date}</th>
