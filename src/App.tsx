@@ -8559,6 +8559,15 @@ function parseGeneratorSpecs(specsRaw: string) {
     return {
       power: "",
       frequency: "",
+      fuelType: "",
+      tankCapacity: "",
+      fuelLevel: "",
+      lowFuelThreshold: "",
+      hourMeter: "",
+      lastRefillDate: "",
+      lastRefillLiters: "",
+      lastServiceHours: "",
+      nextServiceHours: "",
       hasAts: false,
       atsSerial: "",
       specs: "",
@@ -8566,6 +8575,15 @@ function parseGeneratorSpecs(specsRaw: string) {
   }
   let power = "";
   let frequency = "";
+  let fuelType = "";
+  let tankCapacity = "";
+  let fuelLevel = "";
+  let lowFuelThreshold = "";
+  let hourMeter = "";
+  let lastRefillDate = "";
+  let lastRefillLiters = "";
+  let lastServiceHours = "";
+  let nextServiceHours = "";
   let hasAts = false;
   let atsSerial = "";
   const visibleLines: string[] = [];
@@ -8587,6 +8605,51 @@ function parseGeneratorSpecs(specsRaw: string) {
     match = line.match(/^Frequency:\s*(.+)$/i);
     if (match) {
       if (!frequency) frequency = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Fuel Type:\s*(.+)$/i);
+    if (match) {
+      if (!fuelType) fuelType = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Tank Capacity:\s*(.+)$/i);
+    if (match) {
+      if (!tankCapacity) tankCapacity = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Current Fuel:\s*(.+)$/i);
+    if (match) {
+      if (!fuelLevel) fuelLevel = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Low Fuel Alert:\s*(.+)$/i);
+    if (match) {
+      if (!lowFuelThreshold) lowFuelThreshold = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Hour Meter:\s*(.+)$/i);
+    if (match) {
+      if (!hourMeter) hourMeter = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Last Refill Date:\s*(.+)$/i);
+    if (match) {
+      if (!lastRefillDate) lastRefillDate = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Last Refill Amount:\s*(.+)$/i);
+    if (match) {
+      if (!lastRefillLiters) lastRefillLiters = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Last Service Hours:\s*(.+)$/i);
+    if (match) {
+      if (!lastServiceHours) lastServiceHours = String(match[1] || "").trim();
+      continue;
+    }
+    match = line.match(/^Next Service Hours:\s*(.+)$/i);
+    if (match) {
+      if (!nextServiceHours) nextServiceHours = String(match[1] || "").trim();
       continue;
     }
     match = line.match(/^Included:\s*(.+)$/i);
@@ -8612,6 +8675,15 @@ function parseGeneratorSpecs(specsRaw: string) {
   return {
     power,
     frequency,
+    fuelType,
+    tankCapacity,
+    fuelLevel,
+    lowFuelThreshold,
+    hourMeter,
+    lastRefillDate,
+    lastRefillLiters,
+    lastServiceHours,
+    nextServiceHours,
     hasAts,
     atsSerial,
     specs: visibleLines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
@@ -8623,6 +8695,15 @@ function buildGeneratorSpecs(
   power: string,
   frequency: string,
   options?: {
+    fuelType?: string;
+    tankCapacity?: string;
+    fuelLevel?: string;
+    lowFuelThreshold?: string;
+    hourMeter?: string;
+    lastRefillDate?: string;
+    lastRefillLiters?: string;
+    lastServiceHours?: string;
+    nextServiceHours?: string;
     hasAts: boolean;
     atsSerial?: string;
   }
@@ -8631,10 +8712,33 @@ function buildGeneratorSpecs(
   const out: string[] = [];
   const nextPower = String(power || "").trim();
   const nextFrequency = String(frequency || "").trim();
+  const fuelType = options?.fuelType !== undefined ? String(options.fuelType || "").trim() : normalized.fuelType;
+  const tankCapacity = options?.tankCapacity !== undefined ? String(options.tankCapacity || "").trim() : normalized.tankCapacity;
+  const fuelLevel = options?.fuelLevel !== undefined ? String(options.fuelLevel || "").trim() : normalized.fuelLevel;
+  const lowFuelThreshold =
+    options?.lowFuelThreshold !== undefined ? String(options.lowFuelThreshold || "").trim() : normalized.lowFuelThreshold;
+  const hourMeter = options?.hourMeter !== undefined ? String(options.hourMeter || "").trim() : normalized.hourMeter;
+  const lastRefillDate =
+    options?.lastRefillDate !== undefined ? String(options.lastRefillDate || "").trim() : normalized.lastRefillDate;
+  const lastRefillLiters =
+    options?.lastRefillLiters !== undefined ? String(options.lastRefillLiters || "").trim() : normalized.lastRefillLiters;
+  const lastServiceHours =
+    options?.lastServiceHours !== undefined ? String(options.lastServiceHours || "").trim() : normalized.lastServiceHours;
+  const nextServiceHours =
+    options?.nextServiceHours !== undefined ? String(options.nextServiceHours || "").trim() : normalized.nextServiceHours;
   const hasAts = options ? Boolean(options.hasAts) : normalized.hasAts;
   const atsSerial = options ? String(options.atsSerial || "").trim() : normalized.atsSerial;
   if (nextPower) out.push(`Power: ${nextPower}`);
   if (nextFrequency) out.push(`Frequency: ${nextFrequency}`);
+  if (fuelType) out.push(`Fuel Type: ${fuelType}`);
+  if (tankCapacity) out.push(`Tank Capacity: ${tankCapacity}`);
+  if (fuelLevel) out.push(`Current Fuel: ${fuelLevel}`);
+  if (lowFuelThreshold) out.push(`Low Fuel Alert: ${lowFuelThreshold}`);
+  if (hourMeter) out.push(`Hour Meter: ${hourMeter}`);
+  if (lastRefillDate) out.push(`Last Refill Date: ${lastRefillDate}`);
+  if (lastRefillLiters) out.push(`Last Refill Amount: ${lastRefillLiters}`);
+  if (lastServiceHours) out.push(`Last Service Hours: ${lastServiceHours}`);
+  if (nextServiceHours) out.push(`Next Service Hours: ${nextServiceHours}`);
   if (hasAts) out.push("Included: ATS");
   if (hasAts && atsSerial) out.push(`ATS S/N: ${atsSerial}`);
   if (normalized.specs) out.push(normalized.specs);
@@ -12294,6 +12398,15 @@ export default function App() {
     serialNumber: "",
     generatorPower: "",
     generatorFrequency: "",
+    generatorFuelType: "Diesel",
+    generatorTankCapacity: "",
+    generatorFuelLevel: "",
+    generatorLowFuelThreshold: "",
+    generatorHourMeter: "",
+    generatorLastRefillDate: "",
+    generatorLastRefillLiters: "",
+    generatorLastServiceHours: "",
+    generatorNextServiceHours: "",
     generatorHasAts: false,
     generatorAtsSerial: "",
     generatorAtsPhoto: "",
@@ -12580,6 +12693,15 @@ export default function App() {
     serialNumber: "",
     generatorPower: "",
     generatorFrequency: "",
+    generatorFuelType: "Diesel",
+    generatorTankCapacity: "",
+    generatorFuelLevel: "",
+    generatorLowFuelThreshold: "",
+    generatorHourMeter: "",
+    generatorLastRefillDate: "",
+    generatorLastRefillLiters: "",
+    generatorLastServiceHours: "",
+    generatorNextServiceHours: "",
     generatorHasAts: false,
     generatorAtsSerial: "",
     generatorAtsPhoto: "",
@@ -21412,11 +21534,35 @@ export default function App() {
   useEffect(() => {
     setAssetForm((prev) => {
       if (isGeneratorAsset(prev.category, prev.type)) return prev;
-      if (!prev.generatorPower && !prev.generatorFrequency && !prev.generatorHasAts && !prev.generatorAtsSerial && !prev.generatorAtsPhoto) return prev;
+      if (
+        !prev.generatorPower &&
+        !prev.generatorFrequency &&
+        (!prev.generatorFuelType || prev.generatorFuelType === "Diesel") &&
+        !prev.generatorTankCapacity &&
+        !prev.generatorFuelLevel &&
+        !prev.generatorLowFuelThreshold &&
+        !prev.generatorHourMeter &&
+        !prev.generatorLastRefillDate &&
+        !prev.generatorLastRefillLiters &&
+        !prev.generatorLastServiceHours &&
+        !prev.generatorNextServiceHours &&
+        !prev.generatorHasAts &&
+        !prev.generatorAtsSerial &&
+        !prev.generatorAtsPhoto
+      ) return prev;
       return {
         ...prev,
         generatorPower: "",
         generatorFrequency: "",
+        generatorFuelType: "Diesel",
+        generatorTankCapacity: "",
+        generatorFuelLevel: "",
+        generatorLowFuelThreshold: "",
+        generatorHourMeter: "",
+        generatorLastRefillDate: "",
+        generatorLastRefillLiters: "",
+        generatorLastServiceHours: "",
+        generatorNextServiceHours: "",
         generatorHasAts: false,
         generatorAtsSerial: "",
         generatorAtsPhoto: "",
@@ -23165,6 +23311,15 @@ export default function App() {
         })
       : (createIsGenerator
           ? buildGeneratorSpecs(assetForm.specs, assetForm.generatorPower, assetForm.generatorFrequency, {
+              fuelType: assetForm.generatorFuelType,
+              tankCapacity: assetForm.generatorTankCapacity,
+              fuelLevel: assetForm.generatorFuelLevel,
+              lowFuelThreshold: assetForm.generatorLowFuelThreshold,
+              hourMeter: assetForm.generatorHourMeter,
+              lastRefillDate: assetForm.generatorLastRefillDate,
+              lastRefillLiters: assetForm.generatorLastRefillLiters,
+              lastServiceHours: assetForm.generatorLastServiceHours,
+              nextServiceHours: assetForm.generatorNextServiceHours,
               hasAts: assetForm.generatorHasAts,
               atsSerial: assetForm.generatorAtsSerial,
             })
@@ -24439,6 +24594,15 @@ export default function App() {
           serialNumber: "",
           generatorPower: "",
           generatorFrequency: "",
+          generatorFuelType: "Diesel",
+          generatorTankCapacity: "",
+          generatorFuelLevel: "",
+          generatorLowFuelThreshold: "",
+          generatorHourMeter: "",
+          generatorLastRefillDate: "",
+          generatorLastRefillLiters: "",
+          generatorLastServiceHours: "",
+          generatorNextServiceHours: "",
           generatorHasAts: false,
           generatorAtsSerial: "",
           generatorAtsPhoto: "",
@@ -32371,6 +32535,15 @@ export default function App() {
       : {
           power: "",
           frequency: "",
+          fuelType: "",
+          tankCapacity: "",
+          fuelLevel: "",
+          lowFuelThreshold: "",
+          hourMeter: "",
+          lastRefillDate: "",
+          lastRefillLiters: "",
+          lastServiceHours: "",
+          nextServiceHours: "",
           hasAts: false,
           atsSerial: "",
           specs: parsedFan.specs || parsedAircon.specs || String(asset.specs || ""),
@@ -32421,6 +32594,15 @@ export default function App() {
       serialNumber: asset.serialNumber || "",
       generatorPower: parsedGenerator.power,
       generatorFrequency: parsedGenerator.frequency,
+      generatorFuelType: parsedGenerator.fuelType || "Diesel",
+      generatorTankCapacity: parsedGenerator.tankCapacity,
+      generatorFuelLevel: parsedGenerator.fuelLevel,
+      generatorLowFuelThreshold: parsedGenerator.lowFuelThreshold,
+      generatorHourMeter: parsedGenerator.hourMeter,
+      generatorLastRefillDate: parsedGenerator.lastRefillDate,
+      generatorLastRefillLiters: parsedGenerator.lastRefillLiters,
+      generatorLastServiceHours: parsedGenerator.lastServiceHours,
+      generatorNextServiceHours: parsedGenerator.nextServiceHours,
       generatorHasAts: parsedGenerator.hasAts || Boolean(generatorAtsChild),
       generatorAtsSerial: String(generatorAtsChild?.serialNumber || parsedGenerator.atsSerial || "").trim(),
       generatorAtsPhoto: normalizeAssetPhotos(generatorAtsChild || {})[0] || "",
@@ -33159,6 +33341,15 @@ export default function App() {
           })
         : (editingIsGenerator
             ? buildGeneratorSpecs(assetEditForm.specs.trim(), assetEditForm.generatorPower, assetEditForm.generatorFrequency, {
+                fuelType: assetEditForm.generatorFuelType,
+                tankCapacity: assetEditForm.generatorTankCapacity,
+                fuelLevel: assetEditForm.generatorFuelLevel,
+                lowFuelThreshold: assetEditForm.generatorLowFuelThreshold,
+                hourMeter: assetEditForm.generatorHourMeter,
+                lastRefillDate: assetEditForm.generatorLastRefillDate,
+                lastRefillLiters: assetEditForm.generatorLastRefillLiters,
+                lastServiceHours: assetEditForm.generatorLastServiceHours,
+                nextServiceHours: assetEditForm.generatorNextServiceHours,
                 hasAts: assetEditForm.generatorHasAts,
                 atsSerial: assetEditForm.generatorAtsSerial,
               })
@@ -37314,6 +37505,10 @@ export default function App() {
         : null,
     [detailLinkedComponents, detailTablet]
   );
+  const detailGenerator = useMemo(
+    () => (detailAsset && isGeneratorAsset(detailAsset.category, detailAsset.type) ? parseGeneratorSpecs(detailAsset.specs || "") : null),
+    [detailAsset]
+  );
   const detailTabletIncludedSummary = useMemo(() => {
     if (!detailTablet) return "";
     const labels: string[] = [];
@@ -37603,6 +37798,16 @@ export default function App() {
                     {isFanAsset(detailAsset.category, detailAsset.type) ? (
                       <div className="asset-detail-kv"><span>Fan Type</span><strong>{parseFanSpecs(detailAsset.specs || "").fanType || "-"}</strong></div>
                     ) : null}
+                    {detailGenerator ? (
+                      <>
+                        <div className="asset-detail-kv"><span>Fuel Type</span><strong>{detailGenerator.fuelType || "Diesel"}</strong></div>
+                        <div className="asset-detail-kv"><span>Tank Capacity</span><strong>{detailGenerator.tankCapacity || "-"}</strong></div>
+                        <div className="asset-detail-kv"><span>Current Fuel</span><strong>{detailGenerator.fuelLevel || "-"}</strong></div>
+                        <div className="asset-detail-kv"><span>Low Fuel Alert</span><strong>{detailGenerator.lowFuelThreshold || "-"}</strong></div>
+                        <div className="asset-detail-kv"><span>Hour Meter</span><strong>{detailGenerator.hourMeter || "-"}</strong></div>
+                        <div className="asset-detail-kv"><span>ATS Included</span><strong>{detailGenerator.hasAts ? "Yes" : "No"}</strong></div>
+                      </>
+                    ) : null}
                     {detailTablet ? (
                       <div className="asset-detail-kv"><span>Included Components</span><strong>{detailTabletIncludedSummary}</strong></div>
                     ) : null}
@@ -37698,6 +37903,18 @@ export default function App() {
                     ) : null}
                     {!detailFurniture ? (
                       <div className="asset-detail-kv"><span>Schedule Note</span><strong>{detailAsset.scheduleNote || "-"}</strong></div>
+                    ) : null}
+                    {detailGenerator ? (
+                      <div className="asset-detail-kv"><span>Last Refill Date</span><strong>{formatDate(detailGenerator.lastRefillDate || "-")}</strong></div>
+                    ) : null}
+                    {detailGenerator ? (
+                      <div className="asset-detail-kv"><span>Last Refill Amount</span><strong>{detailGenerator.lastRefillLiters || "-"}</strong></div>
+                    ) : null}
+                    {detailGenerator ? (
+                      <div className="asset-detail-kv"><span>Last Service Hours</span><strong>{detailGenerator.lastServiceHours || "-"}</strong></div>
+                    ) : null}
+                    {detailGenerator ? (
+                      <div className="asset-detail-kv"><span>Next Service Hours</span><strong>{detailGenerator.nextServiceHours || "-"}</strong></div>
                     ) : null}
                   </div>
                 </section>
@@ -45690,7 +45907,7 @@ export default function App() {
                     reportInventoryGroupFilterLabel
                   )
                     ? reportInventoryGroupFilterLabel
-                    : "សមតុល្យឧបករណ៍ស្តុក"}_${reportInventoryCampusFilterLabel || t.allCampuses}`
+                    : "សមតុល្យឧបករណ៍ស្តុក"}\n${reportInventoryCampusFilterLabel || t.allCampuses}`
                 : `${
                     (
                       reportInventoryGroupFilter !== "ALL" &&
@@ -45698,7 +45915,7 @@ export default function App() {
                     )
                       ? reportInventoryGroupFilterLabel
                       : "Inventory Tool Balance"
-                  } Report_${reportInventoryCampusFilterLabel || "All Campuses"}`
+                  } Report\n${reportInventoryCampusFilterLabel || "All Campuses"}`
             )
           : (lang === "km" ? "របាយការណ៍សមតុល្យស្តុក" : "Inventory Stock Balance Report");
         columns = visibleInventoryReportColumnDefs.map((column) => column.label);
@@ -54586,6 +54803,66 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                       </div>
                       <div className="field field-wide">
+                        <span>Diesel Control</span>
+                        <div className="form-grid" style={{ marginTop: 8 }}>
+                          <input
+                            className="input"
+                            value={assetForm.generatorFuelType}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorFuelType: e.target.value }))}
+                            placeholder="Diesel"
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.generatorTankCapacity}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorTankCapacity: e.target.value }))}
+                            placeholder="Tank capacity, ex: 200 L"
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.generatorFuelLevel}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorFuelLevel: e.target.value }))}
+                            placeholder="Current fuel, ex: 120 L"
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.generatorLowFuelThreshold}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorLowFuelThreshold: e.target.value }))}
+                            placeholder="Low fuel alert, ex: 40 L"
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.generatorHourMeter}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorHourMeter: e.target.value }))}
+                            placeholder="Hour meter, ex: 845 h"
+                          />
+                          <input
+                            type="date"
+                            className="input"
+                            value={normalizeYmdInput(assetForm.generatorLastRefillDate)}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorLastRefillDate: normalizeYmdInput(e.target.value) }))}
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.generatorLastRefillLiters}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorLastRefillLiters: e.target.value }))}
+                            placeholder="Last refill amount, ex: 60 L"
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.generatorLastServiceHours}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorLastServiceHours: e.target.value }))}
+                            placeholder="Last service hours, ex: 800 h"
+                          />
+                          <input
+                            className="input"
+                            value={assetForm.generatorNextServiceHours}
+                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorNextServiceHours: e.target.value }))}
+                            placeholder="Next service hours, ex: 1000 h"
+                          />
+                        </div>
+                        <div className="tiny">Use liters and running hours so fuel stock and service timing are easy to track.</div>
+                      </div>
+                      <div className="field field-wide">
                         <span>Included Components</span>
                         <input
                           id="generator-ats-create-upload"
@@ -56654,6 +56931,66 @@ function formatTicketRequestSource(value?: string) {
                               placeholder="Vendor"
                             />
                           </div>
+                        </div>
+                        <div className="field field-wide">
+                          <span>Diesel Control</span>
+                          <div className="form-grid" style={{ marginTop: 8 }}>
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorFuelType}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorFuelType: e.target.value }))}
+                              placeholder="Diesel"
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorTankCapacity}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorTankCapacity: e.target.value }))}
+                              placeholder="Tank capacity, ex: 200 L"
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorFuelLevel}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorFuelLevel: e.target.value }))}
+                              placeholder="Current fuel, ex: 120 L"
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorLowFuelThreshold}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorLowFuelThreshold: e.target.value }))}
+                              placeholder="Low fuel alert, ex: 40 L"
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorHourMeter}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorHourMeter: e.target.value }))}
+                              placeholder="Hour meter, ex: 845 h"
+                            />
+                            <input
+                              type="date"
+                              className="input"
+                              value={normalizeYmdInput(assetEditForm.generatorLastRefillDate)}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorLastRefillDate: normalizeYmdInput(e.target.value) }))}
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorLastRefillLiters}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorLastRefillLiters: e.target.value }))}
+                              placeholder="Last refill amount, ex: 60 L"
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorLastServiceHours}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorLastServiceHours: e.target.value }))}
+                              placeholder="Last service hours, ex: 800 h"
+                            />
+                            <input
+                              className="input"
+                              value={assetEditForm.generatorNextServiceHours}
+                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorNextServiceHours: e.target.value }))}
+                              placeholder="Next service hours, ex: 1000 h"
+                            />
+                          </div>
+                          <div className="tiny">This lets you update diesel level, refill history, and service-hour planning in one place.</div>
                         </div>
                         <div className="field field-wide">
                           <span>Included Components</span>

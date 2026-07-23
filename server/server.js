@@ -3658,7 +3658,7 @@ function resolveTelegramBotTokenForKind(kind = "default") {
     return TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   }
   if (normalizedKind === "tools") {
-    return TELEGRAM_TOOL_BOT_TOKEN;
+    return TELEGRAM_TOOL_BOT_TOKEN || TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
   }
   return TELEGRAM_BOT_TOKEN;
 }
@@ -10012,11 +10012,7 @@ const server = http.createServer(async (req, res) => {
       };
       await writeDb(db);
       try {
-        const expectedQty = Math.max(0, Number(nextReport.expectedQty || 0));
-        const countedQty = Math.max(0, Number(nextReport.countedQty || 0));
-        if (expectedQty === countedQty) {
-          await sendTelegramToolReviewAlert(nextReport, db);
-        }
+        await sendTelegramToolReviewAlert(nextReport, db);
       } catch (err) {
         console.warn("[ALERT] Failed to send tool verification Telegram alert:", err instanceof Error ? err.message : err);
       }
