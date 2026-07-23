@@ -17286,152 +17286,235 @@ export default function App() {
           </label>
         </div>
 
-        <div className="table-wrap vault-table-wrap inventory-item-table-wrap" style={{ marginTop: 12 }}>
-          <table className={`vault-responsive-table inventory-item-list-table ${inventoryDashboardGroup === "SUPPLY" ? "inventory-item-list-table-supply" : "inventory-item-list-table-tools"}`}>
-            <thead>
-              <tr>
-                <th>
-                  <button
-                    className={`th-sort-btn ${inventoryItemSort.key === "itemCode" ? "is-active" : ""}`}
-                    onClick={() => toggleInventoryItemSort("itemCode")}
-                  >
-                    <span className="inventory-item-th-label">Code {inventoryItemSort.key === "itemCode" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                  </button>
-                </th>
-                <th>
-                  <button
-                    className={`th-sort-btn ${inventoryItemSort.key === "photo" ? "is-active" : ""}`}
-                    onClick={() => toggleInventoryItemSort("photo")}
-                  >
-                    <span className="inventory-item-th-label">{t.photo} {inventoryItemSort.key === "photo" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                  </button>
-                </th>
-                <th>
-                  <button
-                    className={`th-sort-btn ${inventoryItemSort.key === "itemName" ? "is-active" : ""}`}
-                    onClick={() => toggleInventoryItemSort("itemName")}
-                  >
-                    <span className="inventory-item-th-label">Name {inventoryItemSort.key === "itemName" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                  </button>
-                </th>
-                <th>
-                  <span className="inventory-item-th-label">
-                    {inventoryDashboardGroup === "SUPPLY" ? "Responsible" : <>Owner /<br />Team</>}
-                  </span>
-                </th>
-                {inventoryDashboardGroup === "SUPPLY" ? (
-                  <th>
-                    <button
-                      className={`th-sort-btn ${inventoryItemSort.key === "group" ? "is-active" : ""}`}
-                      onClick={() => toggleInventoryItemSort("group")}
-                    >
-                      <span className="inventory-item-th-label">
-                        Group {inventoryItemSort.key === "group" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
-                      </span>
-                    </button>
-                  </th>
-                ) : null}
-                <th>
-                  <button
-                    className={`th-sort-btn ${inventoryItemSort.key === "campus" ? "is-active" : ""}`}
-                    onClick={() => toggleInventoryItemSort("campus")}
-                  >
-                    <span className="inventory-item-th-label">{t.campus} {inventoryItemSort.key === "campus" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                  </button>
-                </th>
-                <th>
-                  <button
-                    className={`th-sort-btn ${inventoryItemSort.key === "location" ? "is-active" : ""}`}
-                    onClick={() => toggleInventoryItemSort("location")}
-                  >
-                    <span className="inventory-item-th-label">{t.location} {inventoryItemSort.key === "location" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                  </button>
-                </th>
-                {inventoryDashboardGroup === "SUPPLY" ? (
-                  <th>
-                    <button
-                      className={`th-sort-btn ${inventoryItemSort.key === "unit" ? "is-active" : ""}`}
-                      onClick={() => toggleInventoryItemSort("unit")}
-                    >
-                      <span className="inventory-item-th-label">Unit {inventoryItemSort.key === "unit" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                    </button>
-                  </th>
-                ) : null}
-                <th>
-                  <button
-                    className={`th-sort-btn ${inventoryItemSort.key === "openingQty" ? "is-active" : ""}`}
-                    onClick={() => toggleInventoryItemSort("openingQty")}
-                  >
-                    <span className="inventory-item-th-label">Qty {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                  </button>
-                </th>
-                {inventoryDashboardGroup === "SUPPLY" ? (
-                  <th>
-                    <button
-                      className={`th-sort-btn ${inventoryItemSort.key === "minStock" ? "is-active" : ""}`}
-                      onClick={() => toggleInventoryItemSort("minStock")}
-                    >
-                      <span className="inventory-item-th-label">Min<br />Qty {inventoryItemSort.key === "minStock" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
-                    </button>
-                  </th>
-                ) : null}
-                <th><span className="inventory-item-th-label">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {inventoryItemRows.length ? (
-                inventoryItemRows.map((row) => (
-                  <tr key={`inv-item-row-${row.id}`}>
-                    <td data-label="Code"><strong>{row.itemCode}</strong></td>
-                    <td data-label={t.photo}>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
-                    <td data-label="Name">{inventoryDisplayName(row.itemName, lang)}</td>
-                    <td data-label={inventoryDashboardGroup === "SUPPLY" ? "Responsible" : "Owner / Team"}>
-                      {inventoryDashboardGroup === "SUPPLY"
-                        ? row.responsibleParty || "-"
-                        : `${ownerTypeLabel(row.ownerType)}${row.responsibleParty ? ` • ${row.responsibleParty}` : ""}`}
-                    </td>
+        {isPhoneView ? (
+          <div className="inventory-item-mobile-list" style={{ marginTop: 12 }}>
+            {inventoryItemRows.length ? (
+              inventoryItemRows.map((row) => (
+                <article key={`inv-item-mobile-${row.id}`} className="inventory-item-mobile-card">
+                  <div className="inventory-item-mobile-head">
+                    <div className="inventory-item-mobile-photo">
+                      {renderAssetPhoto(row.photo || "", row.itemCode)}
+                    </div>
+                    <div className="inventory-item-mobile-copy">
+                      <span className="inventory-item-mobile-code">{row.itemCode}</span>
+                      <strong>{inventoryDisplayName(row.itemName, lang)}</strong>
+                      <small>
+                        {inventoryDashboardGroup === "SUPPLY"
+                          ? inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))
+                          : ownerTypeLabel(row.ownerType)}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="inventory-item-mobile-grid">
+                    <div>
+                      <span>{inventoryDashboardGroup === "SUPPLY" ? "Responsible" : "Owner / Team"}</span>
+                      <strong>
+                        {inventoryDashboardGroup === "SUPPLY"
+                          ? row.responsibleParty || "-"
+                          : `${ownerTypeLabel(row.ownerType)}${row.responsibleParty ? ` • ${row.responsibleParty}` : ""}`}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>{t.campus}</span>
+                      <strong>{inventoryCampusLabel(row.campus)}</strong>
+                    </div>
+                    <div>
+                      <span>{t.location}</span>
+                      <strong>{row.location || "-"}</strong>
+                    </div>
+                    <div>
+                      <span>Qty</span>
+                      <strong>{row.openingQty}</strong>
+                    </div>
                     {inventoryDashboardGroup === "SUPPLY" ? (
-                      <td data-label="Group">
-                        {inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}
-                      </td>
-                    ) : null}
-                    <td data-label={t.campus}>{inventoryCampusLabel(row.campus)}</td>
-                    <td data-label={t.location}>{row.location}</td>
-                    {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Unit">{row.unit}</td> : null}
-                    <td data-label="Qty">{row.openingQty}</td>
-                    {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Min">{row.minStock}</td> : null}
-                    <td data-label="Actions" className="vault-table-action-cell">
-                      <div className="asset-row-actions">
-                        <button
-                          className="btn-icon-edit"
-                          disabled={!isAdmin}
-                          onClick={() => startEditInventoryItem(row)}
-                          title="Edit"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          className="btn-danger"
-                          disabled={!isAdmin}
-                          onClick={() => deleteInventoryItem(row)}
-                          title={t.delete}
-                        >
-                          X
-                        </button>
+                      <div>
+                        <span>Unit</span>
+                        <strong>{row.unit || "-"}</strong>
                       </div>
+                    ) : null}
+                    {inventoryDashboardGroup === "SUPPLY" ? (
+                      <div>
+                        <span>Min Qty</span>
+                        <strong>{row.minStock}</strong>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="inventory-item-mobile-actions">
+                    <button
+                      className="tab btn-small"
+                      disabled={!isAdmin}
+                      onClick={() => startEditInventoryItem(row)}
+                      title="Edit"
+                    >
+                      <Pencil size={16} strokeWidth={2.2} />
+                      <span>{lang === "km" ? "កែប្រែ" : "Edit"}</span>
+                    </button>
+                    <button
+                      className="btn-danger btn-small"
+                      disabled={!isAdmin}
+                      onClick={() => deleteInventoryItem(row)}
+                      title={t.delete}
+                    >
+                      <Trash2 size={16} strokeWidth={2.2} />
+                      <span>{lang === "km" ? "លុប" : "Delete"}</span>
+                    </button>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="panel-note">
+                {inventoryBalanceRows.length ? "No inventory items match the current filters." : "No inventory items yet."}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="table-wrap vault-table-wrap inventory-item-table-wrap" style={{ marginTop: 12 }}>
+            <table className={`vault-responsive-table inventory-item-list-table ${inventoryDashboardGroup === "SUPPLY" ? "inventory-item-list-table-supply" : "inventory-item-list-table-tools"}`}>
+              <thead>
+                <tr>
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "itemCode" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("itemCode")}
+                    >
+                      <span className="inventory-item-th-label">Code {inventoryItemSort.key === "itemCode" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "photo" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("photo")}
+                    >
+                      <span className="inventory-item-th-label">{t.photo} {inventoryItemSort.key === "photo" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "itemName" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("itemName")}
+                    >
+                      <span className="inventory-item-th-label">Name {inventoryItemSort.key === "itemName" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  </th>
+                  <th>
+                    <span className="inventory-item-th-label">
+                      {inventoryDashboardGroup === "SUPPLY" ? "Responsible" : <>Owner /<br />Team</>}
+                    </span>
+                  </th>
+                  {inventoryDashboardGroup === "SUPPLY" ? (
+                    <th>
+                      <button
+                        className={`th-sort-btn ${inventoryItemSort.key === "group" ? "is-active" : ""}`}
+                        onClick={() => toggleInventoryItemSort("group")}
+                      >
+                        <span className="inventory-item-th-label">
+                          Group {inventoryItemSort.key === "group" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
+                        </span>
+                      </button>
+                    </th>
+                  ) : null}
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "campus" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("campus")}
+                    >
+                      <span className="inventory-item-th-label">{t.campus} {inventoryItemSort.key === "campus" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  </th>
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "location" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("location")}
+                    >
+                      <span className="inventory-item-th-label">{t.location} {inventoryItemSort.key === "location" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  </th>
+                  {inventoryDashboardGroup === "SUPPLY" ? (
+                    <th>
+                      <button
+                        className={`th-sort-btn ${inventoryItemSort.key === "unit" ? "is-active" : ""}`}
+                        onClick={() => toggleInventoryItemSort("unit")}
+                      >
+                        <span className="inventory-item-th-label">Unit {inventoryItemSort.key === "unit" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                      </button>
+                    </th>
+                  ) : null}
+                  <th>
+                    <button
+                      className={`th-sort-btn ${inventoryItemSort.key === "openingQty" ? "is-active" : ""}`}
+                      onClick={() => toggleInventoryItemSort("openingQty")}
+                    >
+                      <span className="inventory-item-th-label">Qty {inventoryItemSort.key === "openingQty" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                    </button>
+                  </th>
+                  {inventoryDashboardGroup === "SUPPLY" ? (
+                    <th>
+                      <button
+                        className={`th-sort-btn ${inventoryItemSort.key === "minStock" ? "is-active" : ""}`}
+                        onClick={() => toggleInventoryItemSort("minStock")}
+                      >
+                        <span className="inventory-item-th-label">Min<br />Qty {inventoryItemSort.key === "minStock" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}</span>
+                      </button>
+                    </th>
+                  ) : null}
+                  <th><span className="inventory-item-th-label">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventoryItemRows.length ? (
+                  inventoryItemRows.map((row) => (
+                    <tr key={`inv-item-row-${row.id}`}>
+                      <td data-label="Code"><strong>{row.itemCode}</strong></td>
+                      <td data-label={t.photo}>{renderAssetPhoto(row.photo || "", row.itemCode)}</td>
+                      <td data-label="Name">{inventoryDisplayName(row.itemName, lang)}</td>
+                      <td data-label={inventoryDashboardGroup === "SUPPLY" ? "Responsible" : "Owner / Team"}>
+                        {inventoryDashboardGroup === "SUPPLY"
+                          ? row.responsibleParty || "-"
+                          : `${ownerTypeLabel(row.ownerType)}${row.responsibleParty ? ` • ${row.responsibleParty}` : ""}`}
+                      </td>
+                      {inventoryDashboardGroup === "SUPPLY" ? (
+                        <td data-label="Group">
+                          {inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}
+                        </td>
+                      ) : null}
+                      <td data-label={t.campus}>{inventoryCampusLabel(row.campus)}</td>
+                      <td data-label={t.location}>{row.location}</td>
+                      {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Unit">{row.unit}</td> : null}
+                      <td data-label="Qty">{row.openingQty}</td>
+                      {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Min">{row.minStock}</td> : null}
+                      <td data-label="Actions" className="vault-table-action-cell">
+                        <div className="asset-row-actions">
+                          <button
+                            className="btn-icon-edit"
+                            disabled={!isAdmin}
+                            onClick={() => startEditInventoryItem(row)}
+                            title="Edit"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            className="btn-danger"
+                            disabled={!isAdmin}
+                            onClick={() => deleteInventoryItem(row)}
+                            title={t.delete}
+                          >
+                            X
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="vault-table-empty-row">
+                    <td colSpan={inventoryDashboardGroup === "SUPPLY" ? 11 : 8}>
+                      {inventoryBalanceRows.length ? "No inventory items match the current filters." : "No inventory items yet."}
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr className="vault-table-empty-row">
-                  <td colSpan={inventoryDashboardGroup === "SUPPLY" ? 11 : 8}>
-                    {inventoryBalanceRows.length ? "No inventory items match the current filters." : "No inventory items yet."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </>
     ),
     [
@@ -17450,6 +17533,7 @@ export default function App() {
       inventoryItemSort.key,
       inventoryCampusLabel,
       isAdmin,
+      isPhoneView,
       lang,
       ownerTypeLabel,
       renderAssetPhoto,
