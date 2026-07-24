@@ -4732,6 +4732,8 @@ async function renderTelegramWhiteCompareCardPng({
   secondPhotoPath = "",
   firstLabel = "Previous Photo",
   secondLabel = "Current Photo",
+  firstStampText = "",
+  secondStampText = "",
   textLines = [],
   iconColor = "blue",
 } = {}) {
@@ -4757,18 +4759,24 @@ async function renderTelegramWhiteCompareCardPng({
     <linearGradient id="${iconGradientId}" x1="0%" y1="0%" x2="0%" y2="100%">
       ${iconStops}
     </linearGradient>
+    <linearGradient id="compareOldLabel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6d7f96" />
+      <stop offset="100%" stop-color="#41566f" />
+    </linearGradient>
+    <linearGradient id="compareNewLabel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3e8cff" />
+      <stop offset="100%" stop-color="#1d5fdd" />
+    </linearGradient>
   </defs>
   <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#fbf8f1" stroke="#d9cfbf" stroke-width="2"/>
   <rect x="18" y="18" width="724" height="${totalHeight - 36}" rx="28" ry="28" fill="#f7efdf" stroke="#d9cfbf" stroke-width="1.5"/>
   <rect x="24" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
   <rect x="388" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
   <rect x="24" y="390" width="712" height="${Math.max(180, totalHeight - 414)}" rx="24" ry="24" fill="#ffffff" stroke="#d7c7b4" stroke-width="1.5"/>
-  <line x1="74" y1="34" x2="154" y2="34" stroke="#3e3428" stroke-width="1.5" />
-  <line x1="226" y1="34" x2="306" y2="34" stroke="#3e3428" stroke-width="1.5" />
-  <line x1="438" y1="34" x2="518" y2="34" stroke="#3e3428" stroke-width="1.5" />
-  <line x1="590" y1="34" x2="670" y2="34" stroke="#3e3428" stroke-width="1.5" />
   <rect x="42" y="66" width="300" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
   <rect x="418" y="66" width="300" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
+  <rect x="54" y="78" width="118" height="34" rx="14" ry="14" fill="url(#compareOldLabel)" />
+  <rect x="430" y="78" width="118" height="34" rx="14" ry="14" fill="url(#compareNewLabel)" />
   <rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="82" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="124" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
@@ -4817,24 +4825,68 @@ async function renderTelegramWhiteCompareCardPng({
   }
   composites.push(
     buildTelegramTextComposite(firstLabel, {
-      left: 88,
-      top: 14,
-      width: 204,
-      fontSize: 18,
-      color: "#3e3428",
+      left: 60,
+      top: 84,
+      width: 106,
+      fontSize: 14,
+      color: "#ffffff",
       align: "center",
       weight: "bold",
     }),
     buildTelegramTextComposite(secondLabel, {
-      left: 452,
-      top: 14,
-      width: 204,
-      fontSize: 18,
-      color: "#3e3428",
+      left: 436,
+      top: 84,
+      width: 106,
+      fontSize: 14,
+      color: "#ffffff",
       align: "center",
       weight: "bold",
     })
   );
+  const firstStamp = toText(firstStampText).trim();
+  const secondStamp = toText(secondStampText).trim();
+  if (firstStamp) {
+    composites.push(
+      {
+        input: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="204" height="34" viewBox="0 0 204 34">
+  <rect x="0" y="0" width="204" height="34" rx="12" ry="12" fill="rgba(18,33,55,0.72)"/>
+</svg>`),
+        left: 90,
+        top: 300,
+      },
+      buildTelegramTextComposite(firstStamp, {
+        left: 102,
+        top: 306,
+        width: 180,
+        fontSize: 15,
+        color: "#ffffff",
+        align: "center",
+        weight: "bold",
+      })
+    );
+  }
+  if (secondStamp) {
+    composites.push(
+      {
+        input: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="204" height="34" viewBox="0 0 204 34">
+  <rect x="0" y="0" width="204" height="34" rx="12" ry="12" fill="rgba(18,33,55,0.72)"/>
+</svg>`),
+        left: 454,
+        top: 300,
+      },
+      buildTelegramTextComposite(secondStamp, {
+        left: 466,
+        top: 306,
+        width: 180,
+        fontSize: 15,
+        color: "#ffffff",
+        align: "center",
+        weight: "bold",
+      })
+    );
+  }
   let textY = textStartY;
   normalizedLines.forEach((line, index) => {
     let fontSize = 21;
@@ -5507,57 +5559,43 @@ async function buildToolReviewTelegramPhotoAlerts(source) {
   const itemName = toText(source.itemName || "").trim();
   const baseLabel = [itemCode, itemName].filter(Boolean).join(" - ") || "Tool Verification";
   const currentStamp = formatTelegramPhotoStampDateTime(source.updated || source.created || new Date().toISOString());
+  const firstPhotoPath = previousPhotoPath || currentPhotoPath;
+  const secondPhotoPath = currentPhotoPath || previousPhotoPath;
+  const firstPhotoMedia = previousPhoto || currentPhoto;
+  const compareBuffer = await renderTelegramWhiteCompareCardPng({
+    firstPhotoPath,
+    secondPhotoPath,
+    firstLabel: "រូបភាពចាស់",
+    secondLabel: "រូបភាពថ្មី",
+    secondStampText: currentStamp,
+    textLines: [],
+    iconColor: "blue",
+  });
+  if (compareBuffer) {
+    return [
+      {
+        type: "photo",
+        media: firstPhotoMedia,
+        buffer: compareBuffer,
+        filename: "tool-review-compare.png",
+        mimeType: "image/png",
+        caption: baseLabel,
+      },
+    ];
+  }
   const alerts = [];
   if (previousPhoto) {
-    const previousBuffer = await buildTelegramLabeledPhotoBuffer(previousPhotoPath, {
-      topLabel: "រូបភាពចាស់",
-    });
     alerts.push({
       type: "photo",
       media: previousPhoto,
-      ...(previousBuffer
-        ? {
-            buffer: previousBuffer,
-            filename: "tool-review-old-photo.png",
-            mimeType: "image/png",
-          }
-        : {}),
       caption: `រូបភាពចាស់\n${baseLabel}`,
     });
   }
-  if (currentPhoto && currentPhoto !== previousPhoto) {
-    const currentBuffer = await buildTelegramLabeledPhotoBuffer(currentPhotoPath, {
-      topLabel: "រូបភាពថ្មី",
-      stampText: currentStamp,
-    });
+  if (currentPhoto) {
     alerts.push({
       type: "photo",
       media: currentPhoto,
-      ...(currentBuffer
-        ? {
-            buffer: currentBuffer,
-            filename: "tool-review-new-photo.png",
-            mimeType: "image/png",
-          }
-        : {}),
-      caption: `រូបភាពថ្មី\n${baseLabel}`,
-    });
-  } else if (currentPhoto) {
-    const currentBuffer = await buildTelegramLabeledPhotoBuffer(currentPhotoPath, {
-      topLabel: "រូបភាពថ្មី",
-      stampText: currentStamp,
-    });
-    alerts.push({
-      type: "photo",
-      media: currentPhoto,
-      ...(currentBuffer
-        ? {
-            buffer: currentBuffer,
-            filename: "tool-review-new-photo.png",
-            mimeType: "image/png",
-          }
-        : {}),
-      caption: `រូបភាពថ្មី\n${baseLabel}`,
+      caption: `រូបភាពថ្មី\n${baseLabel}\n${currentStamp}`,
     });
   }
   return alerts;
@@ -6228,6 +6266,34 @@ async function sendTelegramToolReviewAlert(reportEntry, db = null) {
   const note = toText(reportEntry.note);
   const condition = toText(reportEntry.condition) || "-";
   const unit = toText(reportEntry.unit) || "pcs";
+  const settings =
+    db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+      ? db.settings
+      : {};
+  const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
+  const reviewReports = normalizeToolReviewReports(settings.toolReviewReports);
+  const campusToolItems = inventoryItems.filter(
+    (row) =>
+      String(row.campus || "").trim() === String(reportEntry.campus || "").trim() &&
+      isInventoryToolCategoryForTelegram(row.category)
+  );
+  const totalCampusTools = campusToolItems.length;
+  const checkedCampusToolIds = new Set(
+    reviewReports
+      .filter(
+        (row) =>
+          String(row.month || "").trim() === String(reportEntry.month || "").trim() &&
+          String(row.campus || "").trim() === String(reportEntry.campus || "").trim() &&
+          Number(row.itemId || 0) > 0
+      )
+      .map((row) => Number(row.itemId || 0))
+      .filter((value) => value > 0)
+  );
+  if (Number(reportEntry.itemId || 0) > 0) {
+    checkedCampusToolIds.add(Number(reportEntry.itemId || 0));
+  }
+  const checkedCampusTools = checkedCampusToolIds.size;
+  const remainingCampusTools = Math.max(totalCampusTools - checkedCampusTools, 0);
   const actionLabel =
     countedQty > expectedQty
       ? "បន្ថែមស្តុក (Add Stock)"
@@ -6247,7 +6313,7 @@ async function sendTelegramToolReviewAlert(reportEntry, db = null) {
   if (note) {
     lines.push(`មូលហេតុ: ${note}`);
   }
-  lines.push(`បានពិនិត្យចំនួន: ${countedQty}/${expectedQty} ${unit}`);
+  lines.push(`បានពិនិត្យក្នុងសាខានេះ: ${checkedCampusTools}/${totalCampusTools || checkedCampusTools} | មិនទាន់ពិនិត្យ: ${remainingCampusTools}`);
   return sendToolReviewTelegramMessageWithPhotos(
     lines.join("\n"),
     {

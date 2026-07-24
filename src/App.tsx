@@ -44269,6 +44269,7 @@ export default function App() {
             { key: "code", label: lang === "km" ? "កូដ" : "Code" },
             { key: "photo", label: t.photo },
             { key: "name", label: lang === "km" ? "ឈ្មោះ" : "Name" },
+            { key: "owner", label: lang === "km" ? "កម្មសិទ្ធិ" : "Property Type" },
             { key: "location", label: t.location },
             { key: "amount", label: lang === "km" ? "ចំនួន" : "Amount" },
             { key: "unit", label: lang === "km" ? "ឯកតា" : "Unit" },
@@ -44295,7 +44296,7 @@ export default function App() {
       const allowed: InventoryReportColumnKey[] = inventoryReportColumnDefs.map((column) => column.key);
       let filtered: InventoryReportColumnKey[] = prev.filter((key) => allowed.includes(key));
       if (reportInventoryIsToolGroup) {
-        (["amount", "checkStatus"] as InventoryReportColumnKey[]).forEach((requiredKey) => {
+        (["owner", "amount", "checkStatus"] as InventoryReportColumnKey[]).forEach((requiredKey) => {
           if (!filtered.includes(requiredKey) && allowed.includes(requiredKey)) {
             filtered = [...filtered, requiredKey].sort((a, b) => allowed.indexOf(a) - allowed.indexOf(b));
           }
