@@ -4591,6 +4591,41 @@ async function sendTelegramScheduleAssignedAlert(asset, actor = null, db = null)
   });
 }
 
+async function sendTelegramScheduleAssignedDirectAlert(asset, assignee, actor = null, db = null) {
+  if (!asset || typeof asset !== "object" || !assignee || typeof assignee !== "object") {
+    return { ok: false, skipped: true, reason: "missing asset or assignee" };
+  }
+  const chatId = toText(assignee.telegramChatId);
+  if (!chatId) {
+    return { ok: false, skipped: true, reason: "missing telegram chat id" };
+  }
+  const assignedTo = toText(asset.scheduleAssignedTo) || toText(assignee.fullName) || "-";
+  const scheduledBy = toText(actor && (actor.displayName || actor.username)) || "-";
+  const itemName = [toText(asset.category), toText(asset.type)].filter(Boolean).join(" / ") || "Asset";
+  const scheduleDate = normalizeLooseDateToYmd(asset.nextMaintenanceDate) || toText(asset.nextMaintenanceDate) || "-";
+  const scheduleTime = toText(asset.scheduleTime) || "-";
+  const scheduleGroup = toText(asset.scheduleGroup) || "-";
+  const scheduleNote = toText(asset.scheduleNote) || "-";
+  const lines = [
+    ...buildTelegramColorStrip("🟦", "សារ​ជូនដំណឹងថែទាំ ECO", "អ្នកត្រូវបានចាត់តាំងកាលវិភាគថ្មី", true),
+    `<b>${escapeHtml(toText(asset.assetId) || "-")}</b> • ${escapeHtml(itemName)}`,
+    `សាខា: ${formatTelegramCampusKhmer(toText(asset.campus) || "-")}`,
+    `ទីតាំង: ${escapeHtml(toText(asset.location) || "-")}`,
+    `ចាត់តាំងទៅ: ${escapeHtml(assignedTo)}`,
+    `ថ្ងៃ: ${escapeHtml(scheduleDate)}`,
+    `ម៉ោង: ${escapeHtml(scheduleTime)}`,
+    `ក្រុម: ${escapeHtml(scheduleGroup)}`,
+    `កំណត់ចំណាំ: ${escapeHtml(scheduleNote)}`,
+    `រៀបចំដោយ: ${escapeHtml(scheduledBy)}`,
+  ];
+  return sendTelegramMaintenanceMessage(lines.join("\n"), {
+    db,
+    chatIds: [chatId],
+    photoUrl: resolveTelegramPhotoUrl(toText(asset.photo)),
+    parseMode: "HTML",
+  });
+}
+
 function resolveTelegramPhotoUrl(photoPath) {
   const raw = toText(photoPath);
   if (!raw) return "";
@@ -13757,19 +13792,30 @@ const server = http.createServer(async (req, res) => {
       );
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
-      sendJson(res, 200, { asset: db.assets[idx] });
+      let scheduleAlertTriggered = false;
       if (notifyScheduleAssignment && toText(db.assets[idx].scheduleAssignedTo)) {
-        void (async () => {
-          try {
-            await sendTelegramScheduleAssignedAlert(db.assets[idx], admin, db);
-          } catch (err) {
-            console.warn(
-              "[SCHEDULE ALERT] Failed to send assigned schedule Telegram alert:",
-              err instanceof Error ? err.message : err
-            );
+        try {
+          await sendTelegramScheduleAssignedAlert(db.assets[idx], admin, db);
+          scheduleAlertTriggered = true;
+        } catch (err) {
+          console.warn(
+            "[SCHEDULE ALERT] Failed to send assigned schedule Telegram group alert:",
+            err instanceof Error ? err.message : err
+          );
+        }
+        try {
+          const assignee = findStaffUserByFullName(db, db.assets[idx].scheduleAssignedTo);
+          if (assignee && assignee.telegramChatId) {
+            await sendTelegramScheduleAssignedDirectAlert(db.assets[idx], assignee, admin, db);
           }
-        })();
+        } catch (err) {
+          console.warn(
+            "[SCHEDULE ALERT] Failed to send assigned schedule direct alert:",
+            err instanceof Error ? err.message : err
+          );
+        }
       }
+      sendJson(res, 200, { asset: db.assets[idx], scheduleAlertTriggered });
       return;
     }
 
