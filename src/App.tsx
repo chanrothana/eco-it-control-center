@@ -18239,74 +18239,86 @@ export default function App() {
   );
   const reportInventoryRows = useMemo(
     () =>
-      reportInventoryBaseRows.filter((row) => {
-        const isToolGroupFilter =
-          reportInventoryGroupFilter === "ALL" ||
-          reportInventoryGroupFilter === "CLEAN_TOOL" ||
-          reportInventoryGroupFilter === "MAINT_TOOL" ||
-          reportInventoryGroupFilter === "GARDEN_TOOL" ||
-          reportInventoryGroupFilter === "POOL_TOOL";
-        const rowGroup = inventoryBusinessGroupValue(row);
-        if (reportInventoryGroupFilter === "ALL") {
-          if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
+      reportInventoryBaseRows
+        .filter((row) => {
+          const isToolGroupFilter =
+            reportInventoryGroupFilter === "ALL" ||
+            reportInventoryGroupFilter === "CLEAN_TOOL" ||
+            reportInventoryGroupFilter === "MAINT_TOOL" ||
+            reportInventoryGroupFilter === "GARDEN_TOOL" ||
+            reportInventoryGroupFilter === "POOL_TOOL";
+          const rowGroup = inventoryBusinessGroupValue(row);
+          if (reportInventoryGroupFilter === "ALL") {
+            if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
+              return false;
+            }
+          } else if (rowGroup !== reportInventoryGroupFilter) {
             return false;
           }
-        } else if (rowGroup !== reportInventoryGroupFilter) {
-          return false;
-        }
-        const rowCampus = String(row.campus || "").trim();
-        if (reportInventoryGroupFilter === "POOL_TOOL" && !POOL_TOOL_CAMPUSES.includes(rowCampus as typeof POOL_TOOL_CAMPUSES[number])) {
-          return false;
-        }
-        if (reportInventoryCampusFilter !== "ALL" && rowCampus !== reportInventoryCampusFilter) {
-          return false;
-        }
-        if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
-          const isProvider = isProviderToolOwnerType(row.ownerType);
-          if (reportInventoryPropertyFilter === "SCHOOL" && isProvider) {
+          const rowCampus = String(row.campus || "").trim();
+          if (reportInventoryGroupFilter === "POOL_TOOL" && !POOL_TOOL_CAMPUSES.includes(rowCampus as typeof POOL_TOOL_CAMPUSES[number])) {
             return false;
           }
-          if (reportInventoryPropertyFilter === "PROVIDER" && !isProvider) {
+          if (reportInventoryCampusFilter !== "ALL" && rowCampus !== reportInventoryCampusFilter) {
             return false;
           }
-        }
-        return true;
-      }),
-    [reportInventoryBaseRows, reportInventoryCampusFilter, reportInventoryGroupFilter, reportInventoryPropertyFilter]
+          if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
+            const isProvider = isProviderToolOwnerType(row.ownerType);
+            if (reportInventoryPropertyFilter === "SCHOOL" && isProvider) {
+              return false;
+            }
+            if (reportInventoryPropertyFilter === "PROVIDER" && !isProvider) {
+              return false;
+            }
+          }
+          return true;
+        })
+        .map((row) => {
+          const latestReview = latestToolReviewByItemId.get(Number(row.id || 0));
+          const latestPhoto = String(latestReview?.photo || "").trim();
+          return latestPhoto ? { ...row, photo: latestPhoto } : row;
+        }),
+    [latestToolReviewByItemId, reportInventoryBaseRows, reportInventoryCampusFilter, reportInventoryGroupFilter, reportInventoryPropertyFilter]
   );
   const reportInventoryComparisonSourceRows = useMemo(
     () =>
-      reportInventoryBaseRows.filter((row) => {
-        const isToolGroupFilter =
-          reportInventoryGroupFilter === "ALL" ||
-          reportInventoryGroupFilter === "CLEAN_TOOL" ||
-          reportInventoryGroupFilter === "MAINT_TOOL" ||
-          reportInventoryGroupFilter === "GARDEN_TOOL" ||
-          reportInventoryGroupFilter === "POOL_TOOL";
-        const rowGroup = inventoryBusinessGroupValue(row);
-        if (reportInventoryGroupFilter === "ALL") {
-          if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
+      reportInventoryBaseRows
+        .filter((row) => {
+          const isToolGroupFilter =
+            reportInventoryGroupFilter === "ALL" ||
+            reportInventoryGroupFilter === "CLEAN_TOOL" ||
+            reportInventoryGroupFilter === "MAINT_TOOL" ||
+            reportInventoryGroupFilter === "GARDEN_TOOL" ||
+            reportInventoryGroupFilter === "POOL_TOOL";
+          const rowGroup = inventoryBusinessGroupValue(row);
+          if (reportInventoryGroupFilter === "ALL") {
+            if (!INVENTORY_REPORT_TOOL_GROUPS.includes(rowGroup)) {
+              return false;
+            }
+          } else if (rowGroup !== reportInventoryGroupFilter) {
             return false;
           }
-        } else if (rowGroup !== reportInventoryGroupFilter) {
-          return false;
-        }
-        const rowCampus = String(row.campus || "").trim();
-        if (reportInventoryGroupFilter === "POOL_TOOL" && !POOL_TOOL_CAMPUSES.includes(rowCampus as typeof POOL_TOOL_CAMPUSES[number])) {
-          return false;
-        }
-        if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
-          const isProvider = isProviderToolOwnerType(row.ownerType);
-          if (reportInventoryPropertyFilter === "SCHOOL" && isProvider) {
+          const rowCampus = String(row.campus || "").trim();
+          if (reportInventoryGroupFilter === "POOL_TOOL" && !POOL_TOOL_CAMPUSES.includes(rowCampus as typeof POOL_TOOL_CAMPUSES[number])) {
             return false;
           }
-          if (reportInventoryPropertyFilter === "PROVIDER" && !isProvider) {
-            return false;
+          if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
+            const isProvider = isProviderToolOwnerType(row.ownerType);
+            if (reportInventoryPropertyFilter === "SCHOOL" && isProvider) {
+              return false;
+            }
+            if (reportInventoryPropertyFilter === "PROVIDER" && !isProvider) {
+              return false;
+            }
           }
-        }
-        return true;
-    }),
-    [reportInventoryBaseRows, reportInventoryGroupFilter, reportInventoryPropertyFilter]
+          return true;
+        })
+        .map((row) => {
+          const latestReview = latestToolReviewByItemId.get(Number(row.id || 0));
+          const latestPhoto = String(latestReview?.photo || "").trim();
+          return latestPhoto ? { ...row, photo: latestPhoto } : row;
+        }),
+    [latestToolReviewByItemId, reportInventoryBaseRows, reportInventoryGroupFilter, reportInventoryPropertyFilter]
   );
   const reportInventoryComparisonCampuses = useMemo(() => {
     const campuses = Array.from(
