@@ -19997,6 +19997,8 @@ label.backup-action-btn {
   color: #2f4a74;
   font-size: 14px;
   vertical-align: middle;
+  background-clip: padding-box;
+  position: relative;
 }
 
 .inventory-tool-list-table tbody tr:nth-child(even) td {
@@ -20057,13 +20059,24 @@ label.backup-action-btn {
 
 .inventory-tool-list-name-cell small,
 .inventory-tool-list-campus-cell span,
-.inventory-tool-list-location-cell span,
-.inventory-tool-list-responsible-cell {
+.inventory-tool-list-location-cell span {
   color: #5f79a2;
   font-size: 13px;
   display: block;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.inventory-tool-list-responsible-cell {
+  text-align: left;
+  color: #5f79a2;
+  font-size: 13px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.inventory-tool-list-table tbody td:last-child {
+  white-space: nowrap;
 }
 
 .inventory-tool-list-number-badge {
