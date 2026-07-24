@@ -5307,6 +5307,14 @@ async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) 
       kind: "tools",
     });
     sent = Boolean(report && report.ok);
+    if (!sent && normalizedText) {
+      report = await sendTelegramMessage(normalizedText, {
+        db,
+        includeResults: true,
+        kind: "tools",
+      });
+      sent = Boolean(report && report.ok);
+    }
   } else if (normalizedText && normalizedText.length <= 1024) {
     const albumItems = photoAlerts.map((item, index) => ({
       ...item,
@@ -5318,6 +5326,14 @@ async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) 
       includeResults: true,
     });
     sent = Boolean(report && report.ok);
+    if (!sent && normalizedText) {
+      report = await sendTelegramMessage(normalizedText, {
+        db,
+        includeResults: true,
+        kind: "tools",
+      });
+      sent = Boolean(report && report.ok);
+    }
   } else {
     report = await sendTelegramMessage(normalizedText, {
       db,
@@ -5331,6 +5347,14 @@ async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) 
     }));
     const mediaReport = await sendTelegramMediaGroup(albumItems, { db, kind: "tools" });
     sent = Boolean(mediaReport) || sent;
+    if (!sent && normalizedText) {
+      report = await sendTelegramMessage(normalizedText, {
+        db,
+        includeResults: true,
+        kind: "tools",
+      });
+      sent = Boolean(report && report.ok);
+    }
   }
   return {
     ok: sent,
