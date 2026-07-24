@@ -115,6 +115,7 @@ type Asset = {
   nextVerificationDate?: string;
   verificationFrequency?: "NONE" | "MONTHLY" | "TERMLY";
   scheduleNote?: string;
+  scheduleAssignedTo?: string;
   scheduleGroup?: string;
   repeatMode?: "NONE" | "MONTHLY_WEEKDAY" | "EVERY_6_MONTHS" | "EVERY_12_MONTHS" | "WDP_FILTER_CYCLE";
   repeatWeekOfMonth?: number;
@@ -14735,6 +14736,7 @@ export default function App() {
     assetId: "",
     date: "",
     note: "",
+    assignedTo: "",
     group: "",
     repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
     repeatWeekOfMonth: 1,
@@ -14761,6 +14763,7 @@ export default function App() {
     assetId: "",
     date: toYmd(new Date()),
     note: "",
+    assignedTo: "",
     group: "",
     repeatMode: "NONE" as NonNullable<Asset["repeatMode"]>,
     repeatWeekOfMonth: 1,
@@ -34325,6 +34328,7 @@ export default function App() {
         scheduleForm.repeatMode === "WDP_FILTER_CYCLE"
           ? getWdpFilterCycleNote(Number(scheduleForm.repeatCycleStep || 1))
           : scheduleForm.note.trim(),
+      scheduleAssignedTo: scheduleForm.assignedTo.trim(),
       scheduleGroup: String(scheduleForm.group || "").trim() || inferScheduleGroupValue(selectedScheduleAsset || { category: "", type: "", pcType: "" }),
       repeatMode: scheduleForm.repeatMode,
       repeatWeekOfMonth:
@@ -34350,7 +34354,7 @@ export default function App() {
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
           method: "PATCH",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, notifyScheduleAssignment: Boolean(payload.scheduleAssignedTo) }),
         });
       } catch (err) {
         if (!isApiUnavailableError(err)) throw err;
@@ -34369,6 +34373,7 @@ export default function App() {
         ...f,
         note: "",
         date: "",
+        assignedTo: "",
         group: "",
       }));
       await loadData();
@@ -34391,6 +34396,7 @@ export default function App() {
       assetId: "",
       date: ymd,
       note: "",
+      assignedTo: "",
       group: "",
       repeatMode: "NONE",
       repeatWeekOfMonth: computedWeekOfMonth,
@@ -34429,6 +34435,7 @@ export default function App() {
         scheduleQuickForm.repeatMode === "WDP_FILTER_CYCLE"
           ? getWdpFilterCycleNote(Number(scheduleQuickForm.repeatCycleStep || 1))
           : scheduleQuickForm.note.trim(),
+      scheduleAssignedTo: scheduleQuickForm.assignedTo.trim(),
       scheduleGroup: String(scheduleQuickForm.group || "").trim() || inferScheduleGroupValue(selectedQuickScheduleAsset || { category: "", type: "", pcType: "" }),
       repeatMode: scheduleQuickForm.repeatMode,
       repeatWeekOfMonth:
@@ -34454,7 +34461,7 @@ export default function App() {
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
           method: "PATCH",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...payload, notifyScheduleAssignment: Boolean(payload.scheduleAssignedTo) }),
         });
       } catch (err) {
         if (!isApiUnavailableError(err)) throw err;
@@ -34484,6 +34491,7 @@ export default function App() {
       assetId: String(asset.id),
       date: asset.nextMaintenanceDate || "",
       note: asset.scheduleNote || "",
+      assignedTo: asset.scheduleAssignedTo || "",
       group: String(asset.scheduleGroup || "").trim(),
       repeatMode: asset.repeatMode || "NONE",
       repeatWeekOfMonth: Number(asset.repeatWeekOfMonth || 1),
@@ -34500,6 +34508,7 @@ export default function App() {
     const payload = {
       nextMaintenanceDate: "",
       scheduleNote: "",
+      scheduleAssignedTo: "",
       scheduleGroup: "",
       repeatMode: "NONE" as const,
       repeatWeekOfMonth: 0,
@@ -34527,7 +34536,15 @@ export default function App() {
       setStats(buildStatsFromAssets(nextLocal, campusFilter));
       appendUiAudit("SCHEDULE_DELETE", "asset", String(assetId), "Schedule removed");
       if (scheduleForm.assetId === String(assetId)) {
-        setScheduleForm((f) => ({ ...f, date: "", note: "", group: "", repeatMode: "NONE", repeatCycleStep: 1 }));
+        setScheduleForm((f) => ({
+          ...f,
+          date: "",
+          note: "",
+          assignedTo: "",
+          group: "",
+          repeatMode: "NONE",
+          repeatCycleStep: 1,
+        }));
       }
       await loadData();
     } catch (err) {
@@ -34551,6 +34568,7 @@ export default function App() {
     const payload = {
       nextMaintenanceDate: "",
       scheduleNote: "",
+      scheduleAssignedTo: "",
       scheduleGroup: "",
       repeatMode: "NONE" as const,
       repeatWeekOfMonth: 0,
@@ -40606,9 +40624,27 @@ export default function App() {
     () => assets.find((asset) => String(asset.id) === String(scheduleForm.assetId || "")) || null,
     [assets, scheduleForm.assetId]
   );
+  const scheduleAssignableUsers = useMemo(
+    () =>
+      staffUsersForCampus(
+        users,
+        selectedScheduleAsset?.campus || (scheduleSingleFilterCampus !== "ALL" ? scheduleSingleFilterCampus : ""),
+        scheduleForm.assignedTo
+      ),
+    [users, selectedScheduleAsset, scheduleSingleFilterCampus, scheduleForm.assignedTo]
+  );
   const selectedQuickScheduleAsset = useMemo(
     () => assets.find((asset) => String(asset.id) === String(scheduleQuickForm.assetId || "")) || null,
     [assets, scheduleQuickForm.assetId]
+  );
+  const scheduleQuickAssignableUsers = useMemo(
+    () =>
+      staffUsersForCampus(
+        users,
+        selectedQuickScheduleAsset?.campus || (scheduleQuickFilterCampus !== "ALL" ? scheduleQuickFilterCampus : ""),
+        scheduleQuickForm.assignedTo
+      ),
+    [users, selectedQuickScheduleAsset, scheduleQuickFilterCampus, scheduleQuickForm.assignedTo]
   );
   const scheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
@@ -64533,24 +64569,32 @@ function formatTicketRequestSource(value?: string) {
                     ? `បង្ហាញ ${scheduleSingleFilteredAssets.length} ទ្រព្យ`
                     : `Showing ${scheduleSingleFilteredAssets.length} asset${scheduleSingleFilteredAssets.length === 1 ? "" : "s"}`}
                 </div>
-                <AssetPicker
+                <select
+                  className="input"
                   value={scheduleForm.assetId}
-                  assets={scheduleSingleFilteredAssets}
-                  getLabel={(asset) => `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.type})`}
-                  onChange={(assetId) => {
+                  onChange={(e) => {
+                    const assetId = String(e.target.value || "");
                     const asset = assets.find((a) => String(a.id) === assetId);
                     setScheduleForm((f) => ({
                       ...f,
                       assetId,
                       date: asset?.nextMaintenanceDate || "",
                       note: asset?.scheduleNote || "",
+                      assignedTo: asset?.scheduleAssignedTo || "",
                       group: String(asset?.scheduleGroup || "").trim(),
                       repeatMode: asset?.repeatMode || "NONE",
                       repeatWeekOfMonth: Number(asset?.repeatWeekOfMonth || 1),
                       repeatWeekday: Number(asset?.repeatWeekday || 6),
                     }));
                   }}
-                />
+                >
+                  <option value="">{lang === "km" ? "ជ្រើសទ្រព្យ" : "Select asset"}</option>
+                  {scheduleSingleFilteredAssets.map((asset) => (
+                    <option key={`schedule-single-asset-${asset.id}`} value={String(asset.id)}>
+                      {`${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.type})`}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="field quickout-date-field eco-date-floating-field" ref={scheduleDateWrapRef}>
                 <span>Next Maintenance Date</span>
@@ -64681,6 +64725,18 @@ function formatTicketRequestSource(value?: string) {
                   <option value={5}>Friday</option>
                   <option value={6}>Saturday</option>
                 </select>
+              </label>
+              <label className="field">
+                <span>{lang === "km" ? "ចាត់តាំងទៅ" : "Assign To"}</span>
+                <UserPicker
+                  value={scheduleForm.assignedTo}
+                  users={scheduleAssignableUsers}
+                  onChange={(value) => setScheduleForm((f) => ({ ...f, assignedTo: value }))}
+                  placeholder={lang === "km" ? "មិនទាន់ចាត់តាំង" : "Unassigned"}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                  emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                  disabled={!scheduleForm.assetId}
+                />
               </label>
               <label className="field field-wide">
                 <span>Schedule Note</span>
@@ -81084,6 +81140,7 @@ function formatTicketRequestSource(value?: string) {
                         ...f,
                         assetId,
                         note: asset?.scheduleNote || f.note,
+                        assignedTo: asset?.scheduleAssignedTo || "",
                         group: String(asset?.scheduleGroup || "").trim(),
                       }));
                     }}
@@ -81200,6 +81257,18 @@ function formatTicketRequestSource(value?: string) {
                     <option value={5}>Friday</option>
                     <option value={6}>Saturday</option>
                   </select>
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "ចាត់តាំងទៅ" : "Assign To"}</span>
+                  <UserPicker
+                    value={scheduleQuickForm.assignedTo}
+                    users={scheduleQuickAssignableUsers}
+                    onChange={(value) => setScheduleQuickForm((f) => ({ ...f, assignedTo: value }))}
+                    placeholder={lang === "km" ? "មិនទាន់ចាត់តាំង" : "Unassigned"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះបុគ្គលិក..." : "Search staff name..."}
+                    emptyText={lang === "km" ? "រកមិនឃើញបុគ្គលិក" : "No staff found."}
+                    disabled={!scheduleQuickForm.assetId}
+                  />
                 </label>
                 <label className="field field-wide">
                   <span>{t.scheduleNote}</span>

@@ -4558,6 +4558,39 @@ async function sendTelegramWorkOrderAssignedAlert(ticket, assignee, actor = null
   });
 }
 
+async function sendTelegramScheduleAssignedAlert(asset, actor = null, db = null) {
+  if (!asset || typeof asset !== "object") {
+    return { ok: false, skipped: true, reason: "missing asset" };
+  }
+  const assignedTo = toText(asset.scheduleAssignedTo);
+  if (!assignedTo) {
+    return { ok: false, skipped: true, reason: "missing assigned staff" };
+  }
+  const scheduledBy = toText(actor && (actor.displayName || actor.username)) || "-";
+  const itemName = [toText(asset.category), toText(asset.type)].filter(Boolean).join(" / ") || "Asset";
+  const scheduleDate = normalizeLooseDateToYmd(asset.nextMaintenanceDate) || toText(asset.nextMaintenanceDate) || "-";
+  const scheduleTime = toText(asset.scheduleTime) || "-";
+  const scheduleGroup = toText(asset.scheduleGroup) || "-";
+  const scheduleNote = toText(asset.scheduleNote) || "-";
+  const lines = [
+    ...buildTelegramColorStrip("🟦", "ECO Maintenance Alert", "New assigned schedule", true),
+    `<b>${escapeHtml(toText(asset.assetId) || "-")}</b> • ${escapeHtml(itemName)}`,
+    `Campus: ${escapeHtml(toText(asset.campus) || "-")}`,
+    `Location: ${escapeHtml(toText(asset.location) || "-")}`,
+    `Assigned Staff: ${escapeHtml(assignedTo)}`,
+    `Date: ${escapeHtml(scheduleDate)}`,
+    `Time: ${escapeHtml(scheduleTime)}`,
+    `Group: ${escapeHtml(scheduleGroup)}`,
+    `Note: ${escapeHtml(scheduleNote)}`,
+    `Scheduled By: ${escapeHtml(scheduledBy)}`,
+  ];
+  return sendTelegramMaintenanceMessage(lines.join("\n"), {
+    db,
+    photoUrl: resolveTelegramPhotoUrl(toText(asset.photo)),
+    parseMode: "HTML",
+  });
+}
+
 function resolveTelegramPhotoUrl(photoPath) {
   const raw = toText(photoPath);
   if (!raw) return "";
@@ -5035,6 +5068,15 @@ async function renderTelegramWhiteSinglePhotoCardPng({
   if (!sharpLib) return null;
   const normalizedLines = Array.isArray(textLines) ? textLines.filter(Boolean) : [];
   const hasTextPanel = normalizedLines.length > 0;
+  const photoFrame = hasTextPanel
+    ? { x: 42, y: 66, width: 676, height: 276 }
+    : { x: 242, y: 66, width: 276, height: 276 };
+  const labelWrap = hasTextPanel
+    ? null
+    : { x: photoFrame.x, y: 66, width: 240, height: 44, innerX: photoFrame.x + 12, innerY: 74, innerWidth: 124, innerHeight: 28 };
+  const stampWrap = hasTextPanel
+    ? { x: 494, y: 292 }
+    : { x: photoFrame.x + photoFrame.width - 224, y: photoFrame.y + photoFrame.height - 50 };
   const headerLineHeight = 30;
   const bodyLineHeight = 32;
   const textStartY = 410;
@@ -5062,7 +5104,7 @@ async function renderTelegramWhiteSinglePhotoCardPng({
   <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#fbf8f1" stroke="#d9cfbf" stroke-width="2"/>
   <rect x="18" y="18" width="724" height="${totalHeight - 36}" rx="28" ry="28" fill="#f7efdf" stroke="#d9cfbf" stroke-width="1.5"/>
   <rect x="24" y="48" width="712" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
-  <rect x="42" y="66" width="676" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
+  <rect x="${photoFrame.x}" y="${photoFrame.y}" width="${photoFrame.width}" height="${photoFrame.height}" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
   ${
     hasTextPanel
       ? `<rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
@@ -5076,8 +5118,8 @@ async function renderTelegramWhiteSinglePhotoCardPng({
   ${
     hasTextPanel
       ? ""
-      : `<rect x="42" y="66" width="240" height="44" rx="12" ry="12" fill="rgba(20,33,48,0.34)" />
-  <rect x="54" y="74" width="124" height="28" rx="12" ry="12" fill="url(#singlePhotoLabel)" />`
+      : `<rect x="${labelWrap.x}" y="${labelWrap.y}" width="${labelWrap.width}" height="${labelWrap.height}" rx="12" ry="12" fill="rgba(20,33,48,0.34)" />
+  <rect x="${labelWrap.innerX}" y="${labelWrap.innerY}" width="${labelWrap.innerWidth}" height="${labelWrap.innerHeight}" rx="12" ry="12" fill="url(#singlePhotoLabel)" />`
   }
 </svg>`;
   const composites = [
@@ -5087,13 +5129,13 @@ async function renderTelegramWhiteSinglePhotoCardPng({
       top: 0,
     },
   ];
-  const topPhoto = await buildTelegramComparePhotoBuffer(photoPath, 676, 276);
+  const topPhoto = await buildTelegramComparePhotoBuffer(photoPath, photoFrame.width, photoFrame.height);
   if (topPhoto) {
-    composites.push({ input: topPhoto, left: 42, top: 66 });
+    composites.push({ input: topPhoto, left: photoFrame.x, top: photoFrame.y });
   } else {
     composites.push(
       buildTelegramTextComposite("NO PHOTO", {
-        left: 254,
+        left: photoFrame.x + Math.round((photoFrame.width - 252) / 2),
         top: 188,
         width: 252,
         fontSize: 22,
@@ -5127,13 +5169,13 @@ async function renderTelegramWhiteSinglePhotoCardPng({
 </svg>`);
     composites.push({
       input: buildOverlayTextSvg({
-        width: 124,
-        height: 28,
+        width: labelWrap.innerWidth,
+        height: labelWrap.innerHeight,
         text: normalizedTopLabel,
         fontSize: 14,
       }),
-      left: 54,
-      top: 74,
+      left: labelWrap.innerX,
+      top: labelWrap.innerY,
     });
     if (normalizedStamp) {
       composites.push(
@@ -5142,8 +5184,8 @@ async function renderTelegramWhiteSinglePhotoCardPng({
 <svg xmlns="http://www.w3.org/2000/svg" width="212" height="38" viewBox="0 0 212 38">
   <rect x="0" y="0" width="212" height="38" rx="12" ry="12" fill="rgba(18,33,55,0.82)"/>
 </svg>`),
-          left: 494,
-          top: 292,
+          left: stampWrap.x,
+          top: stampWrap.y,
         },
         {
           input: buildOverlayTextSvg({
@@ -5152,8 +5194,8 @@ async function renderTelegramWhiteSinglePhotoCardPng({
             text: normalizedStamp,
             fontSize: 14,
           }),
-          left: 508,
-          top: 300,
+          left: stampWrap.x + 14,
+          top: stampWrap.y + 8,
         }
       );
     }
@@ -9215,6 +9257,7 @@ function validateAsset(body, settings) {
   const nextMaintenanceDate = toText(body.nextMaintenanceDate);
   const scheduleTime = toText(body.scheduleTime);
   const scheduleNote = toText(body.scheduleNote);
+  const scheduleAssignedTo = toText(body.scheduleAssignedTo);
   const scheduleGroup = toText(body.scheduleGroup);
   const repeatMode = toUpper(body.repeatMode) || "NONE";
   const repeatWeekOfMonth = Number(body.repeatWeekOfMonth || 0);
@@ -9290,6 +9333,7 @@ function validateAsset(body, settings) {
     nextMaintenanceDate,
     scheduleTime,
     scheduleNote,
+    scheduleAssignedTo,
     scheduleGroup,
     repeatMode,
     repeatWeekOfMonth,
@@ -13560,6 +13604,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const body = await parseBody(req);
+      const notifyScheduleAssignment = Boolean(body && body.notifyScheduleAssignment);
       const current = db.assets[idx];
       const cleaned = validateAsset({
         ...current,
@@ -13713,6 +13758,18 @@ const server = http.createServer(async (req, res) => {
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
       sendJson(res, 200, { asset: db.assets[idx] });
+      if (notifyScheduleAssignment && toText(db.assets[idx].scheduleAssignedTo)) {
+        void (async () => {
+          try {
+            await sendTelegramScheduleAssignedAlert(db.assets[idx], admin, db);
+          } catch (err) {
+            console.warn(
+              "[SCHEDULE ALERT] Failed to send assigned schedule Telegram alert:",
+              err instanceof Error ? err.message : err
+            );
+          }
+        })();
+      }
       return;
     }
 
