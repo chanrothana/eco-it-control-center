@@ -3708,17 +3708,18 @@ function sendTelegramMediaGroupToChat(chatId, mediaItems = [], botToken = TELEGR
             type: toText(item && item.type).trim() || "photo",
             media: toText(item && item.media).trim(),
             caption: toText(item && item.caption).trim(),
+            buffer: Buffer.isBuffer(item && item.buffer) ? item.buffer : null,
+            filename: toText(item && item.filename) || "",
+            mimeType: toText(item && item.mimeType) || "",
           }))
-          .filter((item) => item.media)
+          .filter((item) => item.media || item.buffer)
       : [];
     if (!normalizedChatId || normalizedMedia.length < 2) {
       resolve({ ok: false, chatId: normalizedChatId, statusCode: 0, body: "" });
       return;
     }
-    sendTelegramRequestWithToken(botToken, "sendMediaGroup", {
-      chat_id: normalizedChatId,
-      media: normalizedMedia,
-    }).then((result) => {
+    const hasUploadBuffer = normalizedMedia.some((item) => Buffer.isBuffer(item.buffer) && item.buffer.length > 0);
+    const handleResult = (result) => {
       let messageRefs = [];
       try {
         const parsed = JSON.parse(toText(result && result.body));
@@ -3739,7 +3740,49 @@ function sendTelegramMediaGroupToChat(chatId, mediaItems = [], botToken = TELEGR
         statusCode: Number(result && result.statusCode) || 0,
         body: toText(result && result.body),
       });
-    });
+    };
+    if (hasUploadBuffer) {
+      const files = [];
+      const mediaPayload = normalizedMedia.map((item, index) => {
+        if (Buffer.isBuffer(item.buffer) && item.buffer.length > 0) {
+          const fileId = `photo${index + 1}`;
+          files.push({
+            fieldName: fileId,
+            filename: item.filename || `telegram-photo-${index + 1}.png`,
+            mimeType: item.mimeType || "image/png",
+            buffer: item.buffer,
+          });
+          return {
+            type: item.type,
+            media: `attach://${fileId}`,
+            ...(item.caption ? { caption: item.caption.slice(0, 1024) } : {}),
+          };
+        }
+        return {
+          type: item.type,
+          media: item.media,
+          ...(item.caption ? { caption: item.caption.slice(0, 1024) } : {}),
+        };
+      });
+      sendTelegramMultipartRequestWithToken(
+        botToken,
+        "sendMediaGroup",
+        {
+          chat_id: normalizedChatId,
+          media: JSON.stringify(mediaPayload),
+        },
+        files
+      ).then(handleResult);
+      return;
+    }
+    sendTelegramRequestWithToken(botToken, "sendMediaGroup", {
+      chat_id: normalizedChatId,
+      media: normalizedMedia.map((item) => ({
+        type: item.type,
+        media: item.media,
+        ...(item.caption ? { caption: item.caption.slice(0, 1024) } : {}),
+      })),
+    }).then(handleResult);
   });
 }
 
@@ -4063,14 +4106,15 @@ async function sendTelegramMediaGroup(mediaItems = [], options = {}) {
     // eslint-disable-next-line no-await-in-loop
     results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 3, botToken));
   }
-  if (results.some((row) => row.ok)) return true;
+  const ok = results.some((row) => row.ok);
+  if (ok && !includeResults) return true;
   if (includeResults) {
     return {
-      ok: results.some((row) => row.ok),
+      ok,
       results,
     };
   }
-  return results.some((row) => row.ok);
+  return ok;
 }
 
 async function sendTelegramMaintenanceMessage(text, options = {}) {
@@ -4575,6 +4619,63 @@ async function buildTelegramComparePhotoBuffer(photoPath, width = 280, height = 
         fit: "cover",
         position: "centre",
       })
+      .png()
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+function formatTelegramPhotoStampDateTime(value) {
+  const parsed = value ? new Date(value) : new Date();
+  const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const parts = getAppDateTimeParts(safeDate);
+  if (parts.year && parts.month && parts.day && parts.hour && parts.minute) {
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+  }
+  return safeDate.toISOString().slice(0, 16).replace("T", " ");
+}
+
+async function buildTelegramLabeledPhotoBuffer(
+  photoPath,
+  {
+    topLabel = "",
+    stampText = "",
+  } = {}
+) {
+  const sharpLib = getSharp();
+  if (!sharpLib) return null;
+  const absolutePath = resolveUploadedAbsolutePath(photoPath);
+  if (!absolutePath || !(await fileExists(absolutePath))) return null;
+  try {
+    const pipeline = sharpLib(absolutePath, { failOn: "none", animated: false }).rotate();
+    const metadata = await pipeline.metadata();
+    const width = Math.max(320, Number(metadata.width) || 0);
+    const height = Math.max(320, Number(metadata.height) || 0);
+    const fontCss = await buildTelegramPreviewFontCss();
+    const labelText = escapeSvgText(topLabel);
+    const stampValue = escapeSvgText(stampText);
+    const hasStamp = Boolean(stampValue);
+    const overlaySvg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>${fontCss}</defs>
+  <rect x="0" y="0" width="${width}" height="58" fill="rgba(18, 33, 55, 0.72)" />
+  <text x="${Math.round(width / 2)}" y="37" text-anchor="middle" fill="#ffffff" font-size="28" font-weight="700">${labelText}</text>
+  ${
+    hasStamp
+      ? `<rect x="${Math.max(16, width - 292)}" y="${Math.max(16, height - 58)}" width="276" height="42" rx="14" ry="14" fill="rgba(18, 33, 55, 0.72)" />
+  <text x="${Math.max(24, width - 154)}" y="${Math.max(44, height - 30)}" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="700">${stampValue}</text>`
+      : ""
+  }
+</svg>`;
+    return await pipeline
+      .composite([
+        {
+          input: Buffer.from(overlaySvg),
+          left: 0,
+          top: 0,
+        },
+      ])
       .png()
       .toBuffer();
   } catch {
@@ -5381,39 +5482,74 @@ function isCleaningSupplyCategoryForTelegram(category) {
   return toUpper(category) === "SUPPLY";
 }
 
-function buildToolReviewTelegramPhotoAlerts(source) {
+async function buildToolReviewTelegramPhotoAlerts(source) {
   if (!source || typeof source !== "object") return [];
-  const previousPhoto = resolveTelegramPhotoUrl(toText(source.previousPhoto));
-  const currentPhoto = resolveTelegramPhotoUrl(toText(source.photo));
+  const previousPhotoPath = toText(source.previousPhoto);
+  const currentPhotoPath = toText(source.photo);
+  const previousPhoto = resolveTelegramPhotoUrl(previousPhotoPath);
+  const currentPhoto = resolveTelegramPhotoUrl(currentPhotoPath);
   const itemCode = toText(source.itemCode || source.code || "").trim();
   const itemName = toText(source.itemName || "").trim();
   const baseLabel = [itemCode, itemName].filter(Boolean).join(" - ") || "Tool Verification";
+  const currentStamp = formatTelegramPhotoStampDateTime(source.updated || source.created || new Date().toISOString());
   const alerts = [];
   if (previousPhoto) {
+    const previousBuffer = await buildTelegramLabeledPhotoBuffer(previousPhotoPath, {
+      topLabel: "រូបភាពចាស់",
+    });
     alerts.push({
       type: "photo",
       media: previousPhoto,
-      caption: `Before Photo\n${baseLabel}`,
+      ...(previousBuffer
+        ? {
+            buffer: previousBuffer,
+            filename: "tool-review-old-photo.png",
+            mimeType: "image/png",
+          }
+        : {}),
+      caption: `រូបភាពចាស់\n${baseLabel}`,
     });
   }
   if (currentPhoto && currentPhoto !== previousPhoto) {
+    const currentBuffer = await buildTelegramLabeledPhotoBuffer(currentPhotoPath, {
+      topLabel: "រូបភាពថ្មី",
+      stampText: currentStamp,
+    });
     alerts.push({
       type: "photo",
       media: currentPhoto,
-      caption: `Current Photo\n${baseLabel}`,
+      ...(currentBuffer
+        ? {
+            buffer: currentBuffer,
+            filename: "tool-review-new-photo.png",
+            mimeType: "image/png",
+          }
+        : {}),
+      caption: `រូបភាពថ្មី\n${baseLabel}`,
     });
   } else if (currentPhoto) {
+    const currentBuffer = await buildTelegramLabeledPhotoBuffer(currentPhotoPath, {
+      topLabel: "រូបភាពថ្មី",
+      stampText: currentStamp,
+    });
     alerts.push({
       type: "photo",
       media: currentPhoto,
-      caption: `Current Photo\n${baseLabel}`,
+      ...(currentBuffer
+        ? {
+            buffer: currentBuffer,
+            filename: "tool-review-new-photo.png",
+            mimeType: "image/png",
+          }
+        : {}),
+      caption: `រូបភាពថ្មី\n${baseLabel}`,
     });
   }
   return alerts;
 }
 
 async function sendCleaningSupplyTelegramMessageWithPhotos(text, source, db = null) {
-  const photoAlerts = buildToolReviewTelegramPhotoAlerts(source);
+  const photoAlerts = await buildToolReviewTelegramPhotoAlerts(source);
   const normalizedText = toText(text).trim();
   let report = null;
   let sent = false;
@@ -5472,7 +5608,7 @@ async function sendCleaningSupplyTelegramMessageWithPhotos(text, source, db = nu
 }
 
 async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) {
-  const photoAlerts = buildToolReviewTelegramPhotoAlerts(source);
+  const photoAlerts = await buildToolReviewTelegramPhotoAlerts(source);
   let report = null;
   let sent = false;
   const normalizedText = toText(text).trim();
@@ -5869,7 +6005,7 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], 
   const items = normalizeInventoryItems(settings.inventoryItems);
   const item = items.find((row) => Number(row.id) === Number(txn.itemId));
   const lines = [
-    "ជូនដំណឹង ECO IT - ស្តុក",
+    "🛠️ ជូនដំណឹង ECO IT - ស្តុក",
     "សំណើរចេញស្តុក កំពុងរង់ចាំអនុម័ត",
     `មុខទំនិញ: ${itemCode} - ${itemName}`,
     `បរិមាណ: ${qty} | សាខា: ${campus}`,
@@ -5918,7 +6054,7 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   const remainingStock = item ? calcInventoryCurrentStock(item, txns) : null;
   const stockUnit = toText(item && item.unit) || "";
   const lines = [
-    "ជូនដំណឹង ECO IT - ស្តុក",
+    "🛠️ ជូនដំណឹង ECO IT - ស្តុក",
     "ចេញសម្ភារៈ (Item Out)",
     `មុខទំនិញ: ${itemCode} - ${itemName}`,
     `បរិមាណ: ${qty} | សាខា: ${campus}`,
@@ -5974,7 +6110,7 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
     const requestedBy = toText(txn.requestedBy) || "-";
     const approvedBy = toText(txn.approvedBy) || "-";
     const lines = [
-      "ជូនដំណឹង ECO IT - ឧបករណ៍",
+      "🛠️ ជូនដំណឹង ECO IT - ឧបករណ៍",
       txnType === "BORROW_CONSUME" ? "ប្រើប្រាស់អស់ (Borrow Consume)" : "ខ្ចីចេញ (Borrow Out)",
       `មុខទំនិញ: ${itemCode} - ${itemName}`,
       `បរិមាណ: ${qty} | ពីសាខា: ${campus}`,
@@ -6002,7 +6138,7 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
     const sourceCampus = formatTelegramCampusKhmer(txn.fromCampus);
     const receivedBy = toText(txn.receivedBy) || "-";
     const lines = [
-      "ជូនដំណឹង ECO IT - ឧបករណ៍",
+      "🛠️ ជូនដំណឹង ECO IT - ឧបករណ៍",
       "ត្រឡប់ចូល (Borrow Return)",
       `មុខទំនិញ: ${itemCode} - ${itemName}`,
       `បរិមាណ: ${qty} | សាខាទទួល: ${campus}`,
@@ -6026,7 +6162,7 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
     );
   }
   const lines = [
-    "ជូនដំណឹង ECO IT - ស្តុក",
+    "🛠️ ជូនដំណឹង ECO IT - ស្តុក",
     "បន្ថែមសម្ភារៈ (Item In)",
     `មុខទំនិញ: ${itemCode} - ${itemName}`,
     `បរិមាណ: ${qty} | សាខា: ${campus}`,
@@ -6084,7 +6220,7 @@ async function sendTelegramToolReviewAlert(reportEntry, db = null) {
         ? "ដកចេញពីស្តុក (Take Out Stock)"
         : "ផ្ទៀងផ្ទាត់ចំនួន (Verify Tool)";
   const lines = [
-    "ជូនដំណឹង ECO IT - ស្តុក",
+    "🛠️ ជូនដំណឹង ECO IT - ស្តុក",
     actionLabel,
     `មុខទំនិញ: ${itemCode} - ${itemName}`,
     `សាខា: ${campus} | ទីតាំង: ${location}`,
@@ -6113,7 +6249,7 @@ async function sendTelegramInventoryItemCreatedAlert(item, actor = null, db = nu
   const campus = formatTelegramCampusKhmer(item.campus);
   const recordedBy = toText(actor && actor.displayName) || toText(actor && actor.username) || "staff";
   const lines = [
-    "ជូនដំណឹង ECO IT - ឧបករណ៍",
+    "🛠️ ជូនដំណឹង ECO IT - ឧបករណ៍",
     "បង្កើតឧបករណ៍ថ្មី (New Tool Setup)",
     `មុខទំនិញ: ${toText(item.itemCode) || "-"} - ${toText(item.itemName) || "-"}`,
     `សាខា: ${campus} | ទីតាំង: ${toText(item.location) || "-"}`,
@@ -6149,7 +6285,7 @@ async function sendTelegramInventoryItemUpdatedAlert(previousItem, nextItem, act
     if (toText(previousItem.notes) !== toText(nextItem.notes)) changed.push(`ចំណាំ: ${toText(nextItem.notes) || "-"}`);
   }
   const lines = [
-    "ជូនដំណឹង ECO IT - ឧបករណ៍",
+    "🛠️ ជូនដំណឹង ECO IT - ឧបករណ៍",
     "កែប្រែព័ត៌មានឧបករណ៍ (Tool Item Updated)",
     `មុខទំនិញ: ${toText(nextItem.itemCode) || "-"} - ${toText(nextItem.itemName) || "-"}`,
     `សាខា: ${campus} | ទីតាំង: ${toText(nextItem.location) || "-"}`,
@@ -6176,7 +6312,7 @@ async function sendTelegramInventoryItemDeletedAlert(item, actor = null, db = nu
   const campus = formatTelegramCampusKhmer(item.campus);
   const recordedBy = toText(actor && actor.displayName) || toText(actor && actor.username) || "staff";
   const lines = [
-    "ជូនដំណឹង ECO IT - ឧបករណ៍",
+    "🛠️ ជូនដំណឹង ECO IT - ឧបករណ៍",
     "លុបឧបករណ៍ (Tool Item Deleted)",
     `មុខទំនិញ: ${toText(item.itemCode) || "-"} - ${toText(item.itemName) || "-"}`,
     `សាខា: ${campus} | ទីតាំង: ${toText(item.location) || "-"}`,
