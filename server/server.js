@@ -4801,8 +4801,6 @@ async function renderTelegramWhiteCompareCardPng({
   <rect x="24" y="390" width="712" height="${Math.max(180, totalHeight - 414)}" rx="24" ry="24" fill="#ffffff" stroke="#d7c7b4" stroke-width="1.5"/>
   <rect x="42" y="66" width="300" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
   <rect x="418" y="66" width="300" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
-  <rect x="54" y="78" width="118" height="34" rx="14" ry="14" fill="url(#compareOldLabel)" />
-  <rect x="430" y="78" width="118" height="34" rx="14" ry="14" fill="url(#compareNewLabel)" />
   <rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="82" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="124" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
@@ -4850,24 +4848,77 @@ async function renderTelegramWhiteCompareCardPng({
     );
   }
   composites.push(
-    buildTelegramTextComposite(firstLabel, {
-      left: 60,
-      top: 84,
-      width: 106,
-      fontSize: 14,
-      color: "#ffffff",
-      align: "center",
-      weight: "bold",
-    }),
-    buildTelegramTextComposite(secondLabel, {
-      left: 436,
-      top: 84,
-      width: 106,
-      fontSize: 14,
-      color: "#ffffff",
-      align: "center",
-      weight: "bold",
-    })
+    {
+      input: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="44" viewBox="0 0 300 44">
+  <rect x="0" y="0" width="300" height="44" rx="12" ry="12" fill="rgba(20,33,48,0.34)" />
+  <rect x="12" y="8" width="132" height="30" rx="12" ry="12" fill="url(#compareOldLabel)" />
+  <defs>
+    <linearGradient id="compareOldLabel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6d7f96" />
+      <stop offset="100%" stop-color="#41566f" />
+    </linearGradient>
+  </defs>
+</svg>`),
+      left: 42,
+      top: 66,
+    },
+    {
+      input: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="44" viewBox="0 0 300 44">
+  <rect x="0" y="0" width="300" height="44" rx="12" ry="12" fill="rgba(20,33,48,0.34)" />
+  <rect x="12" y="8" width="132" height="30" rx="12" ry="12" fill="url(#compareNewLabel)" />
+  <defs>
+    <linearGradient id="compareNewLabel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3e8cff" />
+      <stop offset="100%" stop-color="#1d5fdd" />
+    </linearGradient>
+  </defs>
+</svg>`),
+      left: 418,
+      top: 66,
+    }
+  );
+  const buildOverlayTextSvg = ({
+    width,
+    height,
+    text,
+    fontSize,
+    color = "#ffffff",
+    weight = 700,
+  }) => Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <style>
+    text {
+      font-family: Arial, sans-serif;
+      font-size: ${fontSize}px;
+      font-weight: ${weight};
+      fill: ${color};
+    }
+  </style>
+  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle">${escapeSvgText(text)}</text>
+</svg>`);
+  composites.push(
+    {
+      input: buildOverlayTextSvg({
+        width: 132,
+        height: 30,
+        text: firstLabel,
+        fontSize: 15,
+      }),
+      left: 54,
+      top: 74,
+    },
+    {
+      input: buildOverlayTextSvg({
+        width: 132,
+        height: 30,
+        text: secondLabel,
+        fontSize: 15,
+      }),
+      left: 430,
+      top: 74,
+    }
   );
   const firstStamp = toText(firstStampText).trim();
   const secondStamp = toText(secondStampText).trim();
@@ -4881,36 +4932,38 @@ async function renderTelegramWhiteCompareCardPng({
         left: 90,
         top: 300,
       },
-      buildTelegramTextComposite(firstStamp, {
+      {
+        input: buildOverlayTextSvg({
+          width: 180,
+          height: 20,
+          text: firstStamp,
+          fontSize: 14,
+        }),
         left: 102,
-        top: 306,
-        width: 180,
-        fontSize: 15,
-        color: "#ffffff",
-        align: "center",
-        weight: "bold",
-      })
+        top: 307,
+      }
     );
   }
   if (secondStamp) {
     composites.push(
       {
         input: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="204" height="34" viewBox="0 0 204 34">
-  <rect x="0" y="0" width="204" height="34" rx="12" ry="12" fill="rgba(18,33,55,0.72)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="212" height="38" viewBox="0 0 212 38">
+  <rect x="0" y="0" width="212" height="38" rx="12" ry="12" fill="rgba(18,33,55,0.82)"/>
 </svg>`),
-        left: 454,
-        top: 300,
+        left: 494,
+        top: 292,
       },
-      buildTelegramTextComposite(secondStamp, {
-        left: 466,
-        top: 306,
-        width: 180,
-        fontSize: 15,
-        color: "#ffffff",
-        align: "center",
-        weight: "bold",
-      })
+      {
+        input: buildOverlayTextSvg({
+          width: 184,
+          height: 22,
+          text: secondStamp,
+          fontSize: 14,
+        }),
+        left: 508,
+        top: 300,
+      }
     );
   }
   let textY = textStartY;
@@ -5318,11 +5371,13 @@ async function buildToolTelegramPreviewPng(source, text = "") {
   const textLines = bodyLines.length
     ? bodyLines
     : wrapTelegramPreviewText(`Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`, 34);
+  const currentStamp = formatTelegramPhotoStampDateTime(source.updated || source.created || new Date().toISOString());
   return renderTelegramWhiteCompareCardPng({
     firstPhotoPath: firstPhoto,
     secondPhotoPath: secondPhoto,
-    firstLabel: "Previous Photo",
-    secondLabel: "Current Photo",
+    firstLabel: "រូបភាពចាស់",
+    secondLabel: "រូបភាពថ្មី",
+    secondStampText: currentStamp,
     textLines,
     iconColor: "blue",
   });
@@ -10192,6 +10247,8 @@ const server = http.createServer(async (req, res) => {
         location: toText(url.searchParams.get("location")),
         photo: toText(url.searchParams.get("photo")),
         previousPhoto: toText(url.searchParams.get("previousPhoto")),
+        updated: toText(url.searchParams.get("updated")),
+        created: toText(url.searchParams.get("created")),
       };
       const previewText = toText(url.searchParams.get("text"));
       const png = await buildToolTelegramPreviewPng(source, previewText);
