@@ -13724,6 +13724,39 @@ const server = http.createServer(async (req, res) => {
         ];
       }
       const nextCustodyStatus = parentAssignment.custodyStatus;
+      const previousScheduleAssignedTo = toText(current.scheduleAssignedTo);
+      const nextScheduleAssignedTo = toText(cleaned.scheduleAssignedTo);
+      const previousScheduleDate =
+        normalizeLooseDateToYmd(current.nextMaintenanceDate) || toText(current.nextMaintenanceDate);
+      const nextScheduleDate =
+        normalizeLooseDateToYmd(cleaned.nextMaintenanceDate) || toText(cleaned.nextMaintenanceDate);
+      const previousScheduleTime = toText(current.scheduleTime);
+      const nextScheduleTime = toText(cleaned.scheduleTime);
+      const previousScheduleGroup = toText(current.scheduleGroup);
+      const nextScheduleGroup = toText(cleaned.scheduleGroup);
+      const previousScheduleNote = toText(current.scheduleNote);
+      const nextScheduleNote = toText(cleaned.scheduleNote);
+      const previousRepeatMode = toUpper(current.repeatMode) || "NONE";
+      const nextRepeatMode = toUpper(cleaned.repeatMode) || "NONE";
+      const previousRepeatWeekOfMonth = Number(current.repeatWeekOfMonth || 0);
+      const nextRepeatWeekOfMonth = Number(cleaned.repeatWeekOfMonth || 0);
+      const previousRepeatWeekday = Number(current.repeatWeekday || 0);
+      const nextRepeatWeekday = Number(cleaned.repeatWeekday || 0);
+      const previousRepeatCycleStep = Number(current.repeatCycleStep || 0);
+      const nextRepeatCycleStep = Number(cleaned.repeatCycleStep || 0);
+      const scheduleAssignmentChanged = previousScheduleAssignedTo !== nextScheduleAssignedTo;
+      const scheduleDetailsChanged =
+        previousScheduleDate !== nextScheduleDate ||
+        previousScheduleTime !== nextScheduleTime ||
+        previousScheduleGroup !== nextScheduleGroup ||
+        previousScheduleNote !== nextScheduleNote ||
+        previousRepeatMode !== nextRepeatMode ||
+        previousRepeatWeekOfMonth !== nextRepeatWeekOfMonth ||
+        previousRepeatWeekday !== nextRepeatWeekday ||
+        previousRepeatCycleStep !== nextRepeatCycleStep;
+      const shouldSendScheduleAssignmentAlert =
+        Boolean(nextScheduleAssignedTo) &&
+        (notifyScheduleAssignment || scheduleAssignmentChanged || scheduleDetailsChanged);
       const currentStatus = toText(current.status) || "Active";
       const nextStatus = toText(cleaned.status) || "Active";
       const statusChanged = currentStatus !== nextStatus;
@@ -13793,7 +13826,7 @@ const server = http.createServer(async (req, res) => {
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
       let scheduleAlertTriggered = false;
-      if (notifyScheduleAssignment && toText(db.assets[idx].scheduleAssignedTo)) {
+      if (shouldSendScheduleAssignmentAlert && toText(db.assets[idx].scheduleAssignedTo)) {
         try {
           await sendTelegramScheduleAssignedAlert(db.assets[idx], admin, db);
           scheduleAlertTriggered = true;
