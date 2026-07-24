@@ -1906,6 +1906,10 @@ function isPrinterAsset(asset) {
   return toUpper(asset && asset.type) === "PRN";
 }
 
+function isGeneratorAsset(asset) {
+  return toUpper(asset && asset.type) === "GNR";
+}
+
 function isTonerInventoryItem(item) {
   return toUpper(item && item.itemGroup) === "TONER";
 }
@@ -1923,6 +1927,179 @@ function isInventoryTxnSetType(type) {
 
 function isInventoryUsageOutType(type) {
   return type === "OUT" || type === "BORROW_CONSUME";
+}
+
+function parseGeneratorSpecs(specsRaw) {
+  const specs = toText(specsRaw).trim();
+  if (!specs) {
+    return {
+      power: "",
+      frequency: "",
+      fuelType: "",
+      tankCapacity: "",
+      fuelLevel: "",
+      lowFuelThreshold: "",
+      hourMeter: "",
+      lastRefillDate: "",
+      lastRefillLiters: "",
+      lastServiceHours: "",
+      nextServiceHours: "",
+      hasAts: false,
+      atsSerial: "",
+      specs: "",
+    };
+  }
+  let power = "";
+  let frequency = "";
+  let fuelType = "";
+  let tankCapacity = "";
+  let fuelLevel = "";
+  let lowFuelThreshold = "";
+  let hourMeter = "";
+  let lastRefillDate = "";
+  let lastRefillLiters = "";
+  let lastServiceHours = "";
+  let nextServiceHours = "";
+  let hasAts = false;
+  let atsSerial = "";
+  const visibleLines = [];
+  const sourceLines = specs
+    .replace(/\r\n?/g, "\n")
+    .replace(/[|;]+/g, "\n")
+    .split("\n");
+  for (const sourceLine of sourceLines) {
+    const line = toText(sourceLine).trim();
+    if (!line) {
+      if (visibleLines.length && visibleLines[visibleLines.length - 1] !== "") visibleLines.push("");
+      continue;
+    }
+    let match = line.match(/^Power:\s*(.+)$/i);
+    if (match) {
+      if (!power) power = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Frequency:\s*(.+)$/i);
+    if (match) {
+      if (!frequency) frequency = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Fuel Type:\s*(.+)$/i);
+    if (match) {
+      if (!fuelType) fuelType = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Tank Capacity:\s*(.+)$/i);
+    if (match) {
+      if (!tankCapacity) tankCapacity = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Current Fuel:\s*(.+)$/i);
+    if (match) {
+      if (!fuelLevel) fuelLevel = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Low Fuel Alert:\s*(.+)$/i);
+    if (match) {
+      if (!lowFuelThreshold) lowFuelThreshold = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Hour Meter:\s*(.+)$/i);
+    if (match) {
+      if (!hourMeter) hourMeter = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Last Refill Date:\s*(.+)$/i);
+    if (match) {
+      if (!lastRefillDate) lastRefillDate = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Last Refill Amount:\s*(.+)$/i);
+    if (match) {
+      if (!lastRefillLiters) lastRefillLiters = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Last Service Hours:\s*(.+)$/i);
+    if (match) {
+      if (!lastServiceHours) lastServiceHours = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Next Service Hours:\s*(.+)$/i);
+    if (match) {
+      if (!nextServiceHours) nextServiceHours = toText(match[1]).trim();
+      continue;
+    }
+    match = line.match(/^Included:\s*(.+)$/i);
+    if (match) {
+      if (toText(match[1]).toLowerCase().includes("ats")) hasAts = true;
+      continue;
+    }
+    if (/^Included Components:\s*$/i.test(line)) continue;
+    if (/^ATS$/i.test(line)) {
+      hasAts = true;
+      continue;
+    }
+    match = line.match(/^ATS S\/N:\s*(.+)$/i);
+    if (match) {
+      hasAts = true;
+      if (!atsSerial) atsSerial = toText(match[1]).trim();
+      continue;
+    }
+    visibleLines.push(line);
+  }
+  return {
+    power,
+    frequency,
+    fuelType,
+    tankCapacity,
+    fuelLevel,
+    lowFuelThreshold,
+    hourMeter,
+    lastRefillDate,
+    lastRefillLiters,
+    lastServiceHours,
+    nextServiceHours,
+    hasAts,
+    atsSerial,
+    specs: visibleLines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+  };
+}
+
+function buildGeneratorSpecs(baseSpecs, power, frequency, options = {}) {
+  const normalized = parseGeneratorSpecs(baseSpecs);
+  const out = [];
+  const nextPower = toText(power).trim();
+  const nextFrequency = toText(frequency).trim();
+  const fuelType = options.fuelType !== undefined ? toText(options.fuelType).trim() : normalized.fuelType;
+  const tankCapacity = options.tankCapacity !== undefined ? toText(options.tankCapacity).trim() : normalized.tankCapacity;
+  const fuelLevel = options.fuelLevel !== undefined ? toText(options.fuelLevel).trim() : normalized.fuelLevel;
+  const lowFuelThreshold =
+    options.lowFuelThreshold !== undefined ? toText(options.lowFuelThreshold).trim() : normalized.lowFuelThreshold;
+  const hourMeter = options.hourMeter !== undefined ? toText(options.hourMeter).trim() : normalized.hourMeter;
+  const lastRefillDate =
+    options.lastRefillDate !== undefined ? toText(options.lastRefillDate).trim() : normalized.lastRefillDate;
+  const lastRefillLiters =
+    options.lastRefillLiters !== undefined ? toText(options.lastRefillLiters).trim() : normalized.lastRefillLiters;
+  const lastServiceHours =
+    options.lastServiceHours !== undefined ? toText(options.lastServiceHours).trim() : normalized.lastServiceHours;
+  const nextServiceHours =
+    options.nextServiceHours !== undefined ? toText(options.nextServiceHours).trim() : normalized.nextServiceHours;
+  const hasAts = Object.prototype.hasOwnProperty.call(options, "hasAts") ? Boolean(options.hasAts) : normalized.hasAts;
+  const atsSerial = Object.prototype.hasOwnProperty.call(options, "atsSerial") ? toText(options.atsSerial).trim() : normalized.atsSerial;
+  if (nextPower) out.push(`Power: ${nextPower}`);
+  if (nextFrequency) out.push(`Frequency: ${nextFrequency}`);
+  if (fuelType) out.push(`Fuel Type: ${fuelType}`);
+  if (tankCapacity) out.push(`Tank Capacity: ${tankCapacity}`);
+  if (fuelLevel) out.push(`Current Fuel: ${fuelLevel}`);
+  if (lowFuelThreshold) out.push(`Low Fuel Alert: ${lowFuelThreshold}`);
+  if (hourMeter) out.push(`Hour Meter: ${hourMeter}`);
+  if (lastRefillDate) out.push(`Last Refill Date: ${lastRefillDate}`);
+  if (lastRefillLiters) out.push(`Last Refill Amount: ${lastRefillLiters}`);
+  if (lastServiceHours) out.push(`Last Service Hours: ${lastServiceHours}`);
+  if (nextServiceHours) out.push(`Next Service Hours: ${nextServiceHours}`);
+  if (hasAts) out.push("Included: ATS");
+  if (hasAts && atsSerial) out.push(`ATS S/N: ${atsSerial}`);
+  if (normalized.specs) out.push(normalized.specs);
+  return out.join("\n").trim();
 }
 
 function inventoryCampusGroupCode(campusName) {
@@ -11794,6 +11971,171 @@ const server = http.createServer(async (req, res) => {
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
       sendJson(res, 201, { asset: db.assets[assetIdx], entry, txn });
+      return;
+    }
+
+    const generatorRecordMatch = url.pathname.match(/^\/api\/assets\/(\d+)\/generator-records$/);
+    if (req.method === "POST" && generatorRecordMatch) {
+      const user = getAuthUser(req);
+      if (!user) {
+        sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      if (!canRecordMaintenance(user)) {
+        sendJson(res, 403, { error: "Maintenance record permission required" });
+        return;
+      }
+      const assetDbId = Number(generatorRecordMatch[1]);
+      const body = await parseBody(req);
+      const mode = toText(body.mode).trim().toLowerCase();
+      const by = toText(body.by) || toText(user.displayName) || toText(user.username) || "staff";
+      if (!assetDbId || (mode !== "fuel" && mode !== "usage")) {
+        sendJson(res, 400, { error: "Valid asset ID and mode are required" });
+        return;
+      }
+
+      const db = await readDb();
+      const assetIdx = db.assets.findIndex((row) => Number(row.id) === assetDbId);
+      if (assetIdx === -1) {
+        sendJson(res, 404, { error: "Asset not found" });
+        return;
+      }
+      const asset = db.assets[assetIdx];
+      if (!isGeneratorAsset(asset)) {
+        sendJson(res, 400, { error: "Generator record is only available for generator assets" });
+        return;
+      }
+      if (!userCanAccessCampus(user, toText(asset.campus))) {
+        sendJson(res, 403, { error: "Campus access denied" });
+        return;
+      }
+
+      const generator = parseGeneratorSpecs(asset.specs);
+      let entry = null;
+      let nextSpecs = asset.specs || "";
+
+      if (mode === "fuel") {
+        const date = normalizeLooseDateToYmd(body.date) || toText(body.date);
+        const liters = toText(body.liters).trim();
+        const fuelLevel = toText(body.fuelLevel).trim();
+        const hourMeter = toText(body.hourMeter).trim();
+        const extraNote = toText(body.note).trim();
+        if (!date || !liters) {
+          sendJson(res, 400, { error: "date and liters are required" });
+          return;
+        }
+        const noteLines = [
+          `Refill: ${liters}${/l/i.test(liters) ? "" : " L"}`,
+          fuelLevel ? `Current fuel after refill: ${fuelLevel}` : "",
+          hourMeter ? `Hour meter: ${hourMeter}` : "",
+          extraNote,
+        ].filter(Boolean);
+        entry = {
+          id: Date.now(),
+          date,
+          createdAt: new Date().toISOString(),
+          type: "Generator Fuel Refill",
+          note: noteLines.join("\n"),
+          completion: "Done",
+          condition: "Good",
+          cost: "",
+          by,
+          checkedBy: "",
+          photo: "",
+          photos: [],
+          beforePhotos: [],
+          afterPhotos: [],
+          ticketId: 0,
+          ticketNo: "",
+          requestSource: "qr_asset",
+          requestedBy: "",
+          requestTitle: "Generator fuel refill",
+        };
+        nextSpecs = buildGeneratorSpecs(asset.specs || "", generator.power, generator.frequency, {
+          fuelType: generator.fuelType || "Diesel",
+          tankCapacity: generator.tankCapacity,
+          fuelLevel: fuelLevel || generator.fuelLevel,
+          lowFuelThreshold: generator.lowFuelThreshold,
+          hourMeter: hourMeter || generator.hourMeter,
+          lastRefillDate: date,
+          lastRefillLiters: liters,
+          lastServiceHours: generator.lastServiceHours,
+          nextServiceHours: generator.nextServiceHours,
+          hasAts: generator.hasAts,
+          atsSerial: generator.atsSerial,
+        });
+      } else {
+        const startAt = toText(body.startAt).trim();
+        const stopAt = toText(body.stopAt).trim();
+        const hourMeterStart = toText(body.hourMeterStart).trim();
+        const hourMeterStop = toText(body.hourMeterStop).trim();
+        const extraNote = toText(body.note).trim();
+        const date = normalizeLooseDateToYmd(startAt.slice(0, 10)) || normalizeLooseDateToYmd(startAt);
+        if (!startAt || !stopAt || !date) {
+          sendJson(res, 400, { error: "startAt and stopAt are required" });
+          return;
+        }
+        const noteLines = [
+          `Start: ${startAt.replace("T", " ")}`,
+          `Stop: ${stopAt.replace("T", " ")}`,
+          hourMeterStart ? `Hour meter start: ${hourMeterStart}` : "",
+          hourMeterStop ? `Hour meter stop: ${hourMeterStop}` : "",
+          extraNote,
+        ].filter(Boolean);
+        entry = {
+          id: Date.now(),
+          date,
+          createdAt: new Date().toISOString(),
+          type: "Generator Usage Record",
+          note: noteLines.join("\n"),
+          completion: "Done",
+          condition: "Good",
+          cost: "",
+          by,
+          checkedBy: "",
+          photo: "",
+          photos: [],
+          beforePhotos: [],
+          afterPhotos: [],
+          ticketId: 0,
+          ticketNo: "",
+          requestSource: "qr_asset",
+          requestedBy: "",
+          requestTitle: "Generator usage record",
+        };
+        nextSpecs = buildGeneratorSpecs(asset.specs || "", generator.power, generator.frequency, {
+          fuelType: generator.fuelType || "Diesel",
+          tankCapacity: generator.tankCapacity,
+          fuelLevel: generator.fuelLevel,
+          lowFuelThreshold: generator.lowFuelThreshold,
+          hourMeter: hourMeterStop || generator.hourMeter,
+          lastRefillDate: generator.lastRefillDate,
+          lastRefillLiters: generator.lastRefillLiters,
+          lastServiceHours: generator.lastServiceHours,
+          nextServiceHours: generator.nextServiceHours,
+          hasAts: generator.hasAts,
+          atsSerial: generator.atsSerial,
+        });
+      }
+
+      db.assets[assetIdx] = {
+        ...asset,
+        specs: nextSpecs,
+        maintenanceHistory: Array.isArray(asset.maintenanceHistory)
+          ? [entry, ...asset.maintenanceHistory]
+          : [entry],
+      };
+      appendAuditLog(
+        db,
+        user,
+        "CREATE",
+        "generator_record",
+        `${toText(asset.assetId)}#${entry.id}`,
+        `${entry.type} | ${toText(asset.campus)} | ${toText(asset.location)}`
+      );
+      ensureMaintenanceScheduleNotifications(db);
+      await writeDb(db);
+      sendJson(res, 201, { asset: db.assets[assetIdx], entry });
       return;
     }
 

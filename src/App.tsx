@@ -1212,6 +1212,22 @@ type TonerChangeForm = {
   pageCounter: string;
   photo: string;
 };
+type GeneratorFuelRecordForm = {
+  date: string;
+  liters: string;
+  fuelLevel: string;
+  hourMeter: string;
+  note: string;
+  by: string;
+};
+type GeneratorUsageRecordForm = {
+  startAt: string;
+  stopAt: string;
+  hourMeterStart: string;
+  hourMeterStop: string;
+  note: string;
+  by: string;
+};
 type ItemTemplate = {
   id: number;
   name: string;
@@ -9257,6 +9273,15 @@ function groupedFurnitureTransferMatchKey(asset: Asset) {
   ].join("|");
 }
 
+function toDateTimeLocalValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function normalizeAssetForUi(asset: Asset): Asset {
   const photos = normalizeAssetPhotos(asset);
   const normalizeUrl = (raw: string) => {
@@ -12880,6 +12905,26 @@ export default function App() {
   const [assetDetailTonerFileKey, setAssetDetailTonerFileKey] = useState(0);
   const [assetDetailTonerFormOpen, setAssetDetailTonerFormOpen] = useState(false);
   const [assetDetailTonerAdvancedOpen, setAssetDetailTonerAdvancedOpen] = useState(false);
+  const [assetDetailGeneratorFuelOpen, setAssetDetailGeneratorFuelOpen] = useState(false);
+  const [assetDetailGeneratorUsageOpen, setAssetDetailGeneratorUsageOpen] = useState(false);
+  const [assetDetailGeneratorMessage, setAssetDetailGeneratorMessage] = useState("");
+  const [assetDetailGeneratorError, setAssetDetailGeneratorError] = useState("");
+  const [assetDetailGeneratorFuelForm, setAssetDetailGeneratorFuelForm] = useState<GeneratorFuelRecordForm>({
+    date: toYmd(new Date()),
+    liters: "",
+    fuelLevel: "",
+    hourMeter: "",
+    note: "",
+    by: "",
+  });
+  const [assetDetailGeneratorUsageForm, setAssetDetailGeneratorUsageForm] = useState<GeneratorUsageRecordForm>({
+    startAt: toDateTimeLocalValue(new Date()),
+    stopAt: toDateTimeLocalValue(new Date()),
+    hourMeterStart: "",
+    hourMeterStop: "",
+    note: "",
+    by: "",
+  });
   const [transferForm, setTransferForm] = useState({
     assetId: "",
     date: toYmd(new Date()),
@@ -30421,6 +30466,98 @@ export default function App() {
       setBusy(false);
     }
   }
+  async function saveGeneratorFuelRecordForAsset(asset: Pick<Asset, "id">, form: GeneratorFuelRecordForm) {
+    if (!asset?.id || !form.date || !form.liters.trim()) {
+      const message = "Please enter refill date and fuel amount.";
+      setAssetDetailGeneratorError(message);
+      setError(message);
+      return false;
+    }
+    setBusy(true);
+    setAssetDetailGeneratorError("");
+    setAssetDetailGeneratorMessage("");
+    try {
+      const res = await requestJson<{ asset: Asset }>(`/api/assets/${asset.id}/generator-records`, {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "fuel",
+          date: form.date,
+          liters: form.liters.trim(),
+          fuelLevel: form.fuelLevel.trim(),
+          hourMeter: form.hourMeter.trim(),
+          note: form.note.trim(),
+          by: form.by.trim(),
+        }),
+      });
+      const savedAsset = normalizeAssetForUi(res.asset);
+      setAssets((prev) => prev.map((row) => (row.id === savedAsset.id ? { ...row, ...savedAsset } : row)));
+      setAssetDetailGeneratorFuelForm({
+        date: toYmd(new Date()),
+        liters: "",
+        fuelLevel: parseGeneratorSpecs(savedAsset.specs || "").fuelLevel || "",
+        hourMeter: parseGeneratorSpecs(savedAsset.specs || "").hourMeter || "",
+        note: "",
+        by: authUser?.displayName || authUser?.username || form.by,
+      });
+      setAssetDetailGeneratorFuelOpen(false);
+      setAssetDetailGeneratorMessage("Fuel record saved.");
+      setError("");
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save fuel record";
+      setAssetDetailGeneratorError(message);
+      setError(message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveGeneratorUsageRecordForAsset(asset: Pick<Asset, "id">, form: GeneratorUsageRecordForm) {
+    if (!asset?.id || !form.startAt || !form.stopAt) {
+      const message = "Please enter start and stop date/time.";
+      setAssetDetailGeneratorError(message);
+      setError(message);
+      return false;
+    }
+    setBusy(true);
+    setAssetDetailGeneratorError("");
+    setAssetDetailGeneratorMessage("");
+    try {
+      const res = await requestJson<{ asset: Asset }>(`/api/assets/${asset.id}/generator-records`, {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "usage",
+          startAt: form.startAt,
+          stopAt: form.stopAt,
+          hourMeterStart: form.hourMeterStart.trim(),
+          hourMeterStop: form.hourMeterStop.trim(),
+          note: form.note.trim(),
+          by: form.by.trim(),
+        }),
+      });
+      const savedAsset = normalizeAssetForUi(res.asset);
+      setAssets((prev) => prev.map((row) => (row.id === savedAsset.id ? { ...row, ...savedAsset } : row)));
+      setAssetDetailGeneratorUsageForm({
+        startAt: toDateTimeLocalValue(new Date()),
+        stopAt: toDateTimeLocalValue(new Date()),
+        hourMeterStart: parseGeneratorSpecs(savedAsset.specs || "").hourMeter || "",
+        hourMeterStop: parseGeneratorSpecs(savedAsset.specs || "").hourMeter || "",
+        note: "",
+        by: authUser?.displayName || authUser?.username || form.by,
+      });
+      setAssetDetailGeneratorUsageOpen(false);
+      setAssetDetailGeneratorMessage("Usage record saved.");
+      setError("");
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save usage record";
+      setAssetDetailGeneratorError(message);
+      setError(message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
   async function onAssetDetailTonerPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -37537,6 +37674,15 @@ export default function App() {
     () => (detailAsset && isGeneratorAsset(detailAsset.category, detailAsset.type) ? parseGeneratorSpecs(detailAsset.specs || "") : null),
     [detailAsset]
   );
+  const detailGeneratorRecords = useMemo(
+    () =>
+      detailAsset
+        ? [...(detailAsset.maintenanceHistory || [])].filter(
+            (entry) => entry.type === "Generator Fuel Refill" || entry.type === "Generator Usage Record"
+          )
+        : [],
+    [detailAsset]
+  );
   const detailTabletIncludedSummary = useMemo(() => {
     if (!detailTablet) return "";
     const labels: string[] = [];
@@ -37981,6 +38127,124 @@ export default function App() {
                   <div className="asset-detail-rich-value">{detailAsset.notes || "-"}</div>
                 </div>
               </section>
+
+              {detailGenerator ? (
+                <section className="panel toner-summary-card" style={{ marginTop: 12 }}>
+                  <div className="panel-row toner-summary-head">
+                    <h3 className="section-title" style={{ margin: 0 }}>Generator Quick Record</h3>
+                    <div className="row-actions toner-summary-head-actions">
+                      <span className="tiny toner-summary-record-count">{detailGeneratorRecords.length} generator record(s)</span>
+                    </div>
+                  </div>
+                  <div className="form-grid toner-summary-metrics" style={{ marginBottom: 10 }}>
+                    <div className="field toner-summary-metric-card">
+                      <span>Current Fuel</span>
+                      <div className="detail-value toner-summary-metric-value">{detailGenerator.fuelLevel || "-"}</div>
+                    </div>
+                    <div className="field toner-summary-metric-card">
+                      <span>Hour Meter</span>
+                      <div className="detail-value toner-summary-metric-value">{detailGenerator.hourMeter || "-"}</div>
+                    </div>
+                  </div>
+                  <div className="panel-note toner-summary-note" style={{ marginBottom: 12 }}>
+                    Staff can record generator fuel refill and running period here directly after scanning QR code or opening Asset Detail.
+                  </div>
+                  <div className="row-actions toner-summary-primary-actions" style={{ marginBottom: 10 }}>
+                    <button
+                      type="button"
+                      className="tab btn-small toner-summary-toggle-btn"
+                      onClick={() => {
+                        setAssetDetailGeneratorFuelOpen((prev) => !prev);
+                        if (!assetDetailGeneratorFuelOpen) setAssetDetailGeneratorUsageOpen(false);
+                      }}
+                    >
+                      <Droplets size={16} aria-hidden={true} /> {assetDetailGeneratorFuelOpen ? "Hide Fuel Record" : "Fuel Record"}
+                    </button>
+                    <button
+                      type="button"
+                      className="tab btn-small toner-summary-toggle-btn"
+                      onClick={() => {
+                        setAssetDetailGeneratorUsageOpen((prev) => !prev);
+                        if (!assetDetailGeneratorUsageOpen) setAssetDetailGeneratorFuelOpen(false);
+                      }}
+                    >
+                      <Clock3 size={16} aria-hidden={true} /> {assetDetailGeneratorUsageOpen ? "Hide Usage Record" : "Usage Record"}
+                    </button>
+                  </div>
+                  {assetDetailGeneratorMessage ? <div className="panel-note" style={{ marginBottom: 8 }}>{assetDetailGeneratorMessage}</div> : null}
+                  {assetDetailGeneratorError ? <div className="panel-note" style={{ marginBottom: 8, color: "#b42318" }}>{assetDetailGeneratorError}</div> : null}
+                  {assetDetailGeneratorFuelOpen ? (
+                    <>
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Refill Date</span>
+                          <input className="input" type="date" value={assetDetailGeneratorFuelForm.date} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, date: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Fuel Added</span>
+                          <input className="input" placeholder="ex: 20 L" value={assetDetailGeneratorFuelForm.liters} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, liters: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Fuel After Refill</span>
+                          <input className="input" placeholder="ex: 120 L" value={assetDetailGeneratorFuelForm.fuelLevel} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, fuelLevel: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Hour Meter</span>
+                          <input className="input" placeholder="ex: 845 h" value={assetDetailGeneratorFuelForm.hourMeter} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, hourMeter: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>By</span>
+                          <input className="input" value={assetDetailGeneratorFuelForm.by} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, by: e.target.value }))} />
+                        </label>
+                        <label className="field field-wide">
+                          <span>Note</span>
+                          <textarea className="textarea" placeholder="Optional note for staff." value={assetDetailGeneratorFuelForm.note} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        </label>
+                      </div>
+                      <div className="asset-actions">
+                        <button className="btn-primary" disabled={busy} onClick={() => void saveGeneratorFuelRecordForAsset(detailAsset, assetDetailGeneratorFuelForm)}>
+                          Save Fuel Record
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                  {assetDetailGeneratorUsageOpen ? (
+                    <>
+                      <div className="form-grid">
+                        <label className="field">
+                          <span>Start Date & Time</span>
+                          <input className="input" type="datetime-local" value={assetDetailGeneratorUsageForm.startAt} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, startAt: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Stop Date & Time</span>
+                          <input className="input" type="datetime-local" value={assetDetailGeneratorUsageForm.stopAt} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, stopAt: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Hour Meter Start</span>
+                          <input className="input" placeholder="Optional" value={assetDetailGeneratorUsageForm.hourMeterStart} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, hourMeterStart: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>Hour Meter Stop</span>
+                          <input className="input" placeholder="Optional" value={assetDetailGeneratorUsageForm.hourMeterStop} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, hourMeterStop: e.target.value }))} />
+                        </label>
+                        <label className="field">
+                          <span>By</span>
+                          <input className="input" value={assetDetailGeneratorUsageForm.by} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, by: e.target.value }))} />
+                        </label>
+                        <label className="field field-wide">
+                          <span>Note</span>
+                          <textarea className="textarea" placeholder="Optional note for generator usage." value={assetDetailGeneratorUsageForm.note} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, note: e.target.value }))} />
+                        </label>
+                      </div>
+                      <div className="asset-actions">
+                        <button className="btn-primary" disabled={busy} onClick={() => void saveGeneratorUsageRecordForAsset(detailAsset, assetDetailGeneratorUsageForm)}>
+                          Save Usage Record
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </section>
+              ) : null}
             </div>
             ) : null}
 
@@ -38338,7 +38602,7 @@ export default function App() {
         </div>
       );
     },
-    [assetDetailNeedsFullHistory, assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerAdvancedOpen, assetDetailTonerFileKey, assetDetailTonerForm, assetDetailTonerFormOpen, assetDisplayPhoto, assetItemName, assetStatusLabel, buildTonerAutoNote, busy, calcInventoryCurrentStockFromRows, campusLabel, canAccessMenu, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailSelectedTonerItem, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openFullAssetRecordFromDetail, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems, tonerItemDisplayLabel]
+    [assetDetailGeneratorError, assetDetailGeneratorFuelForm, assetDetailGeneratorFuelOpen, assetDetailGeneratorMessage, detailGeneratorRecords.length, assetDetailGeneratorUsageForm, assetDetailGeneratorUsageOpen, assetDetailNeedsFullHistory, assetDetailSections.showAllMaintenance, assetDetailSections.showAllTransfer, assetDetailSections.showDetails, assetDetailTonerAdvancedOpen, assetDetailTonerFileKey, assetDetailTonerForm, assetDetailTonerFormOpen, assetDisplayPhoto, assetItemName, assetStatusLabel, buildTonerAutoNote, busy, calcInventoryCurrentStockFromRows, campusLabel, canAccessMenu, defaultFurnitureSubtype, deleteStatusHistoryEntryByAsset, detailAsset, detailFurniture, detailGenerator, detailLinkedComponents, detailMaintenanceEntries.length, detailMaintenanceVisibleEntries, detailMovementEntries.length, detailMovementVisibleEntries, detailSelectedTonerItem, detailStatusEntries, detailTonerEntries.length, detailTonerItem, detailTonerStock, detailTonerSummaryRow, formatDate, furnitureModelPhoto, hidesAssignmentHistory, inventoryDisplayName, inventoryVisibleTxns, isAdmin, isFanAsset, isPhoneView, isPrinterAssetRow, isSuperAdmin, maintenanceCompletionText, normalizeAssetPhotos, onAssetDetailTonerPhotoFile, openFullAssetRecordFromDetail, openMaintenancePageFromDetail, openTransferPageFromDetail, parseFanSpecs, renderAssetPhoto, renderMaintenancePhotoGroups, renderPublicHistoryEmpty, renderPublicHistoryMeta, saveGeneratorFuelRecordForAsset, saveGeneratorUsageRecordForAsset, saveTonerChangeForAsset, setAssetDetailId, setAssetDetailSections, setAssetDetailTonerFileKey, setAssetDetailTonerForm, setInventoryView, setTab, showsIncludedComponentCards, t, tonerInventoryItems, tonerItemDisplayLabel]
   );
   useEffect(() => {
     if (!assetDetailId) return;
@@ -38358,6 +38622,8 @@ export default function App() {
     if (!actor) return;
     setTonerPurchaseForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
     setAssetDetailTonerForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
+    setAssetDetailGeneratorFuelForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
+    setAssetDetailGeneratorUsageForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
     setPublicQrTonerForm((prev) => (prev.by.trim() ? prev : { ...prev, by: actor }));
   }, [authUser?.displayName, authUser?.username]);
   useEffect(() => {
@@ -38372,6 +38638,30 @@ export default function App() {
     setAssetDetailTonerFormOpen(false);
     setAssetDetailTonerAdvancedOpen(false);
   }, [detailAsset, detailTonerItem, tonerInventoryItems]);
+  useEffect(() => {
+    if (!detailAsset || !detailGenerator) return;
+    const actor = authUser?.displayName || authUser?.username || "";
+    setAssetDetailGeneratorFuelForm({
+      date: toYmd(new Date()),
+      liters: "",
+      fuelLevel: detailGenerator.fuelLevel || "",
+      hourMeter: detailGenerator.hourMeter || "",
+      note: "",
+      by: actor,
+    });
+    setAssetDetailGeneratorUsageForm({
+      startAt: toDateTimeLocalValue(new Date()),
+      stopAt: toDateTimeLocalValue(new Date()),
+      hourMeterStart: detailGenerator.hourMeter || "",
+      hourMeterStop: detailGenerator.hourMeter || "",
+      note: "",
+      by: actor,
+    });
+    setAssetDetailGeneratorFuelOpen(false);
+    setAssetDetailGeneratorUsageOpen(false);
+    setAssetDetailGeneratorMessage("");
+    setAssetDetailGeneratorError("");
+  }, [authUser?.displayName, authUser?.username, detailAsset, detailGenerator]);
   const editingAsset = useMemo(
     () => assets.find((a) => a.id === editingAssetId) || null,
     [assets, editingAssetId]
