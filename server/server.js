@@ -13640,6 +13640,7 @@ const server = http.createServer(async (req, res) => {
 
       const body = await parseBody(req);
       const notifyScheduleAssignment = Boolean(body && body.notifyScheduleAssignment);
+      const preventDuplicateSchedule = Boolean(body && body.preventDuplicateSchedule);
       const current = db.assets[idx];
       const cleaned = validateAsset({
         ...current,
@@ -13744,6 +13745,26 @@ const server = http.createServer(async (req, res) => {
       const nextRepeatWeekday = Number(cleaned.repeatWeekday || 0);
       const previousRepeatCycleStep = Number(current.repeatCycleStep || 0);
       const nextRepeatCycleStep = Number(cleaned.repeatCycleStep || 0);
+      const hasNextSchedule = Boolean(nextScheduleDate) || nextRepeatMode !== "NONE";
+      const sameRecurringPattern =
+        nextRepeatMode === "MONTHLY_WEEKDAY"
+          ? previousRepeatMode === nextRepeatMode &&
+            previousRepeatWeekOfMonth === nextRepeatWeekOfMonth &&
+            previousRepeatWeekday === nextRepeatWeekday
+          : previousRepeatMode === nextRepeatMode &&
+            previousScheduleDate === nextScheduleDate &&
+            (nextRepeatMode !== "WDP_FILTER_CYCLE" || previousRepeatCycleStep === nextRepeatCycleStep);
+      if (
+        preventDuplicateSchedule &&
+        hasNextSchedule &&
+        previousScheduleGroup === nextScheduleGroup &&
+        sameRecurringPattern
+      ) {
+        sendJson(res, 409, {
+          error: `Schedule already exists for ${toText(current.assetId) || `asset ${id}`} with the same date and action.`,
+        });
+        return;
+      }
       const scheduleAssignmentChanged = previousScheduleAssignedTo !== nextScheduleAssignedTo;
       const scheduleDetailsChanged =
         previousScheduleDate !== nextScheduleDate ||

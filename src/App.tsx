@@ -34438,6 +34438,11 @@ export default function App() {
     }
     const assetId = Number(scheduleQuickForm.assetId);
     if (!assetId) return;
+    const duplicateAsset = assets.find((asset) => asset.id === assetId) || null;
+    if (duplicateAsset && quickScheduleDuplicateMatcher(duplicateAsset)) {
+      setError("This asset already has the same schedule for this date and action. Please choose another asset or edit the existing schedule.");
+      return;
+    }
 
     const payload = {
       nextMaintenanceDate: normalizedDate,
@@ -34471,7 +34476,11 @@ export default function App() {
       try {
         await requestJson<{ asset: Asset }>(`/api/assets/${assetId}`, {
           method: "PATCH",
-          body: JSON.stringify({ ...payload, notifyScheduleAssignment: Boolean(payload.scheduleAssignedTo) }),
+          body: JSON.stringify({
+            ...payload,
+            notifyScheduleAssignment: Boolean(payload.scheduleAssignedTo),
+            preventDuplicateSchedule: true,
+          }),
         });
       } catch (err) {
         if (!isApiUnavailableError(err)) throw err;
@@ -39390,6 +39399,54 @@ export default function App() {
     scheduleQuickFilterCategory,
     assetItemName,
   ]);
+  const quickScheduleDuplicateMatcher = useCallback(
+    (
+      asset: Asset,
+      draft?: Partial<{
+        date: string;
+        group: string;
+        repeatMode: NonNullable<Asset["repeatMode"]>;
+        repeatWeekOfMonth: number;
+        repeatWeekday: number;
+        repeatCycleStep: number;
+      }>
+    ) => {
+      const repeatMode = String(draft?.repeatMode || scheduleQuickForm.repeatMode || "NONE").trim().toUpperCase();
+      const assetRepeatMode = String(asset.repeatMode || "NONE").trim().toUpperCase();
+      const draftGroup =
+        String(draft?.group || "").trim() ||
+        String(scheduleQuickForm.group || "").trim() ||
+        inferScheduleGroupValue(asset);
+      const assetGroup = String(asset.scheduleGroup || "").trim() || inferScheduleGroupValue(asset);
+
+      if (!draftGroup || draftGroup !== assetGroup || repeatMode !== assetRepeatMode) {
+        return false;
+      }
+
+      if (repeatMode === "MONTHLY_WEEKDAY") {
+        return (
+          Number(draft?.repeatWeekOfMonth ?? scheduleQuickForm.repeatWeekOfMonth) ===
+            Number(asset.repeatWeekOfMonth || 0) &&
+          Number(draft?.repeatWeekday ?? scheduleQuickForm.repeatWeekday) ===
+            Number(asset.repeatWeekday || 0)
+        );
+      }
+
+      const draftDate = normalizeYmdInput(String(draft?.date || scheduleQuickForm.date || ""));
+      const assetDate = normalizeYmdInput(String(asset.nextMaintenanceDate || ""));
+      if (!draftDate || draftDate !== assetDate) return false;
+
+      if (repeatMode === "WDP_FILTER_CYCLE") {
+        return (
+          Number((draft?.repeatCycleStep ?? scheduleQuickForm.repeatCycleStep) || 1) ===
+          Number(asset.repeatCycleStep || 0)
+        );
+      }
+
+      return true;
+    },
+    [inferScheduleGroupValue, scheduleQuickForm]
+  );
   const scheduleQuickFilteredAssets = useMemo(() => {
     let list = scheduleSelectAssets;
     if (scheduleQuickFilterCampus !== "ALL") {
@@ -39404,7 +39461,7 @@ export default function App() {
     if (scheduleQuickFilterName !== "ALL") {
       list = list.filter((a) => assetItemName(a.category, a.type, a.pcType || "") === scheduleQuickFilterName);
     }
-    return list;
+    return list.filter((asset) => !quickScheduleDuplicateMatcher(asset));
   }, [
     scheduleSelectAssets,
     scheduleQuickFilterCampus,
@@ -39412,6 +39469,31 @@ export default function App() {
     scheduleQuickFilterCategory,
     scheduleQuickFilterName,
     assetItemName,
+    quickScheduleDuplicateMatcher,
+  ]);
+  const scheduleQuickDuplicateHiddenCount = useMemo(() => {
+    let list = scheduleSelectAssets;
+    if (scheduleQuickFilterCampus !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleQuickFilterCampus);
+    }
+    if (scheduleQuickFilterLocation !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === scheduleQuickFilterLocation);
+    }
+    if (scheduleQuickFilterCategory !== "ALL") {
+      list = list.filter((a) => a.category === scheduleQuickFilterCategory);
+    }
+    if (scheduleQuickFilterName !== "ALL") {
+      list = list.filter((a) => assetItemName(a.category, a.type, a.pcType || "") === scheduleQuickFilterName);
+    }
+    return list.filter((asset) => quickScheduleDuplicateMatcher(asset)).length;
+  }, [
+    scheduleSelectAssets,
+    scheduleQuickFilterCampus,
+    scheduleQuickFilterLocation,
+    scheduleQuickFilterCategory,
+    scheduleQuickFilterName,
+    assetItemName,
+    quickScheduleDuplicateMatcher,
   ]);
   const allMaintenanceRows = useMemo(() => {
     const rows: Array<{
@@ -81196,6 +81278,13 @@ function formatTicketRequestSource(value?: string) {
                       ? "មិនមាន assets ត្រូវតាមតម្រងបច្ចុប្បន្ន។"
                       : "No assets match current filters."}
                   </div>
+                  {scheduleQuickDuplicateHiddenCount ? (
+                    <div className="tiny">
+                      {lang === "km"
+                        ? `បានលាក់ ${scheduleQuickDuplicateHiddenCount} asset ព្រោះបានកំណត់កាលវិភាគដូចគ្នារួចហើយ`
+                        : `${scheduleQuickDuplicateHiddenCount} asset(s) hidden because they already have the same date and action.`}
+                    </div>
+                  ) : null}
                 </label>
                 <label className="field field-wide">
                   <span>{lang === "km" ? "ព័ត៌មាន Asset ដែលបានជ្រើស" : "Selected Asset Details"}</span>
