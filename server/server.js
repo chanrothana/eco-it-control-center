@@ -5956,6 +5956,69 @@ async function sendTelegramInventoryItemCreatedAlert(item, actor = null, db = nu
   );
 }
 
+async function sendTelegramInventoryItemUpdatedAlert(previousItem, nextItem, actor = null, db = null) {
+  if (!nextItem || typeof nextItem !== "object") return false;
+  if (!isInventoryToolCategoryForTelegram(nextItem.category)) return false;
+  const campus = formatTelegramCampusKhmer(nextItem.campus);
+  const recordedBy = toText(actor && actor.displayName) || toText(actor && actor.username) || "staff";
+  const changed = [];
+  if (previousItem) {
+    if (toText(previousItem.itemName) !== toText(nextItem.itemName)) changed.push(`ឈ្មោះ: ${toText(previousItem.itemName) || "-"} -> ${toText(nextItem.itemName) || "-"}`);
+    if (toText(previousItem.location) !== toText(nextItem.location)) changed.push(`ទីតាំង: ${toText(previousItem.location) || "-"} -> ${toText(nextItem.location) || "-"}`);
+    if (toText(previousItem.campus) !== toText(nextItem.campus)) changed.push(`សាខា: ${formatTelegramCampusKhmer(previousItem.campus)} -> ${campus}`);
+    if (Number(previousItem.minStock || 0) !== Number(nextItem.minStock || 0)) changed.push(`Min Stock: ${Number(previousItem.minStock || 0)} -> ${Number(nextItem.minStock || 0)}`);
+    if (Number(previousItem.openingQty || 0) !== Number(nextItem.openingQty || 0)) changed.push(`Opening Qty: ${Number(previousItem.openingQty || 0)} -> ${Number(nextItem.openingQty || 0)}`);
+    if (toText(previousItem.responsibleParty) !== toText(nextItem.responsibleParty)) changed.push(`Responsible: ${toText(previousItem.responsibleParty) || "-"} -> ${toText(nextItem.responsibleParty) || "-"}`);
+    if (toText(previousItem.notes) !== toText(nextItem.notes)) changed.push(`ចំណាំ: ${toText(nextItem.notes) || "-"}`);
+  }
+  const lines = [
+    "ជូនដំណឹង ECO IT - ឧបករណ៍",
+    "កែប្រែព័ត៌មានឧបករណ៍ (Tool Item Updated)",
+    `មុខទំនិញ: ${toText(nextItem.itemCode) || "-"} - ${toText(nextItem.itemName) || "-"}`,
+    `សាខា: ${campus} | ទីតាំង: ${toText(nextItem.location) || "-"}`,
+    `ឯកតា: ${toText(nextItem.unit) || "pcs"} | ចំនួនដើម: ${Math.max(0, Number(nextItem.openingQty || 0))}`,
+    `កត់ត្រាដោយ: ${recordedBy}`,
+  ];
+  if (changed.length) {
+    lines.push(`បានផ្លាស់ប្តូរ: ${changed.join(" | ")}`);
+  }
+  return sendToolReviewTelegramMessageWithPhotos(
+    lines.join("\n"),
+    {
+      ...nextItem,
+      photo: toText(nextItem.photo),
+      previousPhoto: toText(previousItem && previousItem.photo),
+    },
+    db
+  );
+}
+
+async function sendTelegramInventoryItemDeletedAlert(item, actor = null, db = null) {
+  if (!item || typeof item !== "object") return false;
+  if (!isInventoryToolCategoryForTelegram(item.category)) return false;
+  const campus = formatTelegramCampusKhmer(item.campus);
+  const recordedBy = toText(actor && actor.displayName) || toText(actor && actor.username) || "staff";
+  const lines = [
+    "ជូនដំណឹង ECO IT - ឧបករណ៍",
+    "លុបឧបករណ៍ (Tool Item Deleted)",
+    `មុខទំនិញ: ${toText(item.itemCode) || "-"} - ${toText(item.itemName) || "-"}`,
+    `សាខា: ${campus} | ទីតាំង: ${toText(item.location) || "-"}`,
+    `ឯកតា: ${toText(item.unit) || "pcs"} | ចំនួនដើម: ${Math.max(0, Number(item.openingQty || 0))}`,
+    `កត់ត្រាដោយ: ${recordedBy}`,
+  ];
+  if (toText(item.responsibleParty)) lines.push(`Responsible: ${toText(item.responsibleParty)}`);
+  if (toText(item.notes)) lines.push(`ចំណាំ: ${toText(item.notes)}`);
+  return sendToolReviewTelegramMessageWithPhotos(
+    lines.join("\n"),
+    {
+      ...item,
+      photo: toText(item.photo),
+      previousPhoto: "",
+    },
+    db
+  );
+}
+
 function buildMaintenanceRecordTelegramMessage(asset, entry, actor = null, options = {}) {
   if (!asset || !entry) return "";
   const mode = toText(options.mode) || "general";
@@ -11179,6 +11242,11 @@ const server = http.createServer(async (req, res) => {
       setInventoryState(db, settings, nextItems, txns);
       appendAuditLog(db, admin, "UPDATE", "inventory_item", updated.itemCode, `${updated.campus} | ${updated.itemName}`);
       await writeDb(db);
+      if (isInventoryToolCategoryForTelegram(updated.category)) {
+        void sendTelegramInventoryItemUpdatedAlert(current, updated, admin, db).catch((err) => {
+          console.warn("[ALERT] Failed to send tool update Telegram alert:", err instanceof Error ? err.message : err);
+        });
+      }
       sendJson(res, 200, { item: updated });
       return;
     }
@@ -11206,6 +11274,11 @@ const server = http.createServer(async (req, res) => {
       setInventoryState(db, settings, nextItems, txns);
       appendAuditLog(db, admin, "DELETE", "inventory_item", toText(current.itemCode), `${toText(current.campus)} | ${toText(current.itemName)}`);
       await writeDb(db);
+      if (isInventoryToolCategoryForTelegram(current.category)) {
+        void sendTelegramInventoryItemDeletedAlert(current, admin, db).catch((err) => {
+          console.warn("[ALERT] Failed to send tool delete Telegram alert:", err instanceof Error ? err.message : err);
+        });
+      }
       sendJson(res, 200, { ok: true });
       return;
     }

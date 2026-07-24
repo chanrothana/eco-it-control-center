@@ -42890,9 +42890,15 @@ export default function App() {
       photo: string;
       notes: string;
     }>;
+    const assetsById = new Map<string, Asset>();
+    for (const asset of assets) {
+      const assetId = String(asset.assetId || "").trim();
+      if (assetId) assetsById.set(assetId, asset);
+    }
     return assets
       .filter((asset) => asset.campus === classroomDetailRoom.campus && asset.location === classroomDetailRoom.location)
       .filter((asset) => String(asset.type || "").trim().toUpperCase() !== "RMT")
+      .filter((asset) => !isLegacyBundledComponentAsset(asset, assetsById.get(String(asset.parentAssetId || "").trim()) || null))
       .map((asset) => {
         const furnitureDetails = parseFurnitureSpecs(asset.specs || "");
         const isFurniture = isFurnitureAsset(asset.category);
@@ -46793,7 +46799,13 @@ export default function App() {
         ? "Maintenance Report for ED"
         : reportType === "schedule_calendar"
           ? (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar")
-        : title;
+          : reportType === "inventory_balance" && reportInventoryIsToolGroup
+            ? `${(
+                reportInventoryGroupFilter !== "ALL" && reportInventoryGroupFilterLabel
+                  ? reportInventoryGroupFilterLabel
+                  : (lang === "km" ? "សមតុល្យឧបករណ៍ស្តុក" : "Inventory Tool Balance")
+              )} Report\n${reportInventoryCampusFilterLabel || "All Campuses"}`
+            : title;
     const reportHeadingTitleHtml =
       reportType === "inventory_balance" && reportInventoryViewMode === "campus_compare"
         ? escapeHtml(reportHeadingTitle).replace(" Campus Comparison Report", "<br />Campus Comparison Report")
@@ -47737,6 +47749,7 @@ export default function App() {
             margin: 0 auto;
             padding-right: 0;
             box-sizing: border-box;
+            text-align: center;
           }
           .report-head-logo {
             position: absolute;
