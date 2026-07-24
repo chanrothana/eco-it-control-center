@@ -25929,6 +25929,10 @@ tr.row-maint-maintenance:hover td {
   padding: 14px 12px;
   background: linear-gradient(180deg, rgba(238, 244, 252, 0.98), rgba(224, 234, 247, 0.96));
   border-bottom: 1px solid rgba(168, 186, 214, 0.38);
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
 }
 
 .report-table-wrap-inventory tbody td {

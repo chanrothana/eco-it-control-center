@@ -4542,9 +4542,24 @@ function resolveTelegramPhotoUrl(photoPath) {
 }
 
 function resolveUploadedAbsolutePath(rawPath) {
-  const raw = toText(rawPath);
-  if (!raw || !raw.startsWith("/uploads/")) return "";
-  const uploadRelative = raw.replace(/^\/uploads\//, "");
+  const raw = toText(rawPath).trim();
+  if (!raw) return "";
+  let normalizedUploadPath = "";
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      normalizedUploadPath = toText(parsed.pathname);
+    } catch {
+      normalizedUploadPath = "";
+    }
+  } else {
+    normalizedUploadPath = raw;
+  }
+  if (normalizedUploadPath.startsWith("uploads/")) {
+    normalizedUploadPath = `/${normalizedUploadPath}`;
+  }
+  if (!normalizedUploadPath.startsWith("/uploads/")) return "";
+  const uploadRelative = normalizedUploadPath.replace(/^\/uploads\//, "");
   const safeUploadRelative = path
     .normalize(uploadRelative)
     .replace(/^(\.\.[/\\])+/, "");
@@ -6232,6 +6247,7 @@ async function sendTelegramToolReviewAlert(reportEntry, db = null) {
   if (note) {
     lines.push(`មូលហេតុ: ${note}`);
   }
+  lines.push(`បានពិនិត្យចំនួន: ${countedQty}/${expectedQty} ${unit}`);
   return sendToolReviewTelegramMessageWithPhotos(
     lines.join("\n"),
     {

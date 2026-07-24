@@ -9335,9 +9335,22 @@ type AssetPickerProps = {
   placeholder?: string;
   disabled?: boolean;
   getLabel: (asset: Asset) => string;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  searchRequiredThreshold?: number;
 };
 
-function AssetPicker({ value, assets, onChange, placeholder = "Select asset", disabled, getLabel }: AssetPickerProps) {
+function AssetPicker({
+  value,
+  assets,
+  onChange,
+  placeholder = "Select asset",
+  disabled,
+  getLabel,
+  searchPlaceholder = "Search by ID or name...",
+  emptyText = "No assets found.",
+  searchRequiredThreshold = 120,
+}: AssetPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -9384,6 +9397,7 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
         .includes(q);
     });
   }, [assets, deferredSearch, getLabel]);
+  const shouldRequireSearchFirst = !deferredSearch.trim() && assets.length >= searchRequiredThreshold;
 
   const selectAsset = useCallback(
     (assetId: string) => {
@@ -9420,12 +9434,16 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
         <div className="asset-picker-menu">
           <input
             className="input asset-picker-search"
-            placeholder="Search by ID or name..."
+            placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <div className="asset-picker-list">
-            {filtered.length ? (
+            {shouldRequireSearchFirst ? (
+              <div className="asset-picker-empty">
+                {`Too many assets (${assets.length}). Type to search first.`}
+              </div>
+            ) : filtered.length ? (
               filtered.map((asset) => (
                 <button
                   type="button"
@@ -9443,7 +9461,7 @@ function AssetPicker({ value, assets, onChange, placeholder = "Select asset", di
                 </button>
               ))
             ) : (
-              <div className="asset-picker-empty">No assets found.</div>
+              <div className="asset-picker-empty">{emptyText}</div>
             )}
           </div>
         </div>
@@ -44291,6 +44309,48 @@ export default function App() {
     () => inventoryReportColumnDefs.filter((column) => inventoryReportVisibleColumns.includes(column.key)),
     [inventoryReportColumnDefs, inventoryReportVisibleColumns]
   );
+  const visibleInventoryReportColumnWidths = useMemo(() => {
+    const widthMap: Record<InventoryReportColumnKey, number> = reportInventoryIsToolGroup
+      ? {
+          code: 14,
+          photo: 9,
+          name: 24,
+          category: 12,
+          campus: 12,
+          location: 20,
+          owner: 9,
+          responsible: 12,
+          unit: 7,
+          amount: 8,
+          checkStatus: 18,
+          stockIn: 6,
+          stockOut: 6,
+          current: 8,
+          min: 6,
+          alert: 8,
+        }
+      : {
+          code: 11,
+          photo: 8,
+          name: 17,
+          category: 11,
+          campus: 12,
+          location: 14,
+          owner: 9,
+          responsible: 12,
+          unit: 6,
+          amount: 7,
+          checkStatus: 12,
+          stockIn: 7,
+          stockOut: 7,
+          current: 7,
+          min: 6,
+          alert: 8,
+        };
+    const weights = visibleInventoryReportColumnDefs.map((column) => widthMap[column.key] || 8);
+    const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+    return weights.map((value) => (value / total) * 100);
+  }, [reportInventoryIsToolGroup, visibleInventoryReportColumnDefs]);
   const updateInventoryReportColumnSelection = useCallback((column: InventoryReportColumnKey) => {
     setInventoryReportVisibleColumns((prev) => {
       const exists = prev.includes(column);
@@ -48028,14 +48088,14 @@ export default function App() {
             justify-items: center;
             text-align: center;
             align-items: start;
-            margin-bottom: 12px;
-            min-height: 138px;
-            padding: 18px 228px 0 0;
+            margin-bottom: 16px;
+            min-height: 156px;
+            padding: 26px 220px 0 220px;
             overflow: visible;
           }
           .report-head-left {
             width: 100%;
-            max-width: 1100px;
+            max-width: none;
             margin: 0 auto;
             padding-right: 0;
             box-sizing: border-box;
@@ -48043,8 +48103,8 @@ export default function App() {
           }
           .report-head-logo {
             position: absolute;
-            right: 8px;
-            top: 2px;
+            right: 10px;
+            top: 8px;
             transform: none;
             width: 190px;
             max-width: 24vw;
@@ -48056,21 +48116,23 @@ export default function App() {
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: #5a705f;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
+            line-height: 1.25;
           }
           .report-head h2 {
             font-size: 28px;
             font-weight: 800;
             color: #1f2e26;
-            line-height: 1.12;
+            line-height: 1.2;
+            max-width: 100%;
           }
           .report-head-subtitle {
-            margin-top: 6px;
+            margin-top: 10px;
             font-size: 16px;
             font-weight: 700;
             letter-spacing: 0.02em;
             color: #5c695f;
-            line-height: 1.2;
+            line-height: 1.35;
           }
           .report-head.report-head-centered {
             margin-bottom: 12px;
@@ -74236,6 +74298,11 @@ function formatTicketRequestSource(value?: string) {
                               </div>
                               <div className="table-wrap report-table-wrap report-table-wrap-inventory report-table-wrap-inventory-page">
                                 <table>
+                                  <colgroup>
+                                    {visibleInventoryReportColumnWidths.map((width, index) => (
+                                      <col key={`report-inventory-page-col-width-${page.key}-${section.key}-${index}`} style={{ width: `${width}%` }} />
+                                    ))}
+                                  </colgroup>
                                   <thead>
                                     <tr>
                                       {visibleInventoryReportColumnDefs.map((column) => (
@@ -74292,6 +74359,11 @@ function formatTicketRequestSource(value?: string) {
               ) : (
                 <div className="table-wrap report-table-wrap report-table-wrap-inventory" style={{ marginTop: 12 }}>
                   <table>
+                    <colgroup>
+                      {visibleInventoryReportColumnWidths.map((width, index) => (
+                        <col key={`report-inventory-col-width-${index}`} style={{ width: `${width}%` }} />
+                      ))}
+                    </colgroup>
                     <thead>
                       <tr>
                         {visibleInventoryReportColumnDefs.map((column) => (
