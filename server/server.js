@@ -4766,6 +4766,7 @@ async function renderTelegramWhiteCompareCardPng({
   const sharpLib = getSharp();
   if (!sharpLib) return null;
   const normalizedLines = Array.isArray(textLines) ? textLines.filter(Boolean) : [];
+  const hasTextPanel = normalizedLines.length > 0;
   const headerLineHeight = 30;
   const bodyLineHeight = 30;
   const textStartY = 428;
@@ -4773,7 +4774,7 @@ async function renderTelegramWhiteCompareCardPng({
   normalizedLines.forEach((_, index) => {
     currentY += index < 2 ? headerLineHeight : bodyLineHeight;
   });
-  const totalHeight = Math.max(820, currentY + 40);
+  const totalHeight = hasTextPanel ? Math.max(820, currentY + 40) : 388;
   const iconGradientId = iconColor === "green" ? "compareIconGreen" : "compareIconBlue";
   const iconStops =
     iconColor === "green"
@@ -4798,15 +4799,23 @@ async function renderTelegramWhiteCompareCardPng({
   <rect x="18" y="18" width="724" height="${totalHeight - 36}" rx="28" ry="28" fill="#f7efdf" stroke="#d9cfbf" stroke-width="1.5"/>
   <rect x="24" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
   <rect x="388" y="48" width="348" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
-  <rect x="24" y="390" width="712" height="${Math.max(180, totalHeight - 414)}" rx="24" ry="24" fill="#ffffff" stroke="#d7c7b4" stroke-width="1.5"/>
+  ${
+    hasTextPanel
+      ? `<rect x="24" y="390" width="712" height="${Math.max(180, totalHeight - 414)}" rx="24" ry="24" fill="#ffffff" stroke="#d7c7b4" stroke-width="1.5"/>`
+      : ""
+  }
   <rect x="42" y="66" width="300" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
   <rect x="418" y="66" width="300" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
-  <rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
+  ${
+    hasTextPanel
+      ? `<rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="82" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="124" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="40" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="82" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
-  <rect x="124" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="124" y="446" width="34" height="34" fill="url(#${iconGradientId})" />`
+      : ""
+  }
 </svg>`;
   const composites = [
     {
@@ -4966,36 +4975,38 @@ async function renderTelegramWhiteCompareCardPng({
       }
     );
   }
-  let textY = textStartY;
-  normalizedLines.forEach((line, index) => {
-    let fontSize = 21;
-    let weight = "normal";
-    let underline = false;
-    if (index < 2) {
-      fontSize = 24;
-      weight = "bold";
-    } else if (/^Asset:/i.test(line) || /^ការងារទូទៅ:/i.test(line)) {
-      fontSize = 22;
-      weight = "bold";
-      underline = true;
-    } else if (/^(សាខា:|ទីតាំង:|កាលបរិច្ឆេទ|ប្រភេទការងារ:|អ្នកអនុវត្ត:|ការងារដែលបានធ្វើ:|ចំណាំបន្ថែម:|ពិនិត្យដោយ:|តម្លៃ:|Ticket:|Task)/.test(line)) {
-      fontSize = 20;
-      weight = "bold";
-    }
-    composites.push(
-      buildTelegramTextComposite(line, {
-        left: 164,
-        top: textY,
-        width: 540,
-        fontSize,
-        color: "#1a1a1a",
-        align: "left",
-        weight,
-        underline,
-      })
-    );
-    textY += index < 2 ? headerLineHeight : bodyLineHeight;
-  });
+  if (hasTextPanel) {
+    let textY = textStartY;
+    normalizedLines.forEach((line, index) => {
+      let fontSize = 21;
+      let weight = "normal";
+      let underline = false;
+      if (index < 2) {
+        fontSize = 24;
+        weight = "bold";
+      } else if (/^Asset:/i.test(line) || /^ការងារទូទៅ:/i.test(line)) {
+        fontSize = 22;
+        weight = "bold";
+        underline = true;
+      } else if (/^(សាខា:|ទីតាំង:|កាលបរិច្ឆេទ|ប្រភេទការងារ:|អ្នកអនុវត្ត:|ការងារដែលបានធ្វើ:|ចំណាំបន្ថែម:|ពិនិត្យដោយ:|តម្លៃ:|Ticket:|Task)/.test(line)) {
+        fontSize = 20;
+        weight = "bold";
+      }
+      composites.push(
+        buildTelegramTextComposite(line, {
+          left: 164,
+          top: textY,
+          width: 540,
+          fontSize,
+          color: "#1a1a1a",
+          align: "left",
+          weight,
+          underline,
+        })
+      );
+      textY += index < 2 ? headerLineHeight : bodyLineHeight;
+    });
+  }
   try {
     return await sharpLib({
       create: {
@@ -5017,10 +5028,13 @@ async function renderTelegramWhiteSinglePhotoCardPng({
   photoPath = "",
   textLines = [],
   iconColor = "blue",
+  topLabel = "",
+  stampText = "",
 } = {}) {
   const sharpLib = getSharp();
   if (!sharpLib) return null;
   const normalizedLines = Array.isArray(textLines) ? textLines.filter(Boolean) : [];
+  const hasTextPanel = normalizedLines.length > 0;
   const headerLineHeight = 30;
   const bodyLineHeight = 32;
   const textStartY = 410;
@@ -5028,7 +5042,7 @@ async function renderTelegramWhiteSinglePhotoCardPng({
   normalizedLines.forEach((_, index) => {
     currentY += index < 2 ? headerLineHeight : bodyLineHeight;
   });
-  const totalHeight = Math.max(760, currentY + 44);
+  const totalHeight = hasTextPanel ? Math.max(760, currentY + 44) : 388;
   const iconGradientId = iconColor === "green" ? "singleIconGreen" : "singleIconBlue";
   const iconStops =
     iconColor === "green"
@@ -5040,17 +5054,31 @@ async function renderTelegramWhiteSinglePhotoCardPng({
     <linearGradient id="${iconGradientId}" x1="0%" y1="0%" x2="0%" y2="100%">
       ${iconStops}
     </linearGradient>
+    <linearGradient id="singlePhotoLabel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3e8cff" />
+      <stop offset="100%" stop-color="#1d5fdd" />
+    </linearGradient>
   </defs>
   <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#fbf8f1" stroke="#d9cfbf" stroke-width="2"/>
   <rect x="18" y="18" width="724" height="${totalHeight - 36}" rx="28" ry="28" fill="#f7efdf" stroke="#d9cfbf" stroke-width="1.5"/>
   <rect x="24" y="48" width="712" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
   <rect x="42" y="66" width="676" height="276" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
-  <rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
+  ${
+    hasTextPanel
+      ? `<rect x="40" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="82" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="124" y="404" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="40" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
   <rect x="82" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
-  <rect x="124" y="446" width="34" height="34" fill="url(#${iconGradientId})" />
+  <rect x="124" y="446" width="34" height="34" fill="url(#${iconGradientId})" />`
+      : ""
+  }
+  ${
+    hasTextPanel
+      ? ""
+      : `<rect x="42" y="66" width="240" height="44" rx="12" ry="12" fill="rgba(20,33,48,0.34)" />
+  <rect x="54" y="74" width="124" height="28" rx="12" ry="12" fill="url(#singlePhotoLabel)" />`
+  }
 </svg>`;
   const composites = [
     {
@@ -5075,36 +5103,93 @@ async function renderTelegramWhiteSinglePhotoCardPng({
       })
     );
   }
-  let textY = textStartY;
-  normalizedLines.forEach((line, index) => {
-    let fontSize = 21;
-    let weight = "normal";
-    let underline = false;
-    if (index < 2) {
-      fontSize = 24;
-      weight = "bold";
-    } else if (/^Asset:/i.test(line) || /^ការងារទូទៅ:/i.test(line)) {
-      fontSize = 22;
-      weight = "bold";
-      underline = true;
-    } else if (/^(សាខា:|ទីតាំង:|កាលបរិច្ឆេទ|ប្រភេទការងារ:|អ្នកអនុវត្ត:|ការងារដែលបានធ្វើ:|ចំណាំបន្ថែម:|ពិនិត្យដោយ:|តម្លៃ:|Ticket:|Task)/.test(line)) {
-      fontSize = 20;
-      weight = "bold";
+  if (!hasTextPanel) {
+    const normalizedTopLabel = toText(topLabel).trim() || "Photo";
+    const normalizedStamp = toText(stampText).trim();
+    const buildOverlayTextSvg = ({
+      width,
+      height,
+      text,
+      fontSize,
+      color = "#ffffff",
+      weight = 700,
+    }) => Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <style>
+    text {
+      font-family: Arial, sans-serif;
+      font-size: ${fontSize}px;
+      font-weight: ${weight};
+      fill: ${color};
     }
-    composites.push(
-      buildTelegramTextComposite(line, {
-        left: 164,
-        top: textY,
-        width: 540,
-        fontSize,
-        color: "#1a1a1a",
-        align: "left",
-        weight,
-        underline,
-      })
-    );
-    textY += index < 2 ? headerLineHeight : bodyLineHeight;
-  });
+  </style>
+  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle">${escapeSvgText(text)}</text>
+</svg>`);
+    composites.push({
+      input: buildOverlayTextSvg({
+        width: 124,
+        height: 28,
+        text: normalizedTopLabel,
+        fontSize: 14,
+      }),
+      left: 54,
+      top: 74,
+    });
+    if (normalizedStamp) {
+      composites.push(
+        {
+          input: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="212" height="38" viewBox="0 0 212 38">
+  <rect x="0" y="0" width="212" height="38" rx="12" ry="12" fill="rgba(18,33,55,0.82)"/>
+</svg>`),
+          left: 494,
+          top: 292,
+        },
+        {
+          input: buildOverlayTextSvg({
+            width: 184,
+            height: 22,
+            text: normalizedStamp,
+            fontSize: 14,
+          }),
+          left: 508,
+          top: 300,
+        }
+      );
+    }
+  }
+  if (hasTextPanel) {
+    let textY = textStartY;
+    normalizedLines.forEach((line, index) => {
+      let fontSize = 21;
+      let weight = "normal";
+      let underline = false;
+      if (index < 2) {
+        fontSize = 24;
+        weight = "bold";
+      } else if (/^Asset:/i.test(line) || /^ការងារទូទៅ:/i.test(line)) {
+        fontSize = 22;
+        weight = "bold";
+        underline = true;
+      } else if (/^(សាខា:|ទីតាំង:|កាលបរិច្ឆេទ|ប្រភេទការងារ:|អ្នកអនុវត្ត:|ការងារដែលបានធ្វើ:|ចំណាំបន្ថែម:|ពិនិត្យដោយ:|តម្លៃ:|Ticket:|Task)/.test(line)) {
+        fontSize = 20;
+        weight = "bold";
+      }
+      composites.push(
+        buildTelegramTextComposite(line, {
+          left: 164,
+          top: textY,
+          width: 540,
+          fontSize,
+          color: "#1a1a1a",
+          align: "left",
+          weight,
+          underline,
+        })
+      );
+      textY += index < 2 ? headerLineHeight : bodyLineHeight;
+    });
+  }
   try {
     return await sharpLib({
       create: {
@@ -5682,14 +5767,41 @@ async function buildToolReviewTelegramPhotoAlerts(source) {
   const itemName = toText(source.itemName || "").trim();
   const baseLabel = [itemCode, itemName].filter(Boolean).join(" - ") || "Tool Verification";
   const currentStamp = formatTelegramPhotoStampDateTime(source.updated || source.created || new Date().toISOString());
+  const hasBeforePhoto = Boolean(previousPhotoPath && previousPhoto);
+  const hasDistinctAfterPhoto =
+    Boolean(currentPhotoPath && currentPhoto) && currentPhotoPath !== previousPhotoPath;
+  const shouldUseCompareCard = hasBeforePhoto && hasDistinctAfterPhoto;
+  const primaryPhotoPath = currentPhotoPath || previousPhotoPath;
+  const primaryPhotoMedia = currentPhoto || previousPhoto;
+  if (!shouldUseCompareCard) {
+    const singleBuffer = await renderTelegramWhiteSinglePhotoCardPng({
+      photoPath: primaryPhotoPath,
+      textLines: [],
+      iconColor: "blue",
+      topLabel: "Photo",
+      stampText: currentStamp,
+    });
+    if (singleBuffer) {
+      return [
+        {
+          type: "photo",
+          media: primaryPhotoMedia,
+          buffer: singleBuffer,
+          filename: "tool-review-photo.png",
+          mimeType: "image/png",
+          caption: baseLabel,
+        },
+      ];
+    }
+  }
   const firstPhotoPath = previousPhotoPath || currentPhotoPath;
   const secondPhotoPath = currentPhotoPath || previousPhotoPath;
   const firstPhotoMedia = previousPhoto || currentPhoto;
   const compareBuffer = await renderTelegramWhiteCompareCardPng({
     firstPhotoPath,
     secondPhotoPath,
-    firstLabel: "រូបភាពចាស់",
-    secondLabel: "រូបភាពថ្មី",
+    firstLabel: "Before",
+    secondLabel: "After",
     secondStampText: currentStamp,
     textLines: [],
     iconColor: "blue",
@@ -5711,14 +5823,14 @@ async function buildToolReviewTelegramPhotoAlerts(source) {
     alerts.push({
       type: "photo",
       media: previousPhoto,
-      caption: `រូបភាពចាស់\n${baseLabel}`,
+      caption: `Before\n${baseLabel}`,
     });
   }
   if (currentPhoto) {
     alerts.push({
       type: "photo",
       media: currentPhoto,
-      caption: `រូបភាពថ្មី\n${baseLabel}\n${currentStamp}`,
+      caption: `After\n${baseLabel}\n${currentStamp}`,
     });
   }
   return alerts;
