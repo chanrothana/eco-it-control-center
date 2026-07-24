@@ -3967,7 +3967,19 @@ async function sendTelegramMessage(text, options = {}) {
     options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoUrl")
       ? toText(options.photoUrl)
       : "";
-  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || (!toText(text) && !photoUrl)) {
+  const photoBuffer =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "photoBuffer")
+      ? options.photoBuffer
+      : null;
+  const photoFilename =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "filename")
+      ? toText(options.filename)
+      : "telegram-preview.png";
+  const photoMimeType =
+    options && typeof options === "object" && Object.prototype.hasOwnProperty.call(options, "mimeType")
+      ? toText(options.mimeType)
+      : "image/png";
+  if (!TELEGRAM_ALERT_ENABLED || !TELEGRAM_BOT_TOKEN || (!toText(text) && !photoUrl && !Buffer.isBuffer(photoBuffer))) {
     telegramLastSendReport = {
       at: new Date().toISOString(),
       ok: false,
@@ -4034,8 +4046,22 @@ async function sendTelegramMessage(text, options = {}) {
   }
   const results = [];
   for (const chatId of targets) {
-    // eslint-disable-next-line no-await-in-loop
-    results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, botToken, parseMode));
+    if (Buffer.isBuffer(photoBuffer) && photoBuffer.length > 0) {
+      // eslint-disable-next-line no-await-in-loop
+      results.push(
+        await sendTelegramPhotoBufferToChatWithRetry(chatId, photoBuffer, {
+          attempts: 3,
+          caption: text,
+          parseMode,
+          filename: photoFilename,
+          mimeType: photoMimeType,
+          botToken,
+        })
+      );
+    } else {
+      // eslint-disable-next-line no-await-in-loop
+      results.push(await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, botToken, parseMode));
+    }
   }
   let successCount = results.filter((row) => row.ok).length;
   const nextReport = {
@@ -5607,9 +5633,13 @@ async function sendCleaningSupplyTelegramMessageWithPhotos(text, source, db = nu
   let report = null;
   let sent = false;
   if (photoAlerts.length <= 1) {
+    const singlePhoto = photoAlerts[0] || null;
     report = await sendTelegramMessage(normalizedText, {
       db,
-      photoUrl: photoAlerts[0] ? photoAlerts[0].media : "",
+      photoUrl: singlePhoto ? singlePhoto.media : "",
+      photoBuffer: singlePhoto && Buffer.isBuffer(singlePhoto.buffer) ? singlePhoto.buffer : null,
+      filename: singlePhoto && singlePhoto.filename ? singlePhoto.filename : "tool-review-compare.png",
+      mimeType: singlePhoto && singlePhoto.mimeType ? singlePhoto.mimeType : "image/png",
       includeResults: true,
     });
     sent = Boolean(report && report.ok);
@@ -5666,9 +5696,13 @@ async function sendToolReviewTelegramMessageWithPhotos(text, source, db = null) 
   let sent = false;
   const normalizedText = toText(text).trim();
   if (photoAlerts.length <= 1) {
+    const singlePhoto = photoAlerts[0] || null;
     report = await sendTelegramMessage(normalizedText, {
       db,
-      photoUrl: photoAlerts[0] ? photoAlerts[0].media : "",
+      photoUrl: singlePhoto ? singlePhoto.media : "",
+      photoBuffer: singlePhoto && Buffer.isBuffer(singlePhoto.buffer) ? singlePhoto.buffer : null,
+      filename: singlePhoto && singlePhoto.filename ? singlePhoto.filename : "tool-review-compare.png",
+      mimeType: singlePhoto && singlePhoto.mimeType ? singlePhoto.mimeType : "image/png",
       includeResults: true,
       kind: "tools",
     });
