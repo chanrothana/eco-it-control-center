@@ -10940,7 +10940,7 @@ export default function App() {
   const [reportInventoryGroupFilter, setReportInventoryGroupFilter] = useState<
     "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL"
   >("CLEAN_TOOL");
-  const [reportInventoryCampusFilter, setReportInventoryCampusFilter] = useState("ALL");
+  const [reportInventoryCampusFilter, setReportInventoryCampusFilter] = useState<string[]>(["ALL"]);
   const [reportInventoryPropertyFilter, setReportInventoryPropertyFilter] = useState<ReportInventoryPropertyFilter>("AUTO");
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
@@ -18263,7 +18263,7 @@ export default function App() {
           if (reportInventoryGroupFilter === "POOL_TOOL" && !POOL_TOOL_CAMPUSES.includes(rowCampus as typeof POOL_TOOL_CAMPUSES[number])) {
             return false;
           }
-          if (reportInventoryCampusFilter !== "ALL" && rowCampus !== reportInventoryCampusFilter) {
+          if (!reportInventoryCampusFilter.includes("ALL") && !reportInventoryCampusFilter.includes(rowCampus)) {
             return false;
           }
           if (isToolGroupFilter && reportInventoryPropertyFilter !== "AUTO") {
@@ -18575,10 +18575,11 @@ export default function App() {
     }
     return inventoryBusinessGroupLabel(reportInventoryGroupFilter);
   }, [inventoryBusinessGroupLabel, lang, reportInventoryGroupFilter]);
-  const reportInventoryCampusFilterLabel = useMemo(
-    () => (reportInventoryCampusFilter === "ALL" ? t.allCampuses : inventoryCampusLabel(reportInventoryCampusFilter)),
-    [inventoryCampusLabel, reportInventoryCampusFilter, t.allCampuses]
-  );
+  const reportInventoryCampusFilterLabel = useMemo(() => {
+    if (!reportInventoryCampusFilter.length) return "0 selected";
+    if (reportInventoryCampusFilter.includes("ALL")) return t.allCampuses;
+    return reportInventoryCampusFilter.map((campus) => inventoryCampusLabel(campus)).join(", ");
+  }, [inventoryCampusLabel, reportInventoryCampusFilter, t.allCampuses]);
   const reportInventoryPropertyFilterOptions = useMemo(
     () => [
       { value: "AUTO" as const, label: lang === "km" ? "ស្វ័យប្រវត្តិ" : "Auto Default" },
@@ -18680,9 +18681,10 @@ export default function App() {
   }, [reportInventoryGroupFilter]);
   useEffect(() => {
     if (reportInventoryGroupFilter !== "POOL_TOOL") return;
-    if (reportInventoryCampusFilter === "ALL") return;
-    if (reportInventoryCampusOptions.includes(reportInventoryCampusFilter)) return;
-    setReportInventoryCampusFilter("ALL");
+    if (reportInventoryCampusFilter.includes("ALL")) return;
+    const next = reportInventoryCampusFilter.filter((campus) => reportInventoryCampusOptions.includes(campus));
+    if (next.length === reportInventoryCampusFilter.length) return;
+    setReportInventoryCampusFilter(next.length ? next : ["ALL"]);
   }, [reportInventoryCampusFilter, reportInventoryCampusOptions, reportInventoryGroupFilter]);
   const reportInventoryToolPages = useMemo(() => {
     if (!reportInventorySplitByCategoryPages) return [];
@@ -44855,7 +44857,7 @@ export default function App() {
       setReportInventoryMode("all");
       setReportInventoryViewMode("list");
       setReportInventoryGroupFilter("CLEAN_TOOL");
-      setReportInventoryCampusFilter("ALL");
+      setReportInventoryCampusFilter(["ALL"]);
       setReportInventoryPropertyFilter("AUTO");
       setInventoryReportVisibleColumns([
         "code",
@@ -46361,7 +46363,7 @@ export default function App() {
                     reportInventoryGroupFilterLabel
                   )
                     ? reportInventoryGroupFilterLabel
-                    : "សមតុល្យឧបករណ៍ស្តុក"}\n${reportInventoryCampusFilterLabel || t.allCampuses}`
+                    : "សមតុល្យឧបករណ៍ស្តុក"} - ${reportInventoryCampusFilterLabel || t.allCampuses}`
                 : `${
                     (
                       reportInventoryGroupFilter !== "ALL" &&
@@ -46369,7 +46371,7 @@ export default function App() {
                     )
                       ? reportInventoryGroupFilterLabel
                       : "Inventory Tool Balance"
-                  } Report\n${reportInventoryCampusFilterLabel || "All Campuses"}`
+                  } Report - ${reportInventoryCampusFilterLabel || "All Campuses"}`
             )
           : (lang === "km" ? "របាយការណ៍សមតុល្យស្តុក" : "Inventory Stock Balance Report");
         columns = visibleInventoryReportColumnDefs.map((column) => column.label);
@@ -47207,16 +47209,22 @@ export default function App() {
         : reportType === "schedule_calendar"
           ? (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar")
           : reportType === "inventory_balance" && reportInventoryIsToolGroup
-            ? `${(
+            ? `${
                 reportInventoryGroupFilter !== "ALL" && reportInventoryGroupFilterLabel
                   ? reportInventoryGroupFilterLabel
                   : (lang === "km" ? "សមតុល្យឧបករណ៍ស្តុក" : "Inventory Tool Balance")
-              )} Report\n${reportInventoryCampusFilterLabel || "All Campuses"}`
+              }${reportInventoryCampusFilterLabel ? ` Report - ${reportInventoryCampusFilterLabel}` : " Report"}`
             : title;
     const reportHeadingTitleHtml =
       reportType === "inventory_balance" && reportInventoryViewMode === "campus_compare"
         ? escapeHtml(reportHeadingTitle).replace(" Campus Comparison Report", "<br />Campus Comparison Report")
-        : escapeHtml(reportHeadingTitle).replace(/\n/g, "<br />");
+        : reportType === "inventory_balance" && reportInventoryIsToolGroup && reportInventoryCampusFilterLabel
+          ? (() => {
+              const safeTitle = escapeHtml(reportHeadingTitle);
+              const [reportLine] = safeTitle.split(" Report - ");
+              return `${reportLine} Report`;
+            })()
+          : escapeHtml(reportHeadingTitle).replace(/\n/g, "<br />");
     const reportHeadingSubtitle =
       reportType === "maintenance_completion"
         ? maintenanceCompletionRangeLabel
@@ -47235,6 +47243,8 @@ export default function App() {
           ? (assetMasterCampusFilter.includes("ALL")
               ? t.allCampuses
               : assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", "))
+        : reportType === "inventory_balance" && reportInventoryIsToolGroup
+          ? reportInventoryCampusFilterLabel
         : reportType === "school_key_control"
           ? [
               reportSchoolKeyCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportSchoolKeyCampusFilter),
@@ -48183,9 +48193,18 @@ export default function App() {
             line-height: 1.2;
             max-width: 100%;
           }
+          .report-head-centered h2 {
+            font-size: 24px;
+            line-height: 1.14;
+            white-space: normal;
+          }
+          .report-head-centered h1,
+          .report-head-centered .report-head-subtitle {
+            white-space: nowrap;
+          }
           .report-head-subtitle {
             margin-top: 10px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
             letter-spacing: 0.02em;
             color: #5c695f;
@@ -71775,20 +71794,24 @@ function formatTicketRequestSource(value?: string) {
                         <span>{t.campus}</span>
                         <SearchableMultiSelectPicker
                           className="report-campus-picker"
-                          summary={
-                            reportInventoryCampusFilter === "ALL"
-                              ? t.allCampuses
-                              : inventoryCampusLabel(reportInventoryCampusFilter)
-                          }
+                          summary={reportInventoryCampusFilterLabel}
                           options={reportInventoryCampusOptions.map((campus) => ({
                             value: campus,
                             label: inventoryCampusLabel(campus),
                           }))}
-                          selectedValues={reportInventoryCampusFilter === "ALL" ? ["ALL"] : [reportInventoryCampusFilter]}
+                          selectedValues={reportInventoryCampusFilter}
                           allOptionLabel={t.allCampuses}
-                          allOptionChecked={reportInventoryCampusFilter === "ALL"}
-                          onToggleAllOption={() => setReportInventoryCampusFilter("ALL")}
-                          onToggleValue={(value, checked) => setReportInventoryCampusFilter(checked ? value : "ALL")}
+                          allOptionChecked={reportInventoryCampusFilter.includes("ALL")}
+                          onToggleAllOption={(checked) =>
+                            setReportInventoryCampusFilter((prev) =>
+                              applyMultiFilterSelection(prev, checked, "ALL", reportInventoryCampusOptions)
+                            )
+                          }
+                          onToggleValue={(value, checked) =>
+                            setReportInventoryCampusFilter((prev) =>
+                              applyMultiFilterSelection(prev, checked, value, reportInventoryCampusOptions)
+                            )
+                          }
                           searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                           emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                         />
@@ -72328,20 +72351,24 @@ function formatTicketRequestSource(value?: string) {
                   {reportInventoryViewMode === "list" ? (
                     <SearchableMultiSelectPicker
                       className="report-campus-picker"
-                      summary={
-                        reportInventoryCampusFilter === "ALL"
-                          ? t.allCampuses
-                          : inventoryCampusLabel(reportInventoryCampusFilter)
-                      }
+                      summary={reportInventoryCampusFilterLabel}
                       options={reportInventoryCampusOptions.map((campus) => ({
                         value: campus,
                         label: inventoryCampusLabel(campus),
                       }))}
-                      selectedValues={reportInventoryCampusFilter === "ALL" ? ["ALL"] : [reportInventoryCampusFilter]}
+                      selectedValues={reportInventoryCampusFilter}
                       allOptionLabel={t.allCampuses}
-                      allOptionChecked={reportInventoryCampusFilter === "ALL"}
-                      onToggleAllOption={() => setReportInventoryCampusFilter("ALL")}
-                      onToggleValue={(value, checked) => setReportInventoryCampusFilter(checked ? value : "ALL")}
+                      allOptionChecked={reportInventoryCampusFilter.includes("ALL")}
+                      onToggleAllOption={(checked) =>
+                        setReportInventoryCampusFilter((prev) =>
+                          applyMultiFilterSelection(prev, checked, "ALL", reportInventoryCampusOptions)
+                        )
+                      }
+                      onToggleValue={(value, checked) =>
+                        setReportInventoryCampusFilter((prev) =>
+                          applyMultiFilterSelection(prev, checked, value, reportInventoryCampusOptions)
+                        )
+                      }
                       searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
                       emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                     />
