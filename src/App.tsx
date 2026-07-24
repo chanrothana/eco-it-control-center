@@ -566,6 +566,7 @@ type LocationEntry = {
   notes?: string;
   photo?: string;
 };
+type SetupLocationSortKey = "campus" | "name" | "type" | "photo" | "currentStudents" | "notes";
 type StaffUser = {
   id: number;
   fullName: string;
@@ -13125,6 +13126,10 @@ export default function App() {
   const [editingLocationId, setEditingLocationId] = useState<number | null>(null);
   const [locationListCampusFilter, setLocationListCampusFilter] = useState("ALL");
   const [locationListSearchInput, setLocationListSearchInput] = useState("");
+  const [setupLocationSort, setSetupLocationSort] = useState<{ key: SetupLocationSortKey; direction: "asc" | "desc" }>({
+    key: "name",
+    direction: "asc",
+  });
   const [campusEditCode, setCampusEditCode] = useState("C1");
   const [campusEditName, setCampusEditName] = useState("Samdach Pan Campus");
   const [campusDraftNames, setCampusDraftNames] = useState<Record<string, string>>(() => {
@@ -21054,22 +21059,45 @@ export default function App() {
 
   const setupLocations = useMemo(() => {
     const search = locationListSearchInput.trim().toLowerCase();
-    return sortLocationEntriesByName(
-      locations.filter((loc) => {
-        if (locationListCampusFilter !== "ALL" && loc.campus !== locationListCampusFilter) return false;
-        if (!search) return true;
-        const typeLabel = isClassroomLocationLike(loc) ? "classroom" : "general";
-        return [
-          reportLocationName(loc.name),
-          String(loc.notes || ""),
-          String(loc.campus || ""),
-          String(loc.currentStudents || ""),
-          typeLabel,
-          campusLabel(loc.campus),
-        ].some((value) => String(value || "").toLowerCase().includes(search));
-      })
-    );
-  }, [locations, locationListCampusFilter, locationListSearchInput, campusNames]);
+    const filtered = locations.filter((loc) => {
+      if (locationListCampusFilter !== "ALL" && loc.campus !== locationListCampusFilter) return false;
+      if (!search) return true;
+      const typeLabel = isClassroomLocationLike(loc) ? "classroom" : "general";
+      return [
+        reportLocationName(loc.name),
+        String(loc.notes || ""),
+        String(loc.campus || ""),
+        String(loc.currentStudents || ""),
+        typeLabel,
+        campusLabel(loc.campus),
+      ].some((value) => String(value || "").toLowerCase().includes(search));
+    });
+    const direction = setupLocationSort.direction === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const readValue = (row: LocationEntry): number | string => {
+        switch (setupLocationSort.key) {
+          case "campus":
+            return campusLabel(row.campus);
+          case "name":
+            return reportLocationName(row.name);
+          case "type":
+            return isClassroomLocationLike(row) ? "Classroom" : "General";
+          case "photo":
+            return String(row.photo || "").trim() ? "1" : "0";
+          case "currentStudents":
+            return Number(row.currentStudents || 0);
+          case "notes":
+            return String(row.notes || "");
+        }
+      };
+      const aValue = readValue(a);
+      const bValue = readValue(b);
+      if (typeof aValue === "number" && typeof bValue === "number") {
+        return (aValue - bValue) * direction;
+      }
+      return String(aValue).localeCompare(String(bValue), undefined, { sensitivity: "base", numeric: true }) * direction;
+    });
+  }, [locations, locationListCampusFilter, locationListSearchInput, setupLocationSort, campusNames]);
   const locationCampusPickerOptions = useMemo(
     () => buildCampusPickerOptions(campusOptions),
     [campusOptions]
@@ -41505,6 +41533,18 @@ export default function App() {
 
   function toggleStaffBorrowingSort(key: StaffBorrowingSortKey) {
     setStaffBorrowingSort((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  }
+
+  function toggleSetupLocationSort(key: SetupLocationSortKey) {
+    setSetupLocationSort((prev) => {
       if (prev.key === key) {
         return {
           key,
@@ -77902,12 +77942,60 @@ function formatTicketRequestSource(value?: string) {
                 <table className="setup-location-table">
                   <thead>
                     <tr>
-                      <th>{t.campus}</th>
-                      <th>{t.locationName}</th>
-                      <th>Type</th>
-                      <th>Photo</th>
-                      <th>Current Students</th>
-                      <th>Notes</th>
+                      <th aria-sort={setupLocationSort.key === "campus" ? (setupLocationSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${setupLocationSort.key === "campus" ? "is-active" : ""}`}
+                          onClick={() => toggleSetupLocationSort("campus")}
+                        >
+                          {t.campus}
+                        </button>
+                      </th>
+                      <th aria-sort={setupLocationSort.key === "name" ? (setupLocationSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${setupLocationSort.key === "name" ? "is-active" : ""}`}
+                          onClick={() => toggleSetupLocationSort("name")}
+                        >
+                          {t.locationName}
+                        </button>
+                      </th>
+                      <th aria-sort={setupLocationSort.key === "type" ? (setupLocationSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${setupLocationSort.key === "type" ? "is-active" : ""}`}
+                          onClick={() => toggleSetupLocationSort("type")}
+                        >
+                          Type
+                        </button>
+                      </th>
+                      <th aria-sort={setupLocationSort.key === "photo" ? (setupLocationSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${setupLocationSort.key === "photo" ? "is-active" : ""}`}
+                          onClick={() => toggleSetupLocationSort("photo")}
+                        >
+                          Photo
+                        </button>
+                      </th>
+                      <th aria-sort={setupLocationSort.key === "currentStudents" ? (setupLocationSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${setupLocationSort.key === "currentStudents" ? "is-active" : ""}`}
+                          onClick={() => toggleSetupLocationSort("currentStudents")}
+                        >
+                          Current Students
+                        </button>
+                      </th>
+                      <th aria-sort={setupLocationSort.key === "notes" ? (setupLocationSort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                        <button
+                          type="button"
+                          className={`th-sort-btn ${setupLocationSort.key === "notes" ? "is-active" : ""}`}
+                          onClick={() => toggleSetupLocationSort("notes")}
+                        >
+                          Notes
+                        </button>
+                      </th>
                       <th>{t.edit}</th>
                       <th>{t.delete}</th>
                     </tr>
@@ -77929,7 +78017,15 @@ function formatTicketRequestSource(value?: string) {
                           <td>{loc.currentStudents || "-"}</td>
                           <td>{loc.notes || "-"}</td>
                           <td>
-                            <button className="tab" disabled={!isAdmin} onClick={() => startEditLocation(loc)}>{t.edit}</button>
+                            <button
+                              className="btn-icon-edit"
+                              disabled={!isAdmin}
+                              onClick={() => startEditLocation(loc)}
+                              title={t.edit}
+                              aria-label={`${t.edit} ${reportLocationName(loc.name)}`}
+                            >
+                              <Pencil size={16} strokeWidth={2.2} />
+                            </button>
                           </td>
                           <td>
                             <button className="btn-danger" disabled={!isAdmin} onClick={() => deleteLocation(loc.id)}>X</button>
