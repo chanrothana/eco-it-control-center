@@ -5367,10 +5367,8 @@ async function buildToolTelegramPreviewPng(source, text = "") {
   const location = toText(source.location) || "-";
   const firstPhoto = previousPhotoPath || currentPhotoPath;
   const secondPhoto = currentPhotoPath && currentPhotoPath !== previousPhotoPath ? currentPhotoPath : "";
-  const bodyLines = wrapTelegramPreviewText(text, 34).slice(0, 14);
-  const textLines = bodyLines.length
-    ? bodyLines
-    : wrapTelegramPreviewText(`Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`, 34);
+  const fallbackText = `Asset: ${itemCode} - ${itemName}\nសាខា: ${campus}\nទីតាំង: ${location}`;
+  const textLines = buildToolTelegramPreviewTextLines(text, fallbackText).slice(0, 20);
   const currentStamp = formatTelegramPhotoStampDateTime(source.updated || source.created || new Date().toISOString());
   return renderTelegramWhiteCompareCardPng({
     firstPhotoPath: firstPhoto,
@@ -5628,6 +5626,50 @@ function isInventoryToolCategoryForTelegram(category) {
 
 function isCleaningSupplyCategoryForTelegram(category) {
   return toUpper(category) === "SUPPLY";
+}
+
+function inventoryTelegramGroupLabel(category) {
+  const normalized = toUpper(category);
+  if (normalized === "POOL_TOOL") return "ឧបករណ៍អាងទឹក";
+  if (normalized === "CLEAN_TOOL") return "ឧបករណ៍សម្អាត";
+  if (normalized === "MAINT_TOOL") return "ឧបករណ៍ជួសជុល";
+  if (normalized === "GARDEN_TOOL") return "ឧបករណ៍ថែសួន";
+  if (normalized === "SERVICE_TOOL") return "ឧបករណ៍សេវាកម្ម";
+  if (normalized === "SUPPLY") return "សម្ភារៈ";
+  return "ឧបករណ៍";
+}
+
+function splitTelegramPreviewChunk(value, maxChars) {
+  const text = toText(value);
+  if (!text) return [""];
+  const out = [];
+  for (let index = 0; index < text.length; index += maxChars) {
+    out.push(text.slice(index, index + maxChars));
+  }
+  return out.length ? out : [""];
+}
+
+function buildToolTelegramPreviewTextLines(text = "", fallbackText = "") {
+  const sourceText = toText(text).trim() || toText(fallbackText).trim();
+  const rawLines = sourceText
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => toText(line).trim())
+    .filter(Boolean);
+  const lines = rawLines.length ? rawLines : [toText(fallbackText).trim() || "Tool"];
+  return lines.flatMap((line, index) => {
+    let maxChars = 24;
+    if (index === 2) {
+      maxChars = 28;
+    } else if (index > 2) {
+      maxChars = 26;
+    }
+    const wrapped = wrapTelegramPreviewText(line, maxChars).filter(Boolean);
+    if (wrapped.length > 1) return wrapped;
+    const [single = ""] = wrapped.length ? wrapped : [line];
+    if (single.length <= maxChars) return [single];
+    return splitTelegramPreviewChunk(single, maxChars);
+  });
 }
 
 async function buildToolReviewTelegramPhotoAlerts(source) {
@@ -6361,9 +6403,15 @@ async function sendTelegramToolReviewAlert(reportEntry, db = null) {
       : {};
   const inventoryItems = normalizeInventoryItems(settings.inventoryItems);
   const reviewReports = normalizeToolReviewReports(settings.toolReviewReports);
+  const sourceItem =
+    inventoryItems.find((row) => Number(row.id || 0) === Number(reportEntry.itemId || 0)) ||
+    inventoryItems.find((row) => toText(row.itemCode) === itemCode);
+  const sourceCategory = toUpper(reportEntry.category || (sourceItem && sourceItem.category));
+  const sourceGroupLabel = inventoryTelegramGroupLabel(sourceCategory);
   const campusToolItems = inventoryItems.filter(
     (row) =>
       String(row.campus || "").trim() === String(reportEntry.campus || "").trim() &&
+      (!sourceCategory || toUpper(row.category) === sourceCategory) &&
       isInventoryToolCategoryForTelegram(row.category)
   );
   const totalCampusTools = campusToolItems.length;
@@ -6373,6 +6421,7 @@ async function sendTelegramToolReviewAlert(reportEntry, db = null) {
         (row) =>
           String(row.month || "").trim() === String(reportEntry.month || "").trim() &&
           String(row.campus || "").trim() === String(reportEntry.campus || "").trim() &&
+          (!sourceCategory || toUpper(row.category) === sourceCategory) &&
           Number(row.itemId || 0) > 0
       )
       .map((row) => Number(row.itemId || 0))
@@ -6402,7 +6451,9 @@ async function sendTelegramToolReviewAlert(reportEntry, db = null) {
   if (note) {
     lines.push(`មូលហេតុ: ${note}`);
   }
-  lines.push(`បានពិនិត្យក្នុងសាខានេះ: ${checkedCampusTools}/${totalCampusTools || checkedCampusTools} | មិនទាន់ពិនិត្យ: ${remainingCampusTools}`);
+  lines.push(
+    `បានពិនិត្យក្នុងផ្នែក${sourceGroupLabel}: ${checkedCampusTools}/${totalCampusTools || checkedCampusTools} | មិនទាន់ពិនិត្យ: ${remainingCampusTools}`
+  );
   return sendToolReviewTelegramMessageWithPhotos(
     lines.join("\n"),
     {
