@@ -81457,6 +81457,7 @@ function formatTicketRequestSource(value?: string) {
                       <th>{t.assetId}</th>
                       <th>{t.photo}</th>
                       <th>{t.campus}</th>
+                      <th>{t.location}</th>
                       <th>{t.status}</th>
                       <th>{t.scheduleNote}</th>
                     </tr>
@@ -81479,13 +81480,14 @@ function formatTicketRequestSource(value?: string) {
                           </td>
                           <td>{renderAssetPhoto(asset.photo || "", asset.assetId)}</td>
                           <td>{campusLabel(asset.campus)}</td>
+                          <td>{asset.location || "-"}</td>
                           <td>{assetStatusLabel(asset.status)}</td>
                           <td>{asset.scheduleNote || "-"}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6}>{t.noScheduledAssetsFound}</td>
+                        <td colSpan={7}>{t.noScheduledAssetsFound}</td>
                       </tr>
                     )}
                   </tbody>
