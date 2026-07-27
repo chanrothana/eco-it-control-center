@@ -50063,6 +50063,10 @@ function formatTicketRequestSource(value?: string) {
     const publicQrCampusSummary = asset ? campusLabel(asset.campus || "-") : t.loading;
     const publicQrStatusSummary = asset ? assetStatusLabel(asset.status || "-") : t.loading;
     const publicQrAssignedSummary = asset ? asset.assignedTo || "-" : t.loading;
+    const publicQrIsAircon = Boolean(asset && isAirconAsset(asset.category || "", asset.type || ""));
+    const publicQrAirconHpSummary = asset
+      ? shortAirconCapacityLabel(parseAirconSpecs(asset.specs || "").acHp || "") || "-"
+      : t.loading;
     const publicQrAccountSummary = authUser ? `${authUser.displayName} (${authUser.role})` : "Guest";
     const publicMaintenanceHistory = [...(asset?.maintenanceHistory || [])].sort(
       (a, b) => Date.parse(String(b.date || "")) - Date.parse(String(a.date || ""))
@@ -50442,10 +50446,10 @@ function formatTicketRequestSource(value?: string) {
                             <div><span>{t.campus}</span><strong>{campusLabel(asset.campus || "-")}</strong></div>
                             <div><span>{t.location}</span><strong>{asset.location || "-"}</strong></div>
                             <div>
-                              <span>{t.user}</span>
+                              <span>{publicQrIsAircon ? "Machine HP" : t.user}</span>
                               <strong className="public-asset-mobile-user-inline">
-                                <span>{asset.assignedTo || "-"}</span>
-                                {publicQrAssignedUser ? (
+                                <span>{publicQrIsAircon ? publicQrAirconHpSummary : asset.assignedTo || "-"}</span>
+                                {!publicQrIsAircon && publicQrAssignedUser ? (
                                   renderStaffAvatar(
                                     publicQrAssignedUser.photo,
                                     publicQrAssignedUser.fullName,
