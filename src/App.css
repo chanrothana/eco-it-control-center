@@ -21709,6 +21709,22 @@ label.backup-action-btn {
   color: #6a7f9f;
 }
 
+.schedule-single-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.schedule-single-header .section-title {
+  margin: 0;
+}
+
+.schedule-single-search-field {
+  flex: 0 0 380px;
+  max-width: 380px;
+}
+
 .schedule-single-top-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -30143,6 +30159,16 @@ tr.row-maint-maintenance:hover td {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .schedule-single-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .schedule-single-search-field {
+    max-width: none;
+    flex-basis: auto;
   }
 
   .schedule-single-top-row {

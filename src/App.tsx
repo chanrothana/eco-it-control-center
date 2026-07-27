@@ -42031,10 +42031,10 @@ export default function App() {
 
   useEffect(() => {
     if (scheduleForm.assetId) return;
-    if (scheduleAssets.length) {
-      setScheduleForm((f) => ({ ...f, assetId: String(scheduleAssets[0].id) }));
+    if (scheduleSingleFilteredAssets.length) {
+      setScheduleForm((f) => ({ ...f, assetId: String(scheduleSingleFilteredAssets[0].id) }));
     }
-  }, [scheduleAssets, scheduleForm.assetId]);
+  }, [scheduleSingleFilteredAssets, scheduleForm.assetId]);
 
   useEffect(() => {
     if ((maintenanceQuickMode && maintenanceQuickGeneralTask) || scheduleMaintenanceUsesGeneralTask) return;
@@ -64650,7 +64650,18 @@ function formatTicketRequestSource(value?: string) {
 
             {scheduleView === "single" && (
               <>
-            <h3 className="section-title">Fill Maintenance Schedule</h3>
+            <div className="schedule-single-header">
+              <h3 className="section-title">Fill Maintenance Schedule</h3>
+              <label className="field schedule-single-search-field">
+                <span>{lang === "km" ? "ស្វែងរកទ្រព្យ" : "Search Asset"}</span>
+                <input
+                  className="input"
+                  value={scheduleSingleFilterSearch}
+                  onChange={(e) => setScheduleSingleFilterSearch(e.target.value)}
+                  placeholder={lang === "km" ? "ស្វែងរក ID, ឈ្មោះ, ទីតាំង..." : "Search ID, name, location..."}
+                />
+              </label>
+            </div>
             <div className="form-grid transfer-record-grid">
               <div className="schedule-single-top-row field-wide">
                 <label className="field">
@@ -64718,15 +64729,6 @@ function formatTicketRequestSource(value?: string) {
                     emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
                   />
                 </label>
-                <label className="field">
-                  <span>{lang === "km" ? "ស្វែងរកទ្រព្យ" : "Search Asset"}</span>
-                  <input
-                    className="input"
-                    value={scheduleSingleFilterSearch}
-                    onChange={(e) => setScheduleSingleFilterSearch(e.target.value)}
-                    placeholder={lang === "km" ? "ស្វែងរក ID, ឈ្មោះ, ទីតាំង..." : "Search ID, name, location..."}
-                  />
-                </label>
               </div>
               <label className="field field-wide">
                 <span>Asset</span>
@@ -64735,11 +64737,17 @@ function formatTicketRequestSource(value?: string) {
                     ? `បង្ហាញ ${scheduleSingleFilteredAssets.length} ទ្រព្យ`
                     : `Showing ${scheduleSingleFilteredAssets.length} asset${scheduleSingleFilteredAssets.length === 1 ? "" : "s"}`}
                 </div>
-                <select
-                  className="input"
+                <AssetPicker
                   value={scheduleForm.assetId}
-                  onChange={(e) => {
-                    const assetId = String(e.target.value || "");
+                  assets={scheduleSingleFilteredAssets}
+                  placeholder={lang === "km" ? "ជ្រើសទ្រព្យ" : "Select asset"}
+                  searchPlaceholder={lang === "km" ? "ស្វែងរក ID ឬ ឈ្មោះ..." : "Search ID or name..."}
+                  emptyText={lang === "km" ? "មិនមានទ្រព្យត្រូវនឹងតម្រង។" : "No assets match the current filters."}
+                  searchRequiredThreshold={80}
+                  getLabel={(asset) =>
+                    `${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)} • ${asset.location || "-"}`
+                  }
+                  onChange={(assetId) => {
                     const asset = assets.find((a) => String(a.id) === assetId);
                     setScheduleForm((f) => ({
                       ...f,
@@ -64753,14 +64761,7 @@ function formatTicketRequestSource(value?: string) {
                       repeatWeekday: Number(asset?.repeatWeekday || 6),
                     }));
                   }}
-                >
-                  <option value="">{lang === "km" ? "ជ្រើសទ្រព្យ" : "Select asset"}</option>
-                  {scheduleSingleFilteredAssets.map((asset) => (
-                    <option key={`schedule-single-asset-${asset.id}`} value={String(asset.id)}>
-                      {`${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)} • ${asset.location || "-"}`}
-                    </option>
-                  ))}
-                </select>
+                />
                 {selectedScheduleAsset ? (
                   <div className="tiny">
                     {`${campusLabel(selectedScheduleAsset.campus)} • ${selectedScheduleAsset.location || "-"} • ${selectedScheduleAsset.category || "-"}`}
@@ -64909,20 +64910,6 @@ function formatTicketRequestSource(value?: string) {
                   disabled={!scheduleForm.assetId}
                 />
               </label>
-              <label className="field field-wide">
-                <span>Schedule Note</span>
-                <input
-                  className="input"
-                  value={
-                    scheduleForm.repeatMode === "WDP_FILTER_CYCLE"
-                      ? getWdpFilterCycleNote(Number(scheduleForm.repeatCycleStep || 1))
-                      : scheduleForm.note
-                  }
-                  onChange={(e) => setScheduleForm((f) => ({ ...f, note: e.target.value }))}
-                  disabled={scheduleForm.repeatMode === "WDP_FILTER_CYCLE"}
-                  placeholder="Example: Monthly preventive maintenance"
-                />
-              </label>
               <label className="field">
                 <span>{lang === "km" ? "ក្រុមកាលវិភាគ" : "Schedule Group"}</span>
                 <select
@@ -64936,6 +64923,20 @@ function formatTicketRequestSource(value?: string) {
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="field field-wide">
+                <span>Schedule Note</span>
+                <input
+                  className="input"
+                  value={
+                    scheduleForm.repeatMode === "WDP_FILTER_CYCLE"
+                      ? getWdpFilterCycleNote(Number(scheduleForm.repeatCycleStep || 1))
+                      : scheduleForm.note
+                  }
+                  onChange={(e) => setScheduleForm((f) => ({ ...f, note: e.target.value }))}
+                  disabled={scheduleForm.repeatMode === "WDP_FILTER_CYCLE"}
+                  placeholder="Example: Monthly preventive maintenance"
+                />
               </label>
             </div>
             <div className="asset-actions">
