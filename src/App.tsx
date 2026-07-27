@@ -418,6 +418,7 @@ type QrLabelEntityType = "asset" | "rental_printer";
 type QrLabelRow = {
   rowKey: string;
   labelId: string;
+  assetDbId?: number;
   itemName: string;
   campus: string;
   category: string;
@@ -9476,6 +9477,8 @@ function extractAssetIdFromQrText(raw: string) {
   if (!text) return "";
   try {
     const url = new URL(text);
+    const fromDbQuery = url.searchParams.get("assetDbId") || url.searchParams.get("assetDb") || "";
+    if (fromDbQuery.trim()) return fromDbQuery.trim();
     const fromQuery = url.searchParams.get("assetId") || url.searchParams.get("asset") || "";
     if (fromQuery.trim()) return fromQuery.trim().toUpperCase();
   } catch {
@@ -12654,6 +12657,14 @@ export default function App() {
       .trim()
       .toUpperCase();
   });
+  const [pendingQrAssetDbId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return (
+      new URLSearchParams(window.location.search).get("assetDbId") ||
+      new URLSearchParams(window.location.search).get("assetDb") ||
+      ""
+    ).trim();
+  });
   const [pendingQrPrinterCode] = useState(() => {
     if (typeof window === "undefined") return "";
     return (
@@ -12664,7 +12675,8 @@ export default function App() {
       .trim()
       .toUpperCase();
   });
-  const isPublicQrRentalPrinter = Boolean(pendingQrPrinterCode && !pendingQrAssetId);
+  const pendingQrAssetLookup = pendingQrAssetDbId || pendingQrAssetId;
+  const isPublicQrRentalPrinter = Boolean(pendingQrPrinterCode && !pendingQrAssetLookup);
   const [qrCodeMap, setQrCodeMap] = useState<Record<string, string>>({});
   const [publicQrAsset, setPublicQrAsset] = useState<PublicQrAsset | null>(null);
   const [publicQrBusy, setPublicQrBusy] = useState(false);
@@ -37114,6 +37126,7 @@ export default function App() {
       const assetCode = extractAssetIdFromQrText(raw);
       if (!assetCode) return null;
       const normalizeAssetCode = (value: string) => String(value || "").trim().toUpperCase();
+      const assetDbId = Number(assetCode);
       const scopedCampus =
         maintenanceQuickMode && maintenanceQuickActiveCampus
           ? maintenanceQuickActiveCampus
@@ -37124,6 +37137,11 @@ export default function App() {
         ? assets.filter((asset) => String(asset.campus || "").trim() === scopedCampus)
         : assets;
       return (
+        (Number.isFinite(assetDbId) && assetDbId > 0
+          ? campusScopedAssets.find((asset) => Number(asset.id) === assetDbId) ||
+            assets.find((asset) => Number(asset.id) === assetDbId) ||
+            null
+          : null) ||
         campusScopedAssets.find((asset) => normalizeAssetCode(asset.assetId) === assetCode) ||
         assets.find((asset) => normalizeAssetCode(asset.assetId) === assetCode) ||
         null
@@ -43993,6 +44011,7 @@ export default function App() {
         .map((row) => ({
           rowKey: `asset-${row.assetDbId}-${row.assetId}`,
           labelId: row.assetId,
+          assetDbId: row.assetDbId,
           itemName: qrAssetItemName(row.category, row.type, row.pcType || "", row.itemName),
           campus: row.campus,
           category: row.category,
@@ -46249,10 +46268,14 @@ export default function App() {
   const qrLabelGridClass = `qr-label-grid qr-label-grid-size-${qrLabelSize.replace("cm", "")}`;
   const qrLabelPreviewClass = `qr-label-card-size-${qrLabelSize.replace("cm", "")}`;
 
-  const buildAssetQrUrl = useCallback((assetId: string) => {
+  const buildAssetQrUrl = useCallback((assetDbId?: number, assetId?: string) => {
     const id = String(assetId || "").trim();
-    if (!id) return "";
-    return `${qrScanBase}/?assetId=${encodeURIComponent(id)}`;
+    const dbId = Number(assetDbId || 0);
+    if (!dbId && !id) return "";
+    const params = new URLSearchParams();
+    if (dbId > 0) params.set("assetDbId", String(dbId));
+    if (id) params.set("assetId", id);
+    return `${qrScanBase}/?${params.toString()}`;
   }, [qrScanBase]);
   const buildRentalPrinterQrUrl = useCallback((machineCode: string) => {
     const code = String(machineCode || "").trim().toUpperCase();
@@ -46272,7 +46295,7 @@ export default function App() {
           const qrTarget =
             row.entityType === "rental_printer"
               ? buildRentalPrinterQrUrl(row.labelId)
-              : buildAssetQrUrl(row.labelId);
+              : buildAssetQrUrl(row.assetDbId, row.labelId);
           const dataUrl = await QRCode.toDataURL(qrTarget, {
             width: 480,
             margin: 1,
@@ -46296,7 +46319,7 @@ export default function App() {
   }, [reportType, qrFilteredRows, qrCodeMap, buildAssetQrUrl, buildRentalPrinterQrUrl]);
 
   useEffect(() => {
-    if (!pendingQrAssetId && !pendingQrPrinterCode) return;
+    if (!pendingQrAssetLookup && !pendingQrPrinterCode) return;
     let cancelled = false;
     setPublicQrBusy(true);
     setPublicQrError("");
@@ -46308,7 +46331,7 @@ export default function App() {
         const ts = Date.now();
         const targetPath = pendingQrPrinterCode
           ? `/api/public/printers/${encodeURIComponent(pendingQrPrinterCode)}?ts=${ts}`
-          : `/api/public/assets/${encodeURIComponent(pendingQrAssetId)}?ts=${ts}`;
+          : `/api/public/assets/${encodeURIComponent(pendingQrAssetLookup)}?ts=${ts}`;
         const res = await requestJson<{ asset: PublicQrAsset }>(
           targetPath
         );
@@ -46328,7 +46351,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [pendingQrAssetId, pendingQrPrinterCode]);
+  }, [pendingQrAssetLookup, pendingQrPrinterCode]);
 
   useEffect(() => {
     setPublicQrRecordForm((prev) => {
@@ -46376,22 +46399,22 @@ export default function App() {
   }, [publicQrAsset?.openWorkOrder, authUser?.displayName, authUser?.username]);
 
   useEffect(() => {
-    if (!pendingQrAssetId && !pendingQrPrinterCode) return;
+    if (!pendingQrAssetLookup && !pendingQrPrinterCode) return;
     setPublicQrSectionsOpen({
       request: false,
       maintenance: false,
       toner: false,
       details: false,
     });
-  }, [allowedCampuses, authUser, canAccessMenu, pendingQrAssetId, pendingQrPrinterCode, publicQrAsset]);
+  }, [allowedCampuses, authUser, canAccessMenu, pendingQrAssetLookup, pendingQrPrinterCode, publicQrAsset]);
   useEffect(() => {
-    if (!pendingQrAssetId && !pendingQrPrinterCode) return;
+    if (!pendingQrAssetLookup && !pendingQrPrinterCode) return;
     setMobileNotificationOpen(false);
-  }, [pendingQrAssetId, pendingQrPrinterCode]);
+  }, [pendingQrAssetLookup, pendingQrPrinterCode]);
   useEffect(() => {
-    if ((!pendingQrAssetId && !pendingQrPrinterCode) || !authUser) return;
+    if ((!pendingQrAssetLookup && !pendingQrPrinterCode) || !authUser) return;
     setMobileMenuOpen(false);
-  }, [pendingQrAssetId, pendingQrPrinterCode, authUser]);
+  }, [pendingQrAssetLookup, pendingQrPrinterCode, authUser]);
 
   async function printCurrentReport(fromUserGesture = false) {
     if (!fromUserGesture) {
@@ -46760,7 +46783,7 @@ export default function App() {
             const qrTarget =
               row.entityType === "rental_printer"
                 ? buildRentalPrinterQrUrl(row.labelId)
-                : buildAssetQrUrl(row.labelId);
+                : buildAssetQrUrl(row.assetDbId, row.labelId);
             const dataUrl = await QRCode.toDataURL(qrTarget, {
               width: 480,
               margin: 1,
@@ -49712,7 +49735,7 @@ export default function App() {
       });
       const ts = Date.now();
       const refreshed = await requestJson<{ asset: PublicQrAsset }>(
-        `/api/public/assets/${encodeURIComponent(asset.assetId)}?ts=${ts}`
+        `/api/public/assets/${encodeURIComponent(String(asset.id))}?ts=${ts}`
       );
       setPublicQrAsset(refreshed.asset || null);
       setPublicQrRecordForm({
@@ -49794,7 +49817,7 @@ export default function App() {
       );
       const ts = Date.now();
       const refreshed = await requestJson<{ asset: PublicQrAsset }>(
-        `/api/public/assets/${encodeURIComponent(asset.assetId)}?ts=${ts}`
+        `/api/public/assets/${encodeURIComponent(String(asset.id))}?ts=${ts}`
       );
       setPublicQrAsset(refreshed.asset || null);
       setPublicQrRecordForm({

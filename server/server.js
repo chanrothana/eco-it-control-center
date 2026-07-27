@@ -10619,15 +10619,20 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname.startsWith("/api/public/assets/")) {
-      const rawAssetId = decodeURIComponent(url.pathname.replace("/api/public/assets/", ""));
-      const assetId = toText(rawAssetId);
-      if (!assetId) {
+      const rawAssetLookup = decodeURIComponent(url.pathname.replace("/api/public/assets/", ""));
+      const assetLookup = toText(rawAssetLookup);
+      if (!assetLookup) {
         sendJson(res, 400, { error: "Asset ID is required" });
         return;
       }
       const db = await readDb();
       const assets = Array.isArray(db.assets) ? db.assets : [];
-      const found = selectBestAssetByAssetId(assets, assetId);
+      const assetDbId = Number(assetLookup);
+      const found =
+        (Number.isFinite(assetDbId) && assetDbId > 0
+          ? assets.find((row) => Number(row && row.id) === assetDbId) || null
+          : null) ||
+        selectBestAssetByAssetId(assets, assetLookup);
       if (!found) {
         sendJson(res, 404, { error: "Asset not found" });
         return;
