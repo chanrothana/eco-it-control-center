@@ -5104,13 +5104,22 @@ async function renderTelegramWhiteSinglePhotoCardPng({
   const hasTextPanel = normalizedLines.length > 0;
   const photoFrame = hasTextPanel
     ? { x: 42, y: 66, width: 676, height: 276 }
-    : { x: 242, y: 66, width: 276, height: 276 };
+    : { x: 220, y: 62, width: 320, height: 320 };
+  const photoStage = hasTextPanel
+    ? { x: 24, y: 48, width: 712, height: 312, radius: 0 }
+    : {
+        x: photoFrame.x - 22,
+        y: photoFrame.y - 18,
+        width: photoFrame.width + 44,
+        height: photoFrame.height + 36,
+        radius: 18,
+      };
   const labelWrap = hasTextPanel
     ? null
-    : { x: photoFrame.x, y: 66, width: 240, height: 44, innerX: photoFrame.x + 12, innerY: 74, innerWidth: 124, innerHeight: 28 };
+    : { x: photoFrame.x + 12, y: 72, width: 164, height: 42, innerX: photoFrame.x + 24, innerY: 79, innerWidth: 136, innerHeight: 28 };
   const stampWrap = hasTextPanel
     ? { x: 494, y: 292 }
-    : { x: photoFrame.x + photoFrame.width - 224, y: photoFrame.y + photoFrame.height - 50 };
+    : { x: photoFrame.x + photoFrame.width - 150, y: photoFrame.y + photoFrame.height - 36 };
   const headerLineHeight = 30;
   const bodyLineHeight = 32;
   const textStartY = 410;
@@ -5137,7 +5146,7 @@ async function renderTelegramWhiteSinglePhotoCardPng({
   </defs>
   <rect width="760" height="${totalHeight}" rx="34" ry="34" fill="#fbf8f1" stroke="#d9cfbf" stroke-width="2"/>
   <rect x="18" y="18" width="724" height="${totalHeight - 36}" rx="28" ry="28" fill="#f7efdf" stroke="#d9cfbf" stroke-width="1.5"/>
-  <rect x="24" y="48" width="712" height="312" fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
+  <rect x="${photoStage.x}" y="${photoStage.y}" width="${photoStage.width}" height="${photoStage.height}" ${photoStage.radius ? `rx="${photoStage.radius}" ry="${photoStage.radius}"` : ""} fill="#fbfaf7" stroke="#d7c7b4" stroke-width="2"/>
   <rect x="${photoFrame.x}" y="${photoFrame.y}" width="${photoFrame.width}" height="${photoFrame.height}" fill="#ffffff" stroke="#d7c7b4" stroke-width="1"/>
   ${
     hasTextPanel
@@ -5163,7 +5172,7 @@ async function renderTelegramWhiteSinglePhotoCardPng({
       top: 0,
     },
   ];
-  const photoScale = hasTextPanel ? 0.7 : 0.82;
+  const photoScale = hasTextPanel ? 0.7 : 0.78;
   const renderedPhotoWidth = Math.max(120, Math.round(photoFrame.width * photoScale));
   const renderedPhotoHeight = Math.max(120, Math.round(photoFrame.height * photoScale));
   const renderedPhotoLeft = photoFrame.x + Math.round((photoFrame.width - renderedPhotoWidth) / 2);

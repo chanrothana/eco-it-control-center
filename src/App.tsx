@@ -18194,8 +18194,8 @@ export default function App() {
       const campus = String(row.campus || "");
       if (!campus) continue;
       campusSet.add(campus);
-      const itemKey = normalizeInventoryCompareText(row.itemName);
       const itemCode = String(row.itemCode || "").trim();
+      const itemKey = itemCode || `${normalizeInventoryCompareText(row.itemName)}::${campus}`;
       if (!itemMap.has(itemKey)) {
         itemMap.set(itemKey, {
           key: itemKey,
@@ -19185,10 +19185,21 @@ export default function App() {
   );
   const inventoryAdminMatrixScopedOutTxns = useMemo(() => {
     const itemQuery = String(inventoryAdminItemQuery || "").trim().toLowerCase();
+    const visibleItemById = new Map<number, InventoryItem>();
+    for (const item of inventoryVisibleItems) {
+      visibleItemById.set(Number(item.id), item);
+    }
     return inventoryVisibleTxns
       .filter((tx) => {
         if (!isInventoryTxnUsageOut(tx.type)) return false;
         if (!isSuperAdmin && String(tx.date || "").slice(0, 7) !== inventoryAdminMonth) return false;
+        const linkedItem = visibleItemById.get(Number(tx.itemId || 0));
+        if (linkedItem) {
+          if (linkedItem.category !== "SUPPLY") return false;
+        } else {
+          const fallbackCode = String(tx.itemCode || "").trim().toUpperCase();
+          if (!fallbackCode.includes("-CS-")) return false;
+        }
         if (itemQuery) {
           const text = `${tx.itemCode || ""} ${tx.itemName || ""}`.toLowerCase();
           if (!text.includes(itemQuery)) return false;
@@ -19196,7 +19207,7 @@ export default function App() {
         return true;
       })
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || Number(b.id || 0) - Number(a.id || 0));
-  }, [inventoryVisibleTxns, inventoryAdminMonth, inventoryAdminItemQuery, isSuperAdmin]);
+  }, [inventoryVisibleItems, inventoryVisibleTxns, inventoryAdminMonth, inventoryAdminItemQuery, isSuperAdmin]);
   useEffect(() => {
     if (!inventoryAdminMatrixCampusOptions.includes(inventoryAdminMatrixCampusFilter)) {
       setInventoryAdminMatrixCampusFilter("ALL");
@@ -19677,6 +19688,7 @@ export default function App() {
     const campuses = splitByCampus ? ["C1", "C2", "C3", "C4"] : [inventoryAdminMatrixCampusFilter];
     const photoByKey = new Map<string, string>();
     for (const item of inventoryVisibleItems) {
+      if (item.category !== "SUPPLY") continue;
       const itemCode = String(item.itemCode || "-");
       const itemName = String(item.itemName || "-");
       const key = `${itemCode.toUpperCase()}::${itemName.toLowerCase()}`;
@@ -19701,6 +19713,7 @@ export default function App() {
     >();
     const itemScopeMap = new Map<string, Array<{ id: number; campus: string; openingQty: number }>>();
     for (const item of inventoryVisibleItems) {
+      if (item.category !== "SUPPLY") continue;
       const campus = inventoryRecordCampusCode(item.campus) || String(item.campus || "").trim();
       if (!campuses.includes(campus)) continue;
       const itemCode = String(item.itemCode || "-");
@@ -19749,7 +19762,10 @@ export default function App() {
     const relevantTxns = inventoryVisibleTxns
       .filter((tx) => {
         const campus = inventoryRecordCampusCode(tx.campus) || String(tx.campus || "").trim();
-        return campuses.includes(campus);
+        if (!campuses.includes(campus)) return false;
+        const linkedItem = inventoryVisibleItems.find((item) => Number(item.id) === Number(tx.itemId || 0));
+        if (linkedItem) return linkedItem.category === "SUPPLY";
+        return String(tx.itemCode || "").trim().toUpperCase().includes("-CS-");
       })
       .slice()
       .sort(
