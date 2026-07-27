@@ -13529,18 +13529,18 @@ label.backup-action-btn {
 .inventory-item-table-wrap {
   max-width: 100%;
   max-height: min(62vh, 720px);
-  overflow-x: hidden !important;
+  overflow-x: auto !important;
   overflow-y: auto !important;
   -webkit-overflow-scrolling: touch;
 }
 
 .vault-shell .inventory-item-table-wrap {
-  overflow-x: hidden !important;
+  overflow-x: auto !important;
   overflow-y: auto !important;
 }
 
 .inventory-item-list-table {
-  min-width: 0;
+  min-width: 1120px;
   width: 100%;
   table-layout: fixed;
   border-collapse: separate;
@@ -13576,7 +13576,7 @@ label.backup-action-btn {
 .inventory-item-list-table-supply td:nth-child(2),
 .inventory-item-list-table-tools th:nth-child(2),
 .inventory-item-list-table-tools td:nth-child(2) {
-  width: 8%;
+  width: 7%;
   text-align: center;
 }
 
@@ -13584,48 +13584,43 @@ label.backup-action-btn {
 .inventory-item-list-table-supply td:nth-child(3),
 .inventory-item-list-table-tools th:nth-child(3),
 .inventory-item-list-table-tools td:nth-child(3) {
-  width: 18%;
+  width: 19%;
 }
 
 .inventory-item-list-table-supply th:nth-child(4),
 .inventory-item-list-table-supply td:nth-child(4),
 .inventory-item-list-table-tools th:nth-child(4),
 .inventory-item-list-table-tools td:nth-child(4) {
-  width: 14%;
+  width: 15%;
 }
 
 .inventory-item-list-table-supply th:nth-child(5),
 .inventory-item-list-table-supply td:nth-child(5) {
-  width: 10%;
+  width: 13%;
 }
 
 .inventory-item-list-table-supply th:nth-child(6),
 .inventory-item-list-table-supply td:nth-child(6) {
-  width: 14%;
+  width: 13%;
 }
 
 .inventory-item-list-table-supply th:nth-child(7),
 .inventory-item-list-table-supply td:nth-child(7) {
-  width: 12%;
+  width: 5%;
+  text-align: center;
 }
 
 .inventory-item-list-table-supply th:nth-child(8),
-.inventory-item-list-table-supply td:nth-child(8) {
-  width: 4%;
+.inventory-item-list-table-supply td:nth-child(8),
+.inventory-item-list-table-supply th:nth-child(9),
+.inventory-item-list-table-supply td:nth-child(9) {
+  width: 5%;
   text-align: center;
 }
 
-.inventory-item-list-table-supply th:nth-child(9),
-.inventory-item-list-table-supply td:nth-child(9),
 .inventory-item-list-table-supply th:nth-child(10),
 .inventory-item-list-table-supply td:nth-child(10) {
-  width: 4%;
-  text-align: center;
-}
-
-.inventory-item-list-table-supply th:nth-child(11),
-.inventory-item-list-table-supply td:nth-child(11) {
-  width: 4%;
+  width: 6%;
 }
 
 .inventory-item-list-table-tools th:nth-child(5),

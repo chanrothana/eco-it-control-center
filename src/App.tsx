@@ -17616,18 +17616,6 @@ export default function App() {
                       {inventoryDashboardGroup === "SUPPLY" ? "Responsible" : <>Owner /<br />Team</>}
                     </span>
                   </th>
-                  {inventoryDashboardGroup === "SUPPLY" ? (
-                    <th>
-                      <button
-                        className={`th-sort-btn ${inventoryItemSort.key === "group" ? "is-active" : ""}`}
-                        onClick={() => toggleInventoryItemSort("group")}
-                      >
-                        <span className="inventory-item-th-label">
-                          Group {inventoryItemSort.key === "group" ? (inventoryItemSort.direction === "asc" ? "▲" : "▼") : ""}
-                        </span>
-                      </button>
-                    </th>
-                  ) : null}
                   <th>
                     <button
                       className={`th-sort-btn ${inventoryItemSort.key === "campus" ? "is-active" : ""}`}
@@ -17687,11 +17675,6 @@ export default function App() {
                           ? row.responsibleParty || "-"
                           : `${ownerTypeLabel(row.ownerType)}${row.responsibleParty ? ` • ${row.responsibleParty}` : ""}`}
                       </td>
-                      {inventoryDashboardGroup === "SUPPLY" ? (
-                        <td data-label="Group">
-                          {inventoryBusinessGroupLabel(inventoryBusinessGroupValue(row))}
-                        </td>
-                      ) : null}
                       <td data-label={t.campus}>{inventoryCampusLabel(row.campus)}</td>
                       <td data-label={t.location}>{row.location}</td>
                       {inventoryDashboardGroup === "SUPPLY" ? <td data-label="Unit">{row.unit}</td> : null}
@@ -17721,7 +17704,7 @@ export default function App() {
                   ))
                 ) : (
                   <tr className="vault-table-empty-row">
-                    <td colSpan={inventoryDashboardGroup === "SUPPLY" ? 11 : 8}>
+                    <td colSpan={inventoryDashboardGroup === "SUPPLY" ? 10 : 8}>
                       {inventoryBalanceRows.length ? "No inventory items match the current filters." : "No inventory items yet."}
                     </td>
                   </tr>
@@ -29995,6 +29978,10 @@ export default function App() {
       setError("Min Stock must be 0 or higher.");
       return;
     }
+    const proceed = window.confirm(
+      `Update item ${current.itemCode}?\n\nThis will save the new setup values for this inventory item.`
+    );
+    if (!proceed) return;
     setBusy(true);
     setError("");
     try {
