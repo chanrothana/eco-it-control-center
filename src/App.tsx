@@ -14744,6 +14744,7 @@ export default function App() {
     repeatCycleStep: 1,
   });
   const [scheduleSingleFilterCampus, setScheduleSingleFilterCampus] = useState("ALL");
+  const [scheduleSingleFilterLocation, setScheduleSingleFilterLocation] = useState("ALL");
   const [scheduleSingleFilterCategory, setScheduleSingleFilterCategory] = useState("ALL");
   const [scheduleSingleFilterSearch, setScheduleSingleFilterSearch] = useState("");
   const [scheduleDatePickerOpen, setScheduleDatePickerOpen] = useState(false);
@@ -39303,26 +39304,44 @@ export default function App() {
     });
   }, [assets, assetItemName]);
   const scheduleSingleFilterSearchDeferred = useDeferredValue(scheduleSingleFilterSearch);
+  const scheduleSingleFilterCampusDeferred = useDeferredValue(scheduleSingleFilterCampus);
+  const scheduleSingleFilterLocationDeferred = useDeferredValue(scheduleSingleFilterLocation);
+  const scheduleSingleFilterCategoryDeferred = useDeferredValue(scheduleSingleFilterCategory);
   const scheduleSingleFilterCampusOptions = useMemo(
     () => Array.from(new Set(scheduleSelectAssets.map((a) => a.campus).filter(Boolean))).sort(compareCampusByCode),
     [scheduleSelectAssets]
   );
+  const scheduleSingleFilterLocationOptions = useMemo(() => {
+    let list = scheduleSelectAssets;
+    if (scheduleSingleFilterCampusDeferred !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleSingleFilterCampusDeferred);
+    }
+    return Array.from(new Set(list.map((a) => String(a.location || "").trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [scheduleSelectAssets, scheduleSingleFilterCampusDeferred]);
   const scheduleSingleFilterCategoryOptions = useMemo(() => {
     let list = scheduleSelectAssets;
-    if (scheduleSingleFilterCampus !== "ALL") {
-      list = list.filter((a) => a.campus === scheduleSingleFilterCampus);
+    if (scheduleSingleFilterCampusDeferred !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleSingleFilterCampusDeferred);
+    }
+    if (scheduleSingleFilterLocationDeferred !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === scheduleSingleFilterLocationDeferred);
     }
     return Array.from(new Set(list.map((a) => String(a.category || "").trim()).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     );
-  }, [scheduleSelectAssets, scheduleSingleFilterCampus]);
+  }, [scheduleSelectAssets, scheduleSingleFilterCampusDeferred, scheduleSingleFilterLocationDeferred]);
   const scheduleSingleFilteredAssets = useMemo(() => {
     let list = scheduleSelectAssets;
-    if (scheduleSingleFilterCampus !== "ALL") {
-      list = list.filter((a) => a.campus === scheduleSingleFilterCampus);
+    if (scheduleSingleFilterCampusDeferred !== "ALL") {
+      list = list.filter((a) => a.campus === scheduleSingleFilterCampusDeferred);
     }
-    if (scheduleSingleFilterCategory !== "ALL") {
-      list = list.filter((a) => String(a.category || "").trim() === scheduleSingleFilterCategory);
+    if (scheduleSingleFilterLocationDeferred !== "ALL") {
+      list = list.filter((a) => String(a.location || "").trim() === scheduleSingleFilterLocationDeferred);
+    }
+    if (scheduleSingleFilterCategoryDeferred !== "ALL") {
+      list = list.filter((a) => String(a.category || "").trim() === scheduleSingleFilterCategoryDeferred);
     }
     const query = scheduleSingleFilterSearchDeferred.trim().toLowerCase();
     if (!query) return list;
@@ -39334,8 +39353,9 @@ export default function App() {
     });
   }, [
     scheduleSelectAssets,
-    scheduleSingleFilterCampus,
-    scheduleSingleFilterCategory,
+    scheduleSingleFilterCampusDeferred,
+    scheduleSingleFilterLocationDeferred,
+    scheduleSingleFilterCategoryDeferred,
     scheduleSingleFilterSearchDeferred,
     assetItemName,
   ]);
@@ -39343,6 +39363,12 @@ export default function App() {
     () => scheduleSingleFilteredAssets.some((asset) => String(asset.id) === scheduleForm.assetId),
     [scheduleSingleFilteredAssets, scheduleForm.assetId]
   );
+  useEffect(() => {
+    if (scheduleSingleFilterLocation === "ALL") return;
+    if (!scheduleSingleFilterLocationOptions.includes(scheduleSingleFilterLocation)) {
+      setScheduleSingleFilterLocation("ALL");
+    }
+  }, [scheduleSingleFilterLocation, scheduleSingleFilterLocationOptions]);
   useEffect(() => {
     if (!scheduleSingleFilterCategoryOptions.includes(scheduleSingleFilterCategory)) {
       setScheduleSingleFilterCategory("ALL");
@@ -64629,37 +64655,68 @@ function formatTicketRequestSource(value?: string) {
               <div className="schedule-single-top-row field-wide">
                 <label className="field">
                   <span>{t.campus}</span>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={scheduleSingleFilterCampus}
-                    onChange={(e) => setScheduleSingleFilterCampus(e.target.value)}
-                  >
-                    <option value="ALL">{t.allCampuses}</option>
-                    {scheduleSingleFilterCampusOptions.map((campus) => (
-                      <option key={`schedule-single-campus-${campus}`} value={campus}>
-                        {campusLabel(campus)}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => {
+                      setScheduleSingleFilterCampus(value);
+                      setScheduleSingleFilterLocation("ALL");
+                    }}
+                    options={[
+                      {
+                        value: "ALL",
+                        label: t.allCampuses,
+                        searchText: `${t.allCampuses} ALL`,
+                      },
+                      ...scheduleSingleFilterCampusOptions.map((campus) => ({
+                        value: campus,
+                        label: campusLabel(campus),
+                        searchText: `${campus} ${campusLabel(campus)} ${CAMPUS_CODE[campus] || ""}`,
+                      })),
+                    ]}
+                    placeholder={t.allCampuses}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t.location}</span>
+                  <LocationPicker
+                    value={scheduleSingleFilterLocation}
+                    onChange={setScheduleSingleFilterLocation}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations" },
+                      ...scheduleSingleFilterLocationOptions.map((location) => ({
+                        value: location,
+                        label: reportLocationName(location),
+                        searchText: `${location} ${reportLocationName(location)}`,
+                      })),
+                    ]}
+                    placeholder={lang === "km" ? "ទីតាំងទាំងអស់" : "All Locations"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                  />
                 </label>
                 <label className="field">
                   <span>{t.category}</span>
-                  <select
-                    className="input"
+                  <LocationPicker
                     value={scheduleSingleFilterCategory}
-                    onChange={(e) => setScheduleSingleFilterCategory(e.target.value)}
-                  >
-                    <option value="ALL">{lang === "km" ? "គ្រប់ប្រភេទ" : "All Categories"}</option>
-                    {scheduleSingleFilterCategoryOptions.map((category) => {
-                      const categoryOption = CATEGORY_OPTIONS.find((option) => option.value === category);
-                      const label = categoryOption ? (lang === "km" ? categoryOption.km : categoryOption.en) : category;
-                      return (
-                        <option key={`schedule-single-category-${category}`} value={category}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    onChange={setScheduleSingleFilterCategory}
+                    options={[
+                      { value: "ALL", label: lang === "km" ? "គ្រប់ប្រភេទ" : "All Categories" },
+                      ...scheduleSingleFilterCategoryOptions.map((category) => {
+                        const categoryOption = CATEGORY_OPTIONS.find((option) => option.value === category);
+                        const label = categoryOption ? (lang === "km" ? categoryOption.km : categoryOption.en) : category;
+                        return {
+                          value: category,
+                          label,
+                          searchText: `${category} ${label}`,
+                        };
+                      }),
+                    ]}
+                    placeholder={lang === "km" ? "គ្រប់ប្រភេទ" : "All Categories"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកប្រភេទ..." : "Search category..."}
+                    emptyText={lang === "km" ? "មិនមានប្រភេទ" : "No category found."}
+                  />
                 </label>
                 <label className="field">
                   <span>{lang === "km" ? "ស្វែងរកទ្រព្យ" : "Search Asset"}</span>
@@ -64700,10 +64757,15 @@ function formatTicketRequestSource(value?: string) {
                   <option value="">{lang === "km" ? "ជ្រើសទ្រព្យ" : "Select asset"}</option>
                   {scheduleSingleFilteredAssets.map((asset) => (
                     <option key={`schedule-single-asset-${asset.id}`} value={String(asset.id)}>
-                      {`${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} (${asset.type})`}
+                      {`${asset.assetId} - ${assetItemName(asset.category, asset.type, asset.pcType || "")} • ${campusLabel(asset.campus)} • ${asset.location || "-"}`}
                     </option>
                   ))}
                 </select>
+                {selectedScheduleAsset ? (
+                  <div className="tiny">
+                    {`${campusLabel(selectedScheduleAsset.campus)} • ${selectedScheduleAsset.location || "-"} • ${selectedScheduleAsset.category || "-"}`}
+                  </div>
+                ) : null}
               </label>
               <label className="field quickout-date-field eco-date-floating-field" ref={scheduleDateWrapRef}>
                 <span>Next Maintenance Date</span>

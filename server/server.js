@@ -5801,6 +5801,15 @@ function inventoryTelegramGroupLabel(category) {
   return "ឧបករណ៍";
 }
 
+function inventoryTelegramHeaderLine(category, fallback = "stock") {
+  if (isCleaningSupplyCategoryForTelegram(category)) {
+    return "🧴 ជូនដំណឹង ECO IT - សម្ភារៈសម្អាត";
+  }
+  return fallback === "tool"
+    ? "🛠️ ជូនដំណឹង ECO IT - ឧបករណ៍"
+    : "🛠️ ជូនដំណឹង ECO IT - ស្តុក";
+}
+
 function splitTelegramPreviewChunk(value, maxChars) {
   const text = toText(value);
   if (!text) return [""];
@@ -5838,6 +5847,7 @@ async function buildToolReviewTelegramPhotoAlerts(source) {
   if (!source || typeof source !== "object") return [];
   const previousPhotoPath = toText(source.previousPhoto);
   const currentPhotoPath = toText(source.photo);
+  const isCleaningSupply = isCleaningSupplyCategoryForTelegram(source.category);
   const previousPhoto = resolveTelegramPhotoUrl(previousPhotoPath);
   const currentPhoto = resolveTelegramPhotoUrl(currentPhotoPath);
   const itemCode = toText(source.itemCode || source.code || "").trim();
@@ -5847,7 +5857,7 @@ async function buildToolReviewTelegramPhotoAlerts(source) {
   const hasBeforePhoto = Boolean(previousPhotoPath && previousPhoto);
   const hasDistinctAfterPhoto =
     Boolean(currentPhotoPath && currentPhoto) && currentPhotoPath !== previousPhotoPath;
-  const shouldUseCompareCard = hasBeforePhoto && hasDistinctAfterPhoto;
+  const shouldUseCompareCard = !isCleaningSupply && hasBeforePhoto && hasDistinctAfterPhoto;
   const primaryPhotoPath = currentPhotoPath || previousPhotoPath;
   const primaryPhotoMedia = currentPhoto || previousPhoto;
   if (!shouldUseCompareCard) {
@@ -5855,7 +5865,7 @@ async function buildToolReviewTelegramPhotoAlerts(source) {
       photoPath: primaryPhotoPath,
       textLines: [],
       iconColor: "blue",
-      topLabel: "Photo",
+      topLabel: isCleaningSupply ? "Cleaning Supply" : "Photo",
       stampText: currentStamp,
     });
     if (singleBuffer) {
@@ -6378,7 +6388,7 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], 
   const items = normalizeInventoryItems(settings.inventoryItems);
   const item = items.find((row) => Number(row.id) === Number(txn.itemId));
   const lines = [
-    "🛠️ ជូនដំណឹង ECO IT - ស្តុក",
+    inventoryTelegramHeaderLine(item && item.category),
     "សំណើរចេញស្តុក កំពុងរង់ចាំអនុម័ត",
     `មុខទំនិញ: ${itemCode} - ${itemName}`,
     `បរិមាណ: ${qty} | សាខា: ${campus}`,
@@ -6398,6 +6408,7 @@ async function sendTelegramInventoryOutApprovalAlert(txn, approverTargets = [], 
     lines.join("\n"),
     {
       ...txn,
+      category: toText(item && item.category),
       photo: toText(txn.photo) || resolveInventoryItemPhotoForTelegram(db, txn),
       previousPhoto: toText(txn.previousPhoto),
     },
@@ -6427,8 +6438,8 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
   const remainingStock = item ? calcInventoryCurrentStock(item, txns) : null;
   const stockUnit = toText(item && item.unit) || "";
   const lines = [
-    "🛠️ ជូនដំណឹង ECO IT - ស្តុក",
-    "ចេញសម្ភារៈ (Item Out)",
+    inventoryTelegramHeaderLine(item && item.category),
+    isCleaningSupplyItem ? "ចេញសម្ភារៈសម្អាត (Item Out)" : "ចេញសម្ភារៈ (Item Out)",
     `មុខទំនិញ: ${itemCode} - ${itemName}`,
     `បរិមាណ: ${qty} | សាខា: ${campus}`,
     `កាលបរិច្ឆេទ: ${date}`,
@@ -6448,6 +6459,7 @@ async function sendTelegramInventoryOutRecordedAlert(txn, db = null) {
     lines.join("\n"),
     {
       ...txn,
+      category: toText(item && item.category),
       photo: toText(txn.photo) || resolveInventoryItemPhotoForTelegram(db, txn),
       previousPhoto: toText(txn.previousPhoto),
     },
@@ -6535,8 +6547,8 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
     );
   }
   const lines = [
-    "🛠️ ជូនដំណឹង ECO IT - ស្តុក",
-    "បន្ថែមសម្ភារៈ (Item In)",
+    inventoryTelegramHeaderLine(item && item.category),
+    isCleaningSupplyItem ? "បន្ថែមសម្ភារៈសម្អាត (Item In)" : "បន្ថែមសម្ភារៈ (Item In)",
     `មុខទំនិញ: ${itemCode} - ${itemName}`,
     `បរិមាណ: ${qty} | សាខា: ${campus}`,
     `កាលបរិច្ឆេទ: ${date}`,
@@ -6556,6 +6568,7 @@ async function sendTelegramInventoryTxnRecordedAlert(txn, db = null) {
       lines.join("\n"),
       {
         ...txn,
+        category: toText(item && item.category),
         photo: toText(txn.photo) || resolveInventoryItemPhotoForTelegram(db, txn),
         previousPhoto: toText(txn.previousPhoto),
       },
