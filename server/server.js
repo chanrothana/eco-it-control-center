@@ -5163,14 +5163,19 @@ async function renderTelegramWhiteSinglePhotoCardPng({
       top: 0,
     },
   ];
-  const topPhoto = await buildTelegramComparePhotoBuffer(photoPath, photoFrame.width, photoFrame.height);
+  const photoScale = hasTextPanel ? 0.7 : 0.82;
+  const renderedPhotoWidth = Math.max(120, Math.round(photoFrame.width * photoScale));
+  const renderedPhotoHeight = Math.max(120, Math.round(photoFrame.height * photoScale));
+  const renderedPhotoLeft = photoFrame.x + Math.round((photoFrame.width - renderedPhotoWidth) / 2);
+  const renderedPhotoTop = photoFrame.y + Math.round((photoFrame.height - renderedPhotoHeight) / 2);
+  const topPhoto = await buildTelegramComparePhotoBuffer(photoPath, renderedPhotoWidth, renderedPhotoHeight);
   if (topPhoto) {
-    composites.push({ input: topPhoto, left: photoFrame.x, top: photoFrame.y });
+    composites.push({ input: topPhoto, left: renderedPhotoLeft, top: renderedPhotoTop });
   } else {
     composites.push(
       buildTelegramTextComposite("NO PHOTO", {
         left: photoFrame.x + Math.round((photoFrame.width - 252) / 2),
-        top: 188,
+        top: photoFrame.y + Math.round((photoFrame.height - 28) / 2),
         width: 252,
         fontSize: 22,
         color: "#8b7359",
