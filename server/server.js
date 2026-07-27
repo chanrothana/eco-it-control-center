@@ -2901,16 +2901,15 @@ function migrateAssetIdsAndLinkedReferences(assetsInput, ticketsInput, notificat
     for (let i = 0; i < rows.length; i += 1) {
       const asset = rows[i];
       const nextSeq = i + 1;
-      const nextAssetId = buildAssetIdValue(asset.campus, asset.category, asset.type, nextSeq);
       const oldAssetId = toText(asset.assetId);
-      const oldSeq = Math.max(Number(asset.seq) || 0, parseAssetSeqFromId(oldAssetId) || 0, 1);
-      const legacyAlias = `${campusCode(asset.campus)}-${legacyAssetCategoryCode(asset.category)}-${toUpper(asset.type)}-${pad(oldSeq, 4)}`;
-      const aliases = [oldAssetId, legacyAlias];
-      for (const alias of aliases) {
+      asset.seq = nextSeq;
+      if (oldAssetId) continue;
+      const nextAssetId = buildAssetIdValue(asset.campus, asset.category, asset.type, nextSeq);
+      const legacyAlias = `${campusCode(asset.campus)}-${legacyAssetCategoryCode(asset.category)}-${toUpper(asset.type)}-${pad(nextSeq, 4)}`;
+      for (const alias of [legacyAlias]) {
         if (!alias || alias === nextAssetId) continue;
         oldToNew.set(toUpper(alias), nextAssetId);
       }
-      asset.seq = nextSeq;
       asset.assetId = nextAssetId;
     }
   }
