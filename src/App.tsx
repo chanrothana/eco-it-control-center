@@ -36122,6 +36122,11 @@ export default function App() {
     setClassroomDetailRoomId(null);
   }
 
+  function openTransferFromClassroom(asset: Asset) {
+    openTransferFromAsset(asset);
+    setAssetDetailId(null);
+  }
+
   function openMaintenancePageFromDetail(asset: Asset) {
     setMaintenanceRecordFromDetail(true);
     setTransferRecordFromDetail(false);
@@ -43355,6 +43360,7 @@ export default function App() {
     if (!classroomDetailRoom) return [] as Array<{
       key: string;
       id: number;
+      asset: Asset;
       assetId: string;
       name: string;
       category: string;
@@ -43363,6 +43369,8 @@ export default function App() {
       status: string;
       photo: string;
       notes: string;
+      canQuickMove: boolean;
+      latestMovementText: string;
     }>;
     const assetsById = new Map<string, Asset>();
     for (const asset of assets) {
@@ -43376,14 +43384,19 @@ export default function App() {
       .map((asset) => {
         const furnitureDetails = parseFurnitureSpecs(asset.specs || "");
         const isFurniture = isFurnitureAsset(asset.category);
+        const latestTransfer = sortTransferHistoryEntries(asset.transferHistory || [])[0] || null;
         const subtype =
           isFurniture
             ? String(furnitureDetails.subtype || defaultFurnitureSubtype(asset.type) || "Furniture").trim()
             : assetItemName(asset.category, asset.type, asset.pcType || "");
         const furnitureName = furnitureModelLabel(asset.type, asset.model || "").trim();
+        const latestMovementText = latestTransfer
+          ? `${formatDate(latestTransfer.date || "-")} • ${Math.max(1, Number(latestTransfer.quantity || 1))} → ${reportLocationName(latestTransfer.toLocation || "-")}`
+          : "";
         return {
           key: `classroom-detail-item-${asset.id}`,
           id: asset.id,
+          asset,
           assetId: asset.assetId,
           name: isFurniture ? furnitureName : assetItemName(asset.category, asset.type, asset.pcType || ""),
           category: asset.category || "-",
@@ -43392,10 +43405,73 @@ export default function App() {
           status: assetStatusLabel(asset.status || "-"),
           photo: assetDisplayPhoto(asset),
           notes: String(furnitureDetails.condition || asset.notes || "").trim(),
+          canQuickMove: isGroupedFurnitureTransferAsset(asset),
+          latestMovementText,
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name) || a.assetId.localeCompare(b.assetId));
-  }, [classroomDetailRoom, assets, assetItemName, assetStatusLabel]);
+  }, [classroomDetailRoom, assets, assetItemName, assetStatusLabel, lang, reportLocationName]);
+  const classroomRecentMovementRows = useMemo(() => {
+    if (!classroomDetailRoom) return [] as Array<{
+      key: string;
+      assetDbId: number;
+      assetId: string;
+      itemName: string;
+      qty: number;
+      direction: string;
+      date: string;
+      fromLabel: string;
+      toLabel: string;
+      by: string;
+      reason: string;
+    }>;
+    const roomCampus = String(classroomDetailRoom.campus || "").trim();
+    const roomLocation = String(classroomDetailRoom.location || "").trim();
+    const formatCampusForClassroomMove = (campus: string) => {
+      const raw = String(campus || "").trim();
+      if (!raw) return "-";
+      if (lang === "km") {
+        if (raw === "Samdach Pan Campus" || raw === "C1") return `សាខា 1 | ${CAMPUS_KM_LABEL["Samdach Pan Campus"] || "សម្ដេចពាន"}`;
+        if (raw === "Chaktomuk Campus" || raw === "C2" || raw === "C2.1") return `សាខា 2.1 | ${CAMPUS_KM_LABEL["Chaktomuk Campus"] || "ចតុមុខ"}`;
+        if (raw === "Chaktomuk Campus (C2.2)" || raw === "C2.2") return `សាខា 2.2 | ${CAMPUS_KM_LABEL["Chaktomuk Campus"] || "ចតុមុខ"}`;
+        if (raw === "Boeung Snor Campus" || raw === "C3") return `សាខា 3 | ${CAMPUS_KM_LABEL["Boeung Snor Campus"] || "បឹងស្នោរ"}`;
+        if (raw === "Veng Sreng Campus" || raw === "C4") return `សាខា 4 | ${CAMPUS_KM_LABEL["Veng Sreng Campus"] || "វេងស្រេង"}`;
+      }
+      return campusNames[raw] || raw;
+    };
+    const formatLocationForClassroomMove = (location: string) => displayLocationName(location, lang);
+    return assets
+      .filter((asset) => isGroupedFurnitureTransferAsset(asset))
+      .flatMap((asset) => {
+        const itemName = furnitureModelLabel(asset.type, asset.model || "").trim() || assetItemName(asset.category, asset.type, asset.pcType || "");
+        return sortTransferHistoryEntries(asset.transferHistory || [])
+          .filter((entry) => {
+            const fromMatch = String(entry.fromCampus || "").trim() === roomCampus && String(entry.fromLocation || "").trim() === roomLocation;
+            const toMatch = String(entry.toCampus || "").trim() === roomCampus && String(entry.toLocation || "").trim() === roomLocation;
+            return fromMatch || toMatch;
+          })
+          .map((entry) => {
+            const fromMatch = String(entry.fromCampus || "").trim() === roomCampus && String(entry.fromLocation || "").trim() === roomLocation;
+            const toMatch = String(entry.toCampus || "").trim() === roomCampus && String(entry.toLocation || "").trim() === roomLocation;
+            const direction = fromMatch && !toMatch ? (lang === "km" ? "ចេញ" : "Moved Out") : (lang === "km" ? "ចូល" : "Moved In");
+            return {
+              key: `classroom-movement-${asset.id}-${entry.id}`,
+              assetDbId: asset.id,
+              assetId: String(asset.assetId || "").trim(),
+              itemName,
+              qty: Math.max(1, Number(entry.quantity || 1)),
+              direction,
+              date: entry.date || "",
+              fromLabel: `${formatCampusForClassroomMove(entry.fromCampus || "-")} • ${formatLocationForClassroomMove(entry.fromLocation || "-")}`,
+              toLabel: `${formatCampusForClassroomMove(entry.toCampus || "-")} • ${formatLocationForClassroomMove(entry.toLocation || "-")}`,
+              by: String(entry.by || "").trim() || "-",
+              reason: String(entry.reason || "").trim() || "-",
+            };
+          });
+      })
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || a.assetId.localeCompare(b.assetId))
+      .slice(0, 8);
+  }, [assets, assetItemName, campusNames, classroomDetailRoom, lang]);
   const classroomLatestVerification = useMemo(() => {
     if (!classroomDetailRoom) return null;
     return (
@@ -82069,41 +82145,67 @@ function formatTicketRequestSource(value?: string) {
               >
                 {classroomDetailItems.length ? (
                   classroomDetailItems.map((item) => (
-                    <button
-                      type="button"
-                      key={item.key}
-                      className="asset-gallery-card"
-                      onClick={() => {
-                        setAssetDetailId(item.id);
-                      }}
-                    >
-                      <div className="asset-gallery-photo-wrap">
-                        {item.photo ? (
-                          <img
-                            loading="lazy"
-                            decoding="async"
-                            src={item.photo}
-                            alt={item.assetId}
-                            className="asset-gallery-photo"
-                          />
-                        ) : (
-                          <div className="asset-gallery-photo-empty">{lang === "km" ? "គ្មានរូបថត" : "No photo"}</div>
-                        )}
-                      </div>
-                      <div className="asset-gallery-meta">
-                        <strong>{item.name}</strong>
-                        <div>{item.assetId}</div>
-                        <div>
-                          {lang === "km" ? "ប្រភេទ" : "Category"}: {item.category}
+                    <article key={item.key} className="asset-gallery-card classroom-asset-card">
+                      <button
+                        type="button"
+                        className="classroom-asset-card-main"
+                        onClick={() => {
+                          setAssetDetailId(item.id);
+                        }}
+                      >
+                        <div className="asset-gallery-photo-wrap">
+                          {item.photo ? (
+                            <img
+                              loading="lazy"
+                              decoding="async"
+                              src={item.photo}
+                              alt={item.assetId}
+                              className="asset-gallery-photo"
+                            />
+                          ) : (
+                            <div className="asset-gallery-photo-empty">{lang === "km" ? "គ្មានរូបថត" : "No photo"}</div>
+                          )}
                         </div>
-                        <div>
-                          {lang === "km" ? "ចំនួន" : "Qty"}: {item.qty}
+                        <div className="asset-gallery-meta">
+                          <strong>{item.name}</strong>
+                          <div>{item.assetId}</div>
+                          <div>
+                            {lang === "km" ? "ប្រភេទ" : "Category"}: {item.category}
+                          </div>
+                          <div>
+                            {lang === "km" ? "ចំនួន" : "Qty"}: {item.qty}
+                          </div>
+                          <div>
+                            {lang === "km" ? "ស្ថានភាព" : "Status"}: {item.status}
+                          </div>
+                          {item.canQuickMove ? (
+                            <div className="classroom-asset-move-note">
+                              {lang === "km" ? "Grouped furniture: move by qty" : "Grouped furniture: move by qty"}
+                            </div>
+                          ) : null}
                         </div>
-                        <div>
-                          {lang === "km" ? "ស្ថានភាព" : "Status"}: {item.status}
+                      </button>
+                      {item.canQuickMove ? (
+                        <div className="classroom-asset-card-actions">
+                          <button
+                            type="button"
+                            className="tab btn-small"
+                            onClick={() => {
+                              openTransferFromClassroom(item.asset);
+                            }}
+                          >
+                            {lang === "km" ? "ផ្លាស់ទី" : "Move"}
+                          </button>
+                          <span className="tiny classroom-asset-card-hint">
+                            {item.latestMovementText || (lang === "km" ? "មិនទាន់មានប្រវត្តិផ្លាស់ទី" : "No movement history yet")}
+                          </span>
                         </div>
-                      </div>
-                    </button>
+                      ) : (
+                        <div className="tiny classroom-asset-card-hint">
+                          {item.latestMovementText || "\u00a0"}
+                        </div>
+                      )}
+                    </article>
                   ))
                 ) : (
                   <div className="panel-note">
@@ -82111,6 +82213,50 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                 )}
               </div>
+              <section className="classroom-movement-section">
+                <div className="panel-row" style={{ alignItems: "end", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <h3 className="section-title" style={{ marginBottom: 2 }}>{lang === "km" ? "ប្រវត្តិផ្លាស់ទីគ្រឿងសង្ហារិមថ្មីៗ" : "Recent Furniture Moves"}</h3>
+                    <div className="tiny">
+                      {lang === "km"
+                        ? "សាមញ្ញសម្រាប់ Table/Chair grouped asset ក្នុងបន្ទប់នេះ។"
+                        : "Simple room history for grouped chair/table records in this classroom."}
+                    </div>
+                  </div>
+                  <div className="tiny">{classroomRecentMovementRows.length} {lang === "km" ? "កំណត់ត្រា" : "records"}</div>
+                </div>
+                {classroomRecentMovementRows.length ? (
+                  <div className="classroom-movement-list">
+                    {classroomRecentMovementRows.map((row) => (
+                      <article key={row.key} className="classroom-movement-card">
+                        <div className="classroom-movement-card-top">
+                          <strong>{row.itemName}</strong>
+                          <span className="classroom-movement-badge">{row.direction}</span>
+                        </div>
+                        <div className="classroom-movement-card-meta">
+                          <div>{row.assetId}</div>
+                          <div>{lang === "km" ? "ចំនួន" : "Qty"}: {row.qty}</div>
+                          <div>{formatDate(row.date || "-")}</div>
+                        </div>
+                        <div className="classroom-movement-route">
+                          <div><span>{lang === "km" ? "ពី" : "From"}</span><strong>{row.fromLabel}</strong></div>
+                          <div><span>{lang === "km" ? "ទៅ" : "To"}</span><strong>{row.toLabel}</strong></div>
+                        </div>
+                        <div className="classroom-movement-card-foot">
+                          <span>{lang === "km" ? "ដោយ" : "By"}: {row.by}</span>
+                          <span>{lang === "km" ? "មូលហេតុ" : "Reason"}: {row.reason}</span>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="panel-note">
+                    {lang === "km"
+                      ? "មិនទាន់មានប្រវត្តិផ្លាស់ទី Table/Chair សម្រាប់បន្ទប់នេះទេ។ ប្រើប៊ូតុង Move លើ card ដើម្បីចាប់ផ្តើមកំណត់ត្រា។"
+                      : "No chair/table movement history for this classroom yet. Use Move on a grouped furniture card to start recording it."}
+                  </div>
+                )}
+              </section>
             </section>
           </div>
         ) : null}

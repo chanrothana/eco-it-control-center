@@ -25726,6 +25726,115 @@ table {
   background: linear-gradient(180deg, rgba(250, 240, 243, 0.98) 0%, rgba(244, 227, 234, 0.98) 100%);
 }
 
+.classroom-asset-card {
+  gap: 12px;
+}
+
+.classroom-asset-card-main {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.classroom-asset-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.classroom-asset-card-hint {
+  flex: 1;
+  min-width: 0;
+  color: #537098;
+}
+
+.classroom-asset-move-note {
+  color: #35527e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.classroom-movement-section {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.classroom-movement-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.classroom-movement-card {
+  border: 1px solid rgba(157, 186, 227, 0.45);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(245, 249, 255, 0.98) 0%, rgba(232, 240, 250, 0.98) 100%);
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+  color: #17304f;
+}
+
+.classroom-movement-card-top,
+.classroom-movement-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.classroom-movement-card-meta {
+  display: flex;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  color: #48658d;
+  font-size: 13px;
+}
+
+.classroom-movement-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(54, 114, 214, 0.12);
+  color: #2350a0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.classroom-movement-route {
+  display: grid;
+  gap: 8px;
+}
+
+.classroom-movement-route div {
+  display: grid;
+  gap: 2px;
+}
+
+.classroom-movement-route span {
+  color: #6280a8;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.classroom-movement-route strong {
+  color: #17304f;
+}
+
 .asset-gallery-photo-wrap {
   border: 1px solid #cbdaf0;
   border-radius: 14px;
