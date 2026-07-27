@@ -35557,59 +35557,60 @@ export default function App() {
     }
   }
 
-  async function submitAssetTransfer(targetAssetId?: number): Promise<boolean> {
+  async function submitAssetTransfer(targetAssetId?: number, formOverride?: Partial<typeof transferForm>): Promise<boolean> {
     if (!requireAdminAction()) return false;
-    const assetId = targetAssetId ?? Number(transferForm.assetId);
-    if (!assetId || !transferForm.toCampus || !transferForm.toLocation.trim()) return false;
+    const form = { ...transferForm, ...(formOverride || {}) };
+    const assetId = targetAssetId ?? Number(form.assetId);
+    if (!assetId || !form.toCampus || !String(form.toLocation || "").trim()) return false;
     const current = assets.find((a) => a.id === assetId);
     if (!current) return false;
     const groupedFurniture = groupedFurnitureTransferMeta(current);
-    const destinationLocation = transferForm.toLocation.trim();
-    const fromLocationPhoto = String(transferForm.fromLocationPhoto || "").trim() || locationPhotoForTransfer(current.campus, current.location || "-");
-    const toLocationPhoto = String(transferForm.toLocationPhoto || "").trim() || locationPhotoForTransfer(transferForm.toCampus, destinationLocation);
+    const destinationLocation = String(form.toLocation || "").trim();
+    const fromLocationPhoto = String(form.fromLocationPhoto || "").trim() || locationPhotoForTransfer(current.campus, current.location || "-");
+    const toLocationPhoto = String(form.toLocationPhoto || "").trim() || locationPhotoForTransfer(form.toCampus, destinationLocation);
     if (
       groupedFurniture &&
-      current.campus === transferForm.toCampus &&
+      current.campus === form.toCampus &&
       String(current.location || "").trim() === destinationLocation
     ) {
       setError("Grouped furniture transfer must move to a different room or campus.");
       return false;
     }
-    const transferQty = groupedFurniture ? Math.max(0, Number(transferForm.quantity || 0)) : 1;
+    const transferQty = groupedFurniture ? Math.max(0, Number(form.quantity || 0)) : 1;
     if (groupedFurniture && (!Number.isFinite(transferQty) || transferQty < 1 || transferQty > groupedFurniture.quantity)) {
       setError(`Transfer quantity must be between 1 and ${groupedFurniture.quantity}.`);
       return false;
     }
     const fromUser = String(current.assignedTo || "").trim();
-    const requestedToUser = String(transferForm.toAssignedTo || "").trim();
+    const requestedToUser = String(form.toAssignedTo || "").trim();
     const toUser =
       isSharedLocation(destinationLocation) && requestedToUser === fromUser
         ? ""
         : requestedToUser;
     const assignmentChanged = fromUser !== toUser;
-    if (!groupedFurniture && toUser && assignmentChanged && !transferForm.responsibilityConfirmed) {
+    if (!groupedFurniture && toUser && assignmentChanged && !form.responsibilityConfirmed) {
       setError("Please confirm staff responsibility before assigning this asset.");
       return false;
     }
-    if (!groupedFurniture && fromUser && assignmentChanged && !transferForm.returnConfirmed) {
+    if (!groupedFurniture && fromUser && assignmentChanged && !form.returnConfirmed) {
       setError("Please confirm previous staff return handover before reassigning.");
       return false;
     }
 
     const transferEntry: TransferEntry = {
       id: Date.now(),
-      date: transferForm.date || toYmd(new Date()),
+      date: form.date || toYmd(new Date()),
       fromCampus: current.campus,
       fromLocation: current.location || "-",
       fromLocationPhoto,
-      toCampus: transferForm.toCampus,
+      toCampus: form.toCampus,
       toLocation: destinationLocation,
       toLocationPhoto,
       ...(groupedFurniture ? { quantity: transferQty } : {}),
-      photo: String(transferForm.photo || "").trim(),
-      reason: transferForm.reason.trim(),
-      by: transferForm.by.trim(),
-      note: transferForm.note.trim(),
+      photo: String(form.photo || "").trim(),
+      reason: String(form.reason || "").trim(),
+      by: String(form.by || "").trim(),
+      note: String(form.note || "").trim(),
     };
     const campusTransferRemark =
       transferEntry.note ||
@@ -35626,7 +35627,7 @@ export default function App() {
           toLocation: transferEntry.toLocation,
           fromUser,
           toUser,
-          responsibilityAck: Boolean(transferForm.responsibilityConfirmed),
+          responsibilityAck: Boolean(form.responsibilityConfirmed),
           by: transferEntry.by,
           note: transferEntry.note || transferEntry.reason || "",
         }
@@ -36084,6 +36085,45 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function reverseTransferHistoryRow(row: TransferHistoryRow) {
+    if (!requireSuperAdminAction()) return;
+    const asset = assets.find((entry) => entry.id === row.assetDbId);
+    if (!asset) {
+      setError("Transfer asset not found.");
+      return;
+    }
+    if (groupedFurnitureTransferMeta(asset)) {
+      setError("Reverse Transfer is not available for grouped furniture. Please create a new transfer record manually.");
+      return;
+    }
+    const latestTransfer = sortTransferHistoryEntries(asset.transferHistory || [])[0] || null;
+    if (!latestTransfer || Number(latestTransfer.id) !== Number(row.transferEntryId)) {
+      setError("Reverse Transfer is only allowed for the latest transfer of this asset.");
+      return;
+    }
+    if (!window.confirm(`Create reverse transfer for ${row.assetId} back to ${row.fromCampus} / ${row.fromLocation}?`)) return;
+
+    const reverseAssignee = isSharedLocation(row.fromLocation || "") ? "" : String(row.fromUser || "").trim();
+    const reverseReason = row.reason
+      ? `Reverse transfer of ${formatDate(row.date || "-")} | ${row.reason}`
+      : `Reverse transfer of ${formatDate(row.date || "-")}`;
+    await submitAssetTransfer(asset.id, {
+      assetId: String(asset.id),
+      date: toYmd(new Date()),
+      toCampus: row.fromCampus,
+      toLocation: row.fromLocation,
+      toAssignedTo: reverseAssignee,
+      fromLocationPhoto: row.toLocationPhoto || locationPhotoForTransfer(asset.campus, asset.location || "-"),
+      toLocationPhoto: row.fromLocationPhoto || locationPhotoForTransfer(row.fromCampus, row.fromLocation || "-"),
+      responsibilityConfirmed: true,
+      returnConfirmed: true,
+      reason: reverseReason,
+      by: String(authUser?.displayName || authUser?.username || "").trim(),
+      note: `Reverse entry created from transfer history card ${row.assetId}`,
+      photo: "",
+    });
   }
 
   function openTransferFromAsset(asset: Asset) {
@@ -66083,13 +66123,13 @@ function formatTicketRequestSource(value?: string) {
                             <Pencil size={16} />
                           </button>
                           <button
-                            className="btn-danger transfer-history-icon-btn"
+                            className="tab transfer-history-icon-btn"
                             disabled={busy}
-                            onClick={() => void deleteTransferHistoryRow(row)}
-                            aria-label="Delete"
-                            title="Delete"
+                            onClick={() => void reverseTransferHistoryRow(row)}
+                            aria-label="Reverse Transfer"
+                            title="Reverse Transfer"
                           >
-                            <Trash2 size={16} />
+                            <RotateCcw size={16} />
                           </button>
                         </div>
                       ) : null}
