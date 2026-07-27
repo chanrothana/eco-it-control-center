@@ -12087,7 +12087,9 @@ const server = http.createServer(async (req, res) => {
       const receivedBy = toText(body.receivedBy);
       const transferToCampus = toText(body.transferToCampus);
       const transferToItemId = Number(body.transferToItemId || 0);
-      const isCampusTransfer = type === "OUT" && transferToItemId > 0 && !!transferToCampus;
+      const hasLinkedCampusMovement = transferToItemId > 0 && !!transferToCampus;
+      const isCampusTransfer = type === "OUT" && hasLinkedCampusMovement;
+      const isBorrowMovement = (type === "BORROW_OUT" || type === "BORROW_IN") && hasLinkedCampusMovement;
       const requiresApproval = requiresInventoryOutApproval(user, settings, date, type);
       const approvalStatus = type === "OUT" ? (requiresApproval ? "PENDING" : "APPROVED") : "";
       const approvalRequestedBy = toText(body.approvalRequestedBy) || toText(user.displayName) || toText(user.username);
@@ -12135,7 +12137,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
       let transferTargetItem = null;
-      if (isCampusTransfer) {
+      if (isCampusTransfer || isBorrowMovement) {
         transferTargetItem = items.find((row) => Number(row.id) === transferToItemId) || null;
         if (!transferTargetItem) {
           sendJson(res, 404, { error: "Destination stock item not found" });
@@ -12161,6 +12163,13 @@ const server = http.createServer(async (req, res) => {
         ) {
           sendJson(res, 400, { error: "Destination item must match the equivalent stock item on the other campus" });
           return;
+        }
+        if (type === "BORROW_IN") {
+          const mirrorCurrentStock = calcInventoryCurrentStock(transferTargetItem, txns);
+          if (qty > mirrorCurrentStock) {
+            sendJson(res, 400, { error: `Not enough stock on borrowed campus. Current: ${mirrorCurrentStock}` });
+            return;
+          }
         }
       }
 
@@ -12236,7 +12245,13 @@ const server = http.createServer(async (req, res) => {
         telegramMessageRefs: [],
       };
       const nextTxnsToCreate = [txn];
-      if (isCampusTransfer && transferTargetItem) {
+      if ((isCampusTransfer || isBorrowMovement) && transferTargetItem) {
+        const mirrorType =
+          type === "BORROW_OUT"
+            ? "IN"
+            : type === "BORROW_IN"
+              ? "OUT"
+              : "IN";
         nextTxnsToCreate.push({
           id: Date.now() + Math.floor(Math.random() * 1000) + 1000,
           itemId: Number(transferTargetItem.id),
@@ -12245,12 +12260,12 @@ const server = http.createServer(async (req, res) => {
           itemName: toText(transferTargetItem.itemName),
           created: new Date().toISOString(),
           date,
-          type: "IN",
+          type: mirrorType,
           qty,
           by: toText(body.by),
           note: toText(body.note),
-          fromCampus: toText(item.campus),
-          toCampus: toText(transferTargetItem.campus),
+          fromCampus: type === "BORROW_IN" ? toText(transferTargetItem.campus) : toText(item.campus),
+          toCampus: type === "BORROW_IN" ? toText(item.campus) : toText(transferTargetItem.campus),
           expectedReturnDate: "",
           requestedBy: "",
           approvedBy: "",
@@ -12304,14 +12319,14 @@ const server = http.createServer(async (req, res) => {
       const nextTxns = [...nextTxnsToCreate, ...txns];
       setInventoryState(db, settings, items, nextTxns);
       appendAuditLog(db, user, "CREATE", "inventory_txn", `${txn.itemCode}-${txn.id}`, `${type} ${qty} ${item.unit}`);
-      if (isCampusTransfer && transferTargetItem) {
+      if ((isCampusTransfer || isBorrowMovement) && transferTargetItem) {
         appendAuditLog(
           db,
           user,
           "CREATE",
           "inventory_txn",
           `${toText(transferTargetItem.itemCode)}-${nextTxnsToCreate[1].id}`,
-          `IN ${qty} ${toText(transferTargetItem.unit || item.unit)} from ${toText(item.campus)}`
+          `${toText(nextTxnsToCreate[1].type)} ${qty} ${toText(transferTargetItem.unit || item.unit)} ${type === "BORROW_IN" ? `to ${toText(item.campus)}` : `from ${toText(item.campus)}`}`
         );
       }
       await writeDb(db);
