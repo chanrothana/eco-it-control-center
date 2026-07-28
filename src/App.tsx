@@ -9521,7 +9521,14 @@ function preferredAssetDisplayName(
   if (!asset) return "-";
   const explicitName = String(asset.name || "").trim();
   const assetId = String(asset.assetId || "").trim();
-  const fallbackLabel = assetItemName(asset.category || "", asset.type || "", asset.pcType || "");
+  const category = String(asset.category || "").trim();
+  const typeCode = String(asset.type || "").trim();
+  const normalizedPcType = String(asset.pcType || "").trim();
+  const option = (TYPE_OPTIONS[category] || TYPE_OPTIONS.IT || []).find((row) => row.code === typeCode);
+  let fallbackLabel = option?.itemEn || typeCode || assetId || "-";
+  if (category === "IT" && typeCode === DESKTOP_PARENT_TYPE && normalizedPcType) {
+    fallbackLabel = `${fallbackLabel} (${normalizedPcType})`;
+  }
   if (!explicitName) return fallbackLabel;
   if (
     looksLikeAssetCodeLabel(explicitName) ||
