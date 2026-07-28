@@ -9495,10 +9495,10 @@ function extractAssetIdFromQrText(raw: string) {
   if (!text) return "";
   try {
     const url = new URL(text);
-    const fromDbQuery = url.searchParams.get("assetDbId") || url.searchParams.get("assetDb") || "";
-    if (fromDbQuery.trim()) return fromDbQuery.trim();
     const fromQuery = url.searchParams.get("assetId") || url.searchParams.get("asset") || "";
     if (fromQuery.trim()) return fromQuery.trim().toUpperCase();
+    const fromDbQuery = url.searchParams.get("assetDbId") || url.searchParams.get("assetDb") || "";
+    if (fromDbQuery.trim()) return fromDbQuery.trim();
   } catch {
     // Not a URL, continue with plain text.
   }
@@ -12758,7 +12758,7 @@ export default function App() {
       .trim()
       .toUpperCase();
   });
-  const pendingQrAssetLookup = pendingQrAssetDbId || pendingQrAssetId;
+  const pendingQrAssetLookup = pendingQrAssetId || pendingQrAssetDbId;
   const isPublicQrRentalPrinter = Boolean(pendingQrPrinterCode && !pendingQrAssetLookup);
   const [qrCodeMap, setQrCodeMap] = useState<Record<string, string>>({});
   const [publicQrAsset, setPublicQrAsset] = useState<PublicQrAsset | null>(null);
@@ -46570,10 +46570,8 @@ export default function App() {
 
   const buildAssetQrUrl = useCallback((assetDbId?: number, assetId?: string) => {
     const id = String(assetId || "").trim();
-    const dbId = Number(assetDbId || 0);
-    if (!dbId && !id) return "";
+    if (!id) return "";
     const params = new URLSearchParams();
-    if (dbId > 0) params.set("assetDbId", String(dbId));
     if (id) params.set("assetId", id);
     return `${qrScanBase}/?${params.toString()}`;
   }, [qrScanBase]);
