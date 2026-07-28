@@ -4734,6 +4734,26 @@ async function buildTelegramComparePhotoBuffer(photoPath, width = 280, height = 
   }
 }
 
+async function buildTelegramSinglePhotoBuffer(photoPath, width = 320, height = 320) {
+  const sharpLib = getSharp();
+  if (!sharpLib) return null;
+  const absolutePath = resolveUploadedAbsolutePath(photoPath);
+  if (!absolutePath || !(await fileExists(absolutePath))) return null;
+  try {
+    return await sharpLib(absolutePath)
+      .rotate()
+      .resize(width, height, {
+        fit: "contain",
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+        position: "centre",
+      })
+      .png()
+      .toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 function formatTelegramPhotoStampDateTime(value) {
   const parsed = value ? new Date(value) : new Date();
   const safeDate = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
@@ -5103,10 +5123,10 @@ async function renderTelegramWhiteSinglePhotoCardPng({
   const normalizedLines = Array.isArray(textLines) ? textLines.filter(Boolean) : [];
   const hasTextPanel = normalizedLines.length > 0;
   const photoFrame = hasTextPanel
-    ? { x: 42, y: 66, width: 676, height: 276 }
+    ? { x: 206, y: 58, width: 348, height: 348 }
     : { x: 220, y: 62, width: 320, height: 320 };
   const photoStage = hasTextPanel
-    ? { x: 24, y: 48, width: 712, height: 312, radius: 0 }
+    ? { x: 188, y: 40, width: 384, height: 384, radius: 20 }
     : {
         x: photoFrame.x - 22,
         y: photoFrame.y - 18,
@@ -5172,12 +5192,14 @@ async function renderTelegramWhiteSinglePhotoCardPng({
       top: 0,
     },
   ];
-  const photoScale = hasTextPanel ? 0.7 : 0.78;
+  const photoScale = hasTextPanel ? 0.94 : 0.78;
   const renderedPhotoWidth = Math.max(120, Math.round(photoFrame.width * photoScale));
   const renderedPhotoHeight = Math.max(120, Math.round(photoFrame.height * photoScale));
   const renderedPhotoLeft = photoFrame.x + Math.round((photoFrame.width - renderedPhotoWidth) / 2);
   const renderedPhotoTop = photoFrame.y + Math.round((photoFrame.height - renderedPhotoHeight) / 2);
-  const topPhoto = await buildTelegramComparePhotoBuffer(photoPath, renderedPhotoWidth, renderedPhotoHeight);
+  const topPhoto = hasTextPanel
+    ? await buildTelegramSinglePhotoBuffer(photoPath, renderedPhotoWidth, renderedPhotoHeight)
+    : await buildTelegramComparePhotoBuffer(photoPath, renderedPhotoWidth, renderedPhotoHeight);
   if (topPhoto) {
     composites.push({ input: topPhoto, left: renderedPhotoLeft, top: renderedPhotoTop });
   } else {
@@ -13857,6 +13879,11 @@ const server = http.createServer(async (req, res) => {
       db.assets[idx] = {
         ...current,
         ...cleaned,
+        // Asset identity must stay fixed for the whole life of the machine.
+        id,
+        assetId: toText(current.assetId),
+        seq: Number(current.seq) || 0,
+        created: toText(current.created),
         assignedTo: incomingAssignedTo,
         photo: mainPhoto,
         photos: nextPhotos,
@@ -13865,7 +13892,7 @@ const server = http.createServer(async (req, res) => {
         statusHistory: nextStatusHistory,
         custodyHistory: finalCustodyHistory,
         custodyStatus: nextCustodyStatus,
-        name: current.assetId,
+        name: toText(current.name),
       };
       if (campusChanged || previousLocation !== nextLocation) {
         for (const asset of db.assets) {

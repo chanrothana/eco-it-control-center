@@ -12140,7 +12140,7 @@ export default function App() {
   const [dashboardQuickCountOpen, setDashboardQuickCountOpen] = useState(true);
   const [reportMonth, setReportMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const [reportScheduleMonth, setReportScheduleMonth] = useState(() => toYmd(new Date()).slice(0, 7));
-  const [reportScheduleView, setReportScheduleView] = useState<"summary" | "details">("summary");
+  const [reportScheduleView, setReportScheduleView] = useState<"calendar" | "list" | "all">("all");
   const [reportDateFrom, setReportDateFrom] = useState(() => `${toYmd(new Date()).slice(0, 7)}-01`);
   const [reportDateTo, setReportDateTo] = useState(() => {
     const now = new Date();
@@ -41467,9 +41467,20 @@ export default function App() {
       };
     });
   }, [reportScheduleMonth, reportScheduleCalendarByDate]);
+  const reportScheduleViewLabel = useMemo(() => {
+    if (reportScheduleView === "calendar") {
+      return lang === "km" ? "ប្រតិទិន" : "Calendar";
+    }
+    if (reportScheduleView === "list") {
+      return lang === "km" ? "បញ្ជី" : "List";
+    }
+    return lang === "km" ? "ទាំងអស់" : "All";
+  }, [lang, reportScheduleView]);
+  const reportScheduleShowCalendar = reportScheduleView !== "list";
+  const reportScheduleShowList = reportScheduleView !== "calendar";
   const reportScheduleDisplayRows = useMemo(
-    () => (reportScheduleView === "details" ? reportScheduleDetailRows : reportScheduleCalendarRows),
-    [reportScheduleCalendarRows, reportScheduleDetailRows, reportScheduleView]
+    () => (reportScheduleShowList ? reportScheduleDetailRows : reportScheduleCalendarRows),
+    [reportScheduleCalendarRows, reportScheduleDetailRows, reportScheduleShowList]
   );
   const reportScheduleDisplaySummary = useMemo(
     () => ({
@@ -45122,11 +45133,7 @@ export default function App() {
       );
       chips.push(`${lang === "km" ? "ក្រុម" : "Group"}: ${reportScheduleGroupLabel(reportScheduleGroupFilter)}`);
       chips.push(
-        `${lang === "km" ? "របៀបបង្ហាញ" : "View"}: ${
-          reportScheduleView === "details"
-            ? (lang === "km" ? "លម្អិត" : "Details")
-            : (lang === "km" ? "សង្ខេប" : "Summary")
-        }`
+        `${lang === "km" ? "របៀបបោះពុម្ព" : "Print View"}: ${reportScheduleViewLabel}`
       );
     } else if (reportType === "school_key_control") {
       chips.push(
@@ -45171,6 +45178,7 @@ export default function App() {
     locationTagResolvedName,
     reportScheduleGroupFilter,
     reportScheduleView,
+    reportScheduleViewLabel,
     reportScheduleGroupLabel,
     reportScheduleMonthLabel,
     reportType,
@@ -47415,8 +47423,8 @@ export default function App() {
             },
             { label: lang === "km" ? "ក្រុម" : "Group", value: reportScheduleGroupLabel(reportScheduleGroupFilter) },
             {
-              label: lang === "km" ? "របៀបបង្ហាញ" : "View",
-              value: reportScheduleView === "details" ? (lang === "km" ? "លម្អិត" : "Details") : (lang === "km" ? "សង្ខេប" : "Summary"),
+              label: lang === "km" ? "របៀបបោះពុម្ព" : "Print View",
+              value: reportScheduleViewLabel,
             },
             { label: lang === "km" ? "ថ្ងៃមានកាលវិភាគ" : "Scheduled Days", value: reportScheduleDisplaySummary.totalDays },
             { label: lang === "km" ? "ក្រុមការងារ" : "Calendar Entries", value: reportScheduleDisplaySummary.totalGroups },
@@ -47693,7 +47701,7 @@ export default function App() {
           )} | ${escapeHtml(lang === "km" ? "ក្រុម" : "Group")}: ${escapeHtml(reportScheduleGroupLabel(reportScheduleGroupFilter))} | ${escapeHtml(
             lang === "km" ? "របៀបបង្ហាញ" : "View"
           )}: ${escapeHtml(
-            reportScheduleView === "details" ? (lang === "km" ? "លម្អិត" : "Details") : (lang === "km" ? "សង្ខេប" : "Summary")
+            reportScheduleViewLabel
           )}</p>`
         : `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
             lang === "km" ? "តម្រងសាខា" : "Campus Filter"
@@ -47750,16 +47758,7 @@ export default function App() {
       reportType === "maintenance_completion"
         ? maintenanceCompletionRangeLabel
         : reportType === "schedule_calendar"
-          ? [
-              reportScheduleMonthLabel,
-              `${lang === "km" ? "សាខា" : "Campus"}: ${
-                reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)
-              }`,
-              `${lang === "km" ? "ក្រុម" : "Group"}: ${reportScheduleGroupLabel(reportScheduleGroupFilter)}`,
-              `${lang === "km" ? "របៀបបង្ហាញ" : "View"}: ${
-                reportScheduleView === "details" ? (lang === "km" ? "លម្អិត" : "Details") : (lang === "km" ? "សង្ខេប" : "Summary")
-              }`,
-            ].join("\n")
+          ? ""
         : reportType === "asset_master"
           ? (assetMasterCampusFilter.includes("ALL")
               ? t.allCampuses
@@ -48394,7 +48393,7 @@ export default function App() {
               : ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
               .map((label, index) => `<div class="schedule-calendar-weekday${index === 0 ? " is-sun" : index === 6 ? " is-sat" : ""}">${escapeHtml(label)}</div>`)
               .join("");
-            const dayCells = reportScheduleDisplayDays
+            const dayCells = reportScheduleCalendarDays
               .map((day) => {
                 const entryBlocks = day.entries.length
                   ? day.entries
@@ -48482,18 +48481,20 @@ export default function App() {
                   )
                   .join("")
               : `<tr><td colspan="10">${escapeHtml(lang === "km" ? "មិនមានកាលវិភាគថែទាំក្នុងខែដែលបានជ្រើស។" : "No maintenance schedule found for the selected month.")}</td></tr>`;
-            return `<div class="schedule-calendar-print">
-              <div class="schedule-calendar-grid-wrap">
+            const calendarHtml = `<div class="schedule-calendar-grid-wrap">
                 <div class="schedule-calendar-grid">${weekdayHeaders}${dayCells}</div>
               </div>
-              <div class="schedule-calendar-legend">${legendItems}</div>
-              <div class="preview-table-wrap" style="margin-top:16px;">
+              <div class="schedule-calendar-legend">${legendItems}</div>`;
+            const listHtml = `<div class="preview-table-wrap" style="margin-top:16px;">
                 <table class="preview-report-table preview-report-table-schedule">
                   ${schedulePreviewColgroup}
                   ${buildPreviewHeadHtml(schedulePreviewHeaders)}
                   <tbody>${detailRows}</tbody>
                 </table>
-              </div>
+              </div>`;
+            return `<div class="schedule-calendar-print">
+              ${reportScheduleShowCalendar ? calendarHtml : ""}
+              ${reportScheduleShowList ? listHtml : ""}
             </div>`;
           })()
         : reportType === "inventory_balance" && reportInventorySplitByCategoryPages
@@ -48698,9 +48699,9 @@ export default function App() {
             justify-items: center;
             text-align: center;
             align-items: start;
-            margin-bottom: 16px;
-            min-height: 156px;
-            padding: 26px 220px 0 220px;
+            margin-bottom: 10px;
+            min-height: 92px;
+            padding: 14px 220px 0 220px;
             overflow: visible;
           }
           .report-head-left {
@@ -48726,7 +48727,7 @@ export default function App() {
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: #5a705f;
-            margin-bottom: 10px;
+            margin: 0 0 8px 0;
             line-height: 1.25;
           }
           .report-head h2 {
@@ -48735,6 +48736,7 @@ export default function App() {
             color: #1f2e26;
             line-height: 1.2;
             max-width: 100%;
+            margin: 0;
           }
           .report-head-centered h2 {
             font-size: 24px;
@@ -48754,7 +48756,7 @@ export default function App() {
             line-height: 1.35;
           }
           .report-head.report-head-centered {
-            margin-bottom: 12px;
+            margin-bottom: 8px;
           }
           .report-summary-grid {
             display: grid;
@@ -72860,10 +72862,11 @@ function formatTicketRequestSource(value?: string) {
                   <select
                     className="input"
                     value={reportScheduleView}
-                    onChange={(e) => setReportScheduleView(e.target.value as "summary" | "details")}
+                    onChange={(e) => setReportScheduleView(e.target.value as "calendar" | "list" | "all")}
                   >
-                    <option value="summary">{lang === "km" ? "សង្ខេប" : "Summary"}</option>
-                    <option value="details">{lang === "km" ? "លម្អិត" : "Details"}</option>
+                    <option value="calendar">{lang === "km" ? "ប្រតិទិន" : "Calendar"}</option>
+                    <option value="list">{lang === "km" ? "បញ្ជី" : "List"}</option>
+                    <option value="all">{lang === "km" ? "ទាំងអស់" : "All"}</option>
                   </select>
                 </>
               ) : null}
@@ -74215,9 +74218,10 @@ function formatTicketRequestSource(value?: string) {
 	                        <div>{reportScheduleMonthLabel}</div>
 	                        <div>{lang === "km" ? "សាខា" : "Campus"}: {reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter)}</div>
 	                        <div>{lang === "km" ? "ក្រុម" : "Group"}: {reportScheduleGroupLabel(reportScheduleGroupFilter)}</div>
-	                        <div>{lang === "km" ? "របៀបបង្ហាញ" : "View"}: {reportScheduleView === "details" ? (lang === "km" ? "លម្អិត" : "Details") : (lang === "km" ? "សង្ខេប" : "Summary")}</div>
+	                        <div>{lang === "km" ? "របៀបបោះពុម្ព" : "Print View"}: {reportScheduleViewLabel}</div>
 	                      </div>
 	                    </div>
+                    {reportScheduleShowCalendar ? (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: isPhoneView ? 6 : 10 }}>
                       {reportScheduleCampusOptions.map((campus) => (
                         <span
@@ -74248,7 +74252,9 @@ function formatTicketRequestSource(value?: string) {
                         </span>
                       ))}
                     </div>
+                    ) : null}
                   </div>
+                  {reportScheduleShowCalendar ? (
                   <div
                     style={{
                       display: "grid",
@@ -74276,7 +74282,7 @@ function formatTicketRequestSource(value?: string) {
                         {weekday}
                       </div>
                     ))}
-	                    {reportScheduleDisplayDays.map((day) => {
+	                    {reportScheduleCalendarDays.map((day) => {
                         const visibleEntries = isPhoneView ? day.entries.slice(0, 1) : day.entries;
                         const hiddenEntryCount = isPhoneView ? Math.max(0, day.entries.length - visibleEntries.length) : 0;
                         return (
@@ -74345,8 +74351,10 @@ function formatTicketRequestSource(value?: string) {
                         );
                       })}
                   </div>
+                  ) : null}
                 </div>
 
+                {reportScheduleShowList ? (
                 <div className="report-schedule-list">
 	                  {reportScheduleDisplayRows.length ? (
 	                    reportScheduleDisplayRows.map((row, index) => (
@@ -74405,6 +74413,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                   )}
                 </div>
+                ) : null}
               </div>
             )}
 
