@@ -9505,6 +9505,33 @@ function extractAssetIdFromQrText(raw: string) {
   return text.toUpperCase();
 }
 
+function looksLikeAssetCodeLabel(value: string) {
+  const text = String(value || "").trim().toUpperCase();
+  if (!text) return false;
+  return /^[A-Z]{2,6}\d?-+[A-Z0-9]{2,10}-[A-Z0-9]{2,10}-\d{1,6}$/.test(text);
+}
+
+function preferredAssetDisplayName(
+  asset:
+    | Pick<Asset, "name" | "assetId" | "category" | "type" | "pcType">
+    | Pick<PublicQrAsset, "name" | "assetId" | "category" | "type" | "pcType">
+    | null
+    | undefined
+) {
+  if (!asset) return "-";
+  const explicitName = String(asset.name || "").trim();
+  const assetId = String(asset.assetId || "").trim();
+  const fallbackLabel = assetItemName(asset.category || "", asset.type || "", asset.pcType || "");
+  if (!explicitName) return fallbackLabel;
+  if (
+    looksLikeAssetCodeLabel(explicitName) ||
+    explicitName.toUpperCase() === assetId.toUpperCase()
+  ) {
+    return fallbackLabel;
+  }
+  return explicitName;
+}
+
 type InventoryItemPickerProps = {
   value: string;
   items: InventoryItem[];
@@ -10554,6 +10581,31 @@ export default function App() {
     | "assignedTo"
     | "status";
   type AssetMasterColumnKey = AssetMasterSortKey;
+  type AssetMasterReportRow = {
+    key: string;
+    assetDbId: number;
+    assetId: string;
+    setCode: string;
+    linkedTo: string;
+    category: string;
+    type: string;
+    pcType: string;
+    itemName: string;
+    itemDescription: string;
+    note: string;
+    acType: string;
+    acCapacity: string;
+    acTypeCapacity: string;
+    quantity: number;
+    serialNumber: string;
+    location: string;
+    purchaseDate: string;
+    lastServiceDate: string;
+    assignedTo: string;
+    status: string;
+    photo: string;
+    campus: string;
+  };
 
   const [lang, setLang] = useState<Lang>(() => {
     const saved = localStorage.getItem("ui_lang");
@@ -44019,7 +44071,7 @@ export default function App() {
       : `<div class="preview-furniture-qty-empty">-</div>`;
     return `<div class="preview-furniture-qty"><div class="preview-furniture-qty-total">Total: ${total}</div><div class="preview-furniture-qty-divider"></div>${detailHtml}</div>`;
   }, [printableFurnitureModelPhotoByLabel]);
-  const assetMasterSetRows = useMemo(() => {
+  const assetMasterSetRows = useMemo<AssetMasterReportRow[]>(() => {
     const toItemDescription = (asset: Asset) => {
       const visibleSpecs = isAirconAsset(asset.category || "", asset.type || "")
         ? parseAirconSpecs(asset.specs || "").specs
@@ -44073,6 +44125,7 @@ export default function App() {
         } else if (setCode !== "-") {
           linkedTo = setMainByCode.get(setCode) || "-";
         }
+        const groupedFurniture = groupedFurnitureTransferMeta(asset);
         return {
           key: `asset-${asset.id}`,
           assetDbId: asset.id,
@@ -44090,6 +44143,7 @@ export default function App() {
           acTypeCapacity: isAirconAsset(asset.category, asset.type)
             ? [parseAirconSpecs(asset.specs || "").acType, parseAirconSpecs(asset.specs || "").acHp].filter(Boolean).join(" | ")
             : "",
+          quantity: groupedFurniture?.quantity || 1,
           serialNumber: String(asset.serialNumber || "").trim(),
           location: asset.location || "-",
           purchaseDate: asset.purchaseDate || "-",
@@ -44315,6 +44369,9 @@ export default function App() {
   const sortedAssetMasterRows = useMemo(() => {
     const direction = assetMasterSort.direction === "asc" ? 1 : -1;
     return [...filteredAssetMasterRows].sort((a, b) => {
+      if (assetMasterSort.key === "quantity") {
+        return (a.quantity - b.quantity) * direction;
+      }
       const aVal = String(a[assetMasterSort.key] || "");
       const bVal = String(b[assetMasterSort.key] || "");
       if (assetMasterSort.key === "campus") {
@@ -44347,6 +44404,7 @@ export default function App() {
       { key: "acTypeCapacity", label: "Type / Capacity", sortable: true },
       { key: "linkedTo", label: "Link to Main Asset", sortable: true },
       { key: "category", label: t.category, sortable: true },
+      { key: "quantity", label: lang === "km" ? "ចំនួន" : "Quantity", sortable: true },
       { key: "itemDescription", label: "Item Description (Specification)", sortable: true },
       { key: "note", label: lang === "km" ? "កំណត់ចំណាំ" : "Note", sortable: true },
       { key: "campus", label: t.campus, sortable: true },
@@ -50409,9 +50467,7 @@ function formatTicketRequestSource(value?: string) {
     const publicQrAssignedUser = String(asset?.assignedTo || "").trim()
       ? users.find((user) => user.fullName === String(asset?.assignedTo || "").trim()) || null
       : null;
-    const publicQrAssetName = asset
-      ? asset.name || assetItemName(asset.category || "", asset.type || "", asset.pcType || "")
-      : "-";
+    const publicQrAssetName = preferredAssetDisplayName(asset);
     const publicQrStatusLabel = assetStatusLabel(asset?.status || "-");
     const publicQrStatusTone = (() => {
       const value = String(asset?.status || "").trim().toLowerCase();
@@ -74007,6 +74063,9 @@ function formatTicketRequestSource(value?: string) {
                                   }
                                   if (column.key === "category") {
                                     return <td key={`${row.key}-category`}>{row.category || "-"}</td>;
+                                  }
+                                  if (column.key === "quantity") {
+                                    return <td key={`${row.key}-quantity`}>{Number.isFinite(row.quantity) ? row.quantity : 1}</td>;
                                   }
                                   if (column.key === "campus") {
                                     return <td key={`${row.key}-campus`}>{reportCampusName(row.campus)}</td>;
