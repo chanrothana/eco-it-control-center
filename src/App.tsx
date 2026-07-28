@@ -78,6 +78,13 @@ const SCHEDULE_GROUP_PRESET_OPTIONS = [
   { value: "General Maintenance", en: "General Maintenance", km: "កាលវិភាគថែទាំទូទៅ" },
   { value: "Report Schedule", en: "Report Schedule", km: "កាលវិភាគរបាយការណ៍" },
 ] as const;
+const LOCATION_TAG_PRESET_OPTIONS = [
+  { value: "paper_bin", en: "Paper Bin", km: "កំប៉ុងក្រដាស់" },
+  { value: "alcohol_bin", en: "Alcohol Bottle", km: "កំប៉ុងអាល់កុល" },
+  { value: "water_bin", en: "Water Bottle", km: "កំប៉ុងទឹក" },
+  { value: "aircon_remote", en: "Air-Con Remote", km: "តេឡេម៉ាស៊ីនត្រជាក់" },
+  { value: "tv_remote", en: "TV Remote", km: "តេឡេទូរទស្សន៍" },
+] as const;
 
 type Asset = {
   id: number;
@@ -402,6 +409,7 @@ type ReportType =
   | "asset_master"
   | "set_code"
   | "asset_by_location"
+  | "location_tags"
   | "furniture_control"
   | "inventory_balance"
   | "schedule_calendar"
@@ -1782,7 +1790,7 @@ const SCHOOL_KEY_LOG_FALLBACK_KEY = "it_school_key_logs_v1";
 const DUPLICATE_PHOTO_UPLOAD_ERROR = "duplicate-photo-upload";
 const PHOTO_USAGE_FIELD_KEYS = new Set(["photo", "photos", "beforePhotos", "afterPhotos"]);
 const REPORT_SECTION_TYPE_MAP: Record<ReportSection, ReportType[]> = {
-  asset: ["asset_full_record", "asset_master", "set_code", "asset_by_location", "furniture_control", "staff_borrowing", "qr_labels"],
+  asset: ["asset_full_record", "asset_master", "set_code", "asset_by_location", "location_tags", "furniture_control", "staff_borrowing", "qr_labels"],
   maintenance: ["schedule_calendar", "maintenance_completion", "overdue"],
   inventory: ["inventory_balance"],
   transfer: ["transfer", "school_key_control"],
@@ -1794,6 +1802,7 @@ const REPORT_TYPE_SECTION_MAP: Record<ReportType, ReportSection> = {
   asset_master: "asset",
   set_code: "asset",
   asset_by_location: "asset",
+  location_tags: "asset",
   furniture_control: "asset",
   inventory_balance: "inventory",
   schedule_calendar: "maintenance",
@@ -10923,6 +10932,10 @@ export default function App() {
   const [pendingClassroomCheckRoomId, setPendingClassroomCheckRoomId] = useState<number | null>(null);
   const [reportSection, setReportSection] = useState<ReportSection>("asset");
   const [reportType, setReportType] = useState<ReportType>("asset_master");
+  const [locationTagCampus, setLocationTagCampus] = useState("");
+  const [locationTagLocation, setLocationTagLocation] = useState("");
+  const [locationTagItemName, setLocationTagItemName] = useState<string>(LOCATION_TAG_PRESET_OPTIONS[0].km);
+  const [locationTagCopies, setLocationTagCopies] = useState("8");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
   const [reportInventoryViewMode, setReportInventoryViewMode] = useState<"list" | "campus_compare">("list");
   const [reportInventoryCompareSort, setReportInventoryCompareSort] = useState<{
@@ -43013,6 +43026,40 @@ export default function App() {
     const options = Array.from(new Set(locationAssetSummaryRows.map((row) => row.campus).filter(Boolean)));
     return options.sort((a, b) => campusLabel(a).localeCompare(campusLabel(b)));
   }, [locationAssetSummaryRows, campusLabel]);
+  const locationTagCampusOptions = useMemo(
+    () => [...allowedCampusOptions].sort((a, b) => campusLabel(a).localeCompare(campusLabel(b))),
+    [allowedCampusOptions, campusLabel]
+  );
+  const locationTagLocationOptions = useMemo(() => {
+    if (!locationTagCampus) return [] as string[];
+    return Array.from(new Set(
+      locations
+        .filter((row) => row.campus === locationTagCampus)
+        .map((row) => String(row.name || "").trim())
+        .filter(Boolean)
+    )).sort((a, b) => reportLocationName(a).localeCompare(reportLocationName(b)));
+  }, [locations, locationTagCampus]);
+  const locationTagCampusLabel = useMemo(
+    () => (locationTagCampus ? campusLabel(locationTagCampus) : "-"),
+    [campusLabel, locationTagCampus]
+  );
+  const locationTagLocationLabel = useMemo(
+    () => (locationTagLocation ? reportLocationName(locationTagLocation) : "-"),
+    [locationTagLocation]
+  );
+  const locationTagCopyCount = useMemo(() => {
+    const parsed = Number(locationTagCopies);
+    if (!Number.isFinite(parsed)) return 1;
+    return Math.max(1, Math.min(60, Math.floor(parsed)));
+  }, [locationTagCopies]);
+  const locationTagResolvedName = useMemo(
+    () => String(locationTagItemName || "").trim() || LOCATION_TAG_PRESET_OPTIONS[0][lang === "km" ? "km" : "en"],
+    [lang, locationTagItemName]
+  );
+  const locationTagPreviewRows = useMemo(
+    () => Array.from({ length: locationTagCopyCount }, (_, index) => ({ key: `tag-${index}`, index })),
+    [locationTagCopyCount]
+  );
   const assetByLocationLocationFilterOptions = useMemo(() => {
     const source =
       assetByLocationCampusFilter.includes("ALL")
@@ -43027,6 +43074,21 @@ export default function App() {
       setAssetByLocationLocationFilter("ALL");
     }
   }, [assetByLocationLocationFilter, assetByLocationLocationFilterOptions]);
+  useEffect(() => {
+    if (!locationTagCampusOptions.length) return;
+    if (!locationTagCampus || !locationTagCampusOptions.includes(locationTagCampus)) {
+      setLocationTagCampus(locationTagCampusOptions[0]);
+    }
+  }, [locationTagCampus, locationTagCampusOptions]);
+  useEffect(() => {
+    if (!locationTagLocationOptions.length) {
+      if (locationTagLocation) setLocationTagLocation("");
+      return;
+    }
+    if (!locationTagLocation || !locationTagLocationOptions.includes(locationTagLocation)) {
+      setLocationTagLocation(locationTagLocationOptions[0]);
+    }
+  }, [locationTagLocation, locationTagLocationOptions]);
   const filteredLocationAssetSummaryRows = useMemo(() => {
     return locationAssetSummaryRows.filter((row) => {
       if (!assetByLocationCampusFilter.length) return false;
@@ -44567,6 +44629,7 @@ export default function App() {
               { value: "asset_full_record" as ReportType, label: "កំណត់ត្រាទ្រព្យសម្បត្តិពេញលេញ" },
               { value: "set_code" as ReportType, label: "ព័ត៌មានក្រុមឧបករណ៍កុំព្យូទ័រ" },
               { value: "asset_by_location" as ReportType, label: "ទ្រព្យសម្បត្តិតាមសាខា និងទីតាំង" },
+              { value: "location_tags" as ReportType, label: "ស្លាកឈ្មោះសាមញ្ញតាមទីតាំង" },
               { value: "furniture_control" as ReportType, label: "គ្រប់គ្រងកៅអី និងតុ" },
               { value: "inventory_balance" as ReportType, label: "សមតុល្យស្តុក" },
               { value: "schedule_calendar" as ReportType, label: "ប្រតិទិនកាលវិភាគថែទាំ" },
@@ -44584,6 +44647,7 @@ export default function App() {
               { value: "asset_full_record" as ReportType, label: "Full Asset Record" },
               { value: "set_code" as ReportType, label: "Computer Set Detail" },
               { value: "asset_by_location" as ReportType, label: "Asset by Campus and Location" },
+              { value: "location_tags" as ReportType, label: "Simple Location Tags" },
               { value: "furniture_control" as ReportType, label: "Chair/Table Control" },
               { value: "inventory_balance" as ReportType, label: "Inventory Stock Balance" },
               { value: "schedule_calendar" as ReportType, label: "Maintenance Schedule Calendar" },
@@ -44600,6 +44664,8 @@ export default function App() {
         .filter((option) =>
           option.value === "asset_full_record"
             ? canAccessMenu("reports.asset_master", "reports")
+            : option.value === "location_tags"
+              ? canAccessMenu("reports.asset_by_location", "reports")
             : canAccessMenu(`reports.${option.value}`, "reports")
         ),
     [lang, canAccessMenu]
@@ -44927,6 +44993,9 @@ export default function App() {
     if (reportType === "asset_master") {
       return `${selectedReportTypeLabel} - ${assetMasterCampusTitle}`;
     }
+    if (reportType === "location_tags") {
+      return `${selectedReportTypeLabel} - ${locationTagResolvedName}`;
+    }
     if (reportType === "schedule_calendar") {
       return lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar";
     }
@@ -44949,6 +45018,7 @@ export default function App() {
             asset_master: "បញ្ជីទ្រព្យសម្បត្តិលម្អិត តាមអ្វីដែលបានជ្រើស។",
             set_code: "មើលក្រុមឧបករណ៍ និងសមាសភាគដែលភ្ជាប់ជាមួយគ្នា។",
             asset_by_location: "សង្ខេបចំនួនឧបករណ៍តាមសាខា និងទីតាំង។",
+            location_tags: "បោះពុម្ពស្លាកឈ្មោះសាមញ្ញសម្រាប់សម្ភារៈតាមសាខា និងទីតាំង ដើម្បីបិតលើវត្ថុប្រើប្រាស់បានភ្លាម។",
             furniture_control: "សង្ខេបកៅអី និងតុតាមសាខា ហើយបង្ហាញគ្រឿងសង្ហារឹមផ្សេងៗក្នុងថ្នាក់រៀនតាមចំនួនសិស្សបច្ចុប្បន្ន។",
             inventory_balance: "បោះពុម្ពសមតុល្យស្តុកតាមវត្ថុ និងទីតាំងស្តុកបច្ចុប្បន្ន។",
             schedule_calendar: "បង្ហាញ និងបោះពុម្ពប្រតិទិនកាលវិភាគថែទាំប្រចាំខែ តាមសាខា និងក្រុមថែទាំ។",
@@ -44966,6 +45036,7 @@ export default function App() {
             asset_master: "Detailed asset list based on selected filters.",
             set_code: "View each computer set with all connected items.",
             asset_by_location: "Summary count by campus and location.",
+            location_tags: "Print simple cut-and-stick name tags with campus and location for accessories and room items.",
             furniture_control: "Chair and table totals by campus with classroom furniture details based on current students.",
             inventory_balance: "Standard stock balance report with current stock by item and campus.",
             schedule_calendar: "Show and print the monthly maintenance calendar grouped by campus and maintenance group.",
@@ -44983,6 +45054,11 @@ export default function App() {
   const selectedReportDisplayGuide = useMemo(() => {
     if (reportType === "asset_master") {
       return `${lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of"}: ${assetMasterItemTitle}`;
+    }
+    if (reportType === "location_tags") {
+      return lang === "km"
+        ? "ជ្រើសសាខា ទីតាំង ឈ្មោះសម្ភារៈ និងចំនួនស្លាក បន្ទាប់មកបោះពុម្ពសម្រាប់បិតលើសម្ភារៈ។"
+        : "Select campus, location, accessory name, and quantity, then print ready-to-cut location tags.";
     }
     if (reportType === "schedule_calendar") {
       return lang === "km"
@@ -45067,6 +45143,11 @@ export default function App() {
       );
       chips.push(`${lang === "km" ? "ពីថ្ងៃ" : "From"}: ${reportSchoolKeyDateFrom || "-"}`);
       chips.push(`${lang === "km" ? "ដល់ថ្ងៃ" : "To"}: ${reportSchoolKeyDateTo || "-"}`);
+    } else if (reportType === "location_tags") {
+      chips.push(`${lang === "km" ? "សាខា" : "Campus"}: ${locationTagCampusLabel}`);
+      chips.push(`${lang === "km" ? "ទីតាំង" : "Location"}: ${locationTagLocationLabel}`);
+      chips.push(`${lang === "km" ? "ឈ្មោះ" : "Name"}: ${locationTagResolvedName}`);
+      chips.push(`${lang === "km" ? "ចំនួនស្លាក" : "Labels"}: ${locationTagCopyCount}`);
     }
     if (reportAssetFilterLabel) chips.push(reportAssetFilterLabel);
     return chips;
@@ -45084,6 +45165,10 @@ export default function App() {
     reportSchoolKeyDateFrom,
     reportSchoolKeyDateTo,
     reportSchoolKeyStatusFilter,
+    locationTagCampusLabel,
+    locationTagCopyCount,
+    locationTagLocationLabel,
+    locationTagResolvedName,
     reportScheduleGroupFilter,
     reportScheduleView,
     reportScheduleGroupLabel,
@@ -45097,13 +45182,14 @@ export default function App() {
   ]);
   const reportFiltersCollapsedDesktop =
     reportType === "maintenance_completion" ? maintenanceReportFiltersCollapsed : reportDesktopFiltersCollapsed;
-  const showReportSignatureOptions = reportType !== "qr_labels";
+  const showReportSignatureOptions = reportType !== "qr_labels" && reportType !== "location_tags";
   const hasReportFilters = useMemo(
     () =>
       reportType === "staff_borrowing" ||
       reportType === "asset_full_record" ||
       reportType === "asset_master" ||
       reportType === "asset_by_location" ||
+      reportType === "location_tags" ||
       reportType === "furniture_control" ||
       reportType === "inventory_balance" ||
       reportType === "schedule_calendar" ||
@@ -45277,13 +45363,20 @@ export default function App() {
       setAssetByLocationLocationFilter("ALL");
       return;
     }
+    if (reportType === "location_tags") {
+      setLocationTagCampus(locationTagCampusOptions[0] || "");
+      setLocationTagLocation("");
+      setLocationTagItemName(LOCATION_TAG_PRESET_OPTIONS[0][lang === "km" ? "km" : "en"]);
+      setLocationTagCopies("8");
+      return;
+    }
     if (reportType === "furniture_control") {
       setReportAssetIdFilter("");
       setFurnitureControlCampusFilter(["ALL"]);
       setFurnitureControlLocationFilter(["ALL"]);
       setFurnitureControlItemFilter(["ALL"]);
     }
-  }, [reportType, resetAssetMasterReportFilters]);
+  }, [lang, locationTagCampusOptions, reportType, resetAssetMasterReportFilters]);
 
   const resetAllReportFiltersOnRefresh = useCallback(() => {
     const today = new Date();
@@ -46711,6 +46804,10 @@ export default function App() {
         String(r.safety),
         r.itemSummary || "-",
       ]);
+    } else if (reportType === "location_tags") {
+      title = lang === "km" ? "ស្លាកឈ្មោះសម្ភារៈតាមទីតាំង" : "Simple Location Tags";
+      columns = [];
+      rows = [];
     } else if (reportType === "furniture_control") {
       title = "Chair and Table Control Report";
       columns = [
@@ -47262,6 +47359,13 @@ export default function App() {
             { label: lang === "km" ? "ទីតាំង" : "Locations", value: filteredLocationAssetSummaryRows.length },
             { label: lang === "km" ? "ទ្រព្យសរុប" : "Total Assets", value: filteredLocationAssetTotal },
           ])
+        : reportType === "location_tags"
+        ? buildPrintSummaryGrid([
+            { label: lang === "km" ? "សាខា" : "Campus", value: locationTagCampusLabel },
+            { label: lang === "km" ? "ទីតាំង" : "Location", value: locationTagLocationLabel },
+            { label: lang === "km" ? "សម្ភារៈ" : "Item", value: locationTagResolvedName },
+            { label: lang === "km" ? "ចំនួនស្លាក" : "Total Tags", value: locationTagCopyCount },
+          ])
         : reportType === "furniture_control"
         ? buildPrintSummaryGrid([
             { label: lang === "km" ? "សាខា" : "Campuses", value: furnitureControlCampusRows.rows.length },
@@ -47557,6 +47661,14 @@ export default function App() {
           )} | ${escapeHtml(lang === "km" ? "តម្រងសាខា" : "Campus Filter")}: ${escapeHtml(filterLabel)} | ${escapeHtml(
             lang === "km" ? "ទំហំ QR" : "QR Size"
           )}: ${escapeHtml(qrLabelSizeLabel)}</p>`
+        : reportType === "location_tags"
+        ? `<p class="meta">${escapeHtml(lang === "km" ? "បង្កើតនៅ" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
+            lang === "km" ? "សាខា" : "Campus"
+          )}: ${escapeHtml(locationTagCampusLabel)} | ${escapeHtml(lang === "km" ? "ទីតាំង" : "Location")}: ${escapeHtml(
+            locationTagLocationLabel
+          )} | ${escapeHtml(lang === "km" ? "សម្ភារៈ" : "Item")}: ${escapeHtml(locationTagResolvedName)} | ${escapeHtml(
+            lang === "km" ? "ចំនួនស្លាក" : "Labels"
+          )}: ${escapeHtml(String(locationTagCopyCount))}</p>`
         : reportType === "inventory_balance"
         ? reportInventoryViewMode === "campus_compare"
           ? `<p class="meta">${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទបោះពុម្ព" : "Generated")}: ${escapeHtml(generatedAt)} | ${escapeHtml(
@@ -47598,6 +47710,8 @@ export default function App() {
     const qrLabelPageCss =
       reportType === "qr_labels"
         ? `@page { size: A4 portrait; margin: 4mm; }`
+        : reportType === "location_tags"
+        ? `@page { size: A4 portrait; margin: 6mm; }`
         : `@page { size: A4 landscape; margin: 0.25in; }`;
 
     const previewTableClassName =
@@ -47613,6 +47727,8 @@ export default function App() {
         ? "Maintenance Report for ED"
         : reportType === "schedule_calendar"
           ? (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar")
+          : reportType === "location_tags"
+            ? (lang === "km" ? "ស្លាកឈ្មោះសម្ភារៈតាមទីតាំង" : "Simple Location Tags")
           : reportType === "inventory_balance" && reportInventoryIsToolGroup
             ? `${
                 reportInventoryGroupFilter !== "ALL" && reportInventoryGroupFilterLabel
@@ -47648,6 +47764,12 @@ export default function App() {
           ? (assetMasterCampusFilter.includes("ALL")
               ? t.allCampuses
               : assetMasterCampusFilter.map((campus) => reportCampusName(campus)).join(", "))
+        : reportType === "location_tags"
+          ? [
+              `${lang === "km" ? "សាខា" : "Campus"}: ${locationTagCampusLabel}`,
+              `${lang === "km" ? "ទីតាំង" : "Location"}: ${locationTagLocationLabel}`,
+              `${lang === "km" ? "ចំនួនស្លាក" : "Labels"}: ${locationTagCopyCount}`,
+            ].join("\n")
         : reportType === "inventory_balance" && reportInventoryIsToolGroup
           ? reportInventoryCampusFilterLabel
         : reportType === "school_key_control"
@@ -48127,6 +48249,21 @@ export default function App() {
                 </table>
               </div>`;
           })()
+        : reportType === "location_tags"
+        ? `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;">
+            ${locationTagPreviewRows
+              .map(
+                (_, index) => `<article style="min-height:102px;border:1.5px dashed #b8c3d4;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;justify-content:center;background:#fff;">
+                  <div style="font-size:16px;font-weight:800;line-height:1.15;color:#132238;">${escapeHtml(locationTagResolvedName)}</div>
+                  <div style="margin-top:8px;font-size:12px;font-weight:700;color:#2b4c7e;">${escapeHtml(locationTagCampusLabel)}</div>
+                  <div style="margin-top:4px;font-size:13px;color:#27364b;">${escapeHtml(locationTagLocationLabel)}</div>
+                  <div style="margin-top:8px;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#6a7688;">${escapeHtml(
+                    lang === "km" ? `ស្លាកទី ${index + 1}` : `Tag ${index + 1}`
+                  )}</div>
+                </article>`
+              )
+              .join("")}
+          </div>`
         : reportType === "qr_labels"
         ? qrFilteredRows.length
           ? `<div class="qr-sticker-grid qr-sticker-grid-${qrPrintVariant}">${qrFilteredRows
@@ -73184,6 +73321,63 @@ function formatTicketRequestSource(value?: string) {
                   />
                 </>
               ) : null}
+              {reportType === "location_tags" ? (
+                <>
+                  <LocationPicker
+                    value={locationTagCampus}
+                    onChange={setLocationTagCampus}
+                    options={locationTagCampusOptions.map((campus) => ({
+                      value: campus,
+                      label: reportCampusName(campus),
+                    }))}
+                    placeholder={lang === "km" ? "ជ្រើសសាខា" : "Select campus"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសាខា..." : "Search campus..."}
+                    emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
+                  />
+                  <LocationPicker
+                    value={locationTagLocation}
+                    onChange={setLocationTagLocation}
+                    options={locationTagLocationOptions.map((location) => ({
+                      value: location,
+                      label: reportLocationName(location),
+                    }))}
+                    placeholder={lang === "km" ? "ជ្រើសទីតាំង" : "Select location"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
+                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                  />
+                  <LocationPicker
+                    value={locationTagItemName}
+                    onChange={setLocationTagItemName}
+                    options={LOCATION_TAG_PRESET_OPTIONS.map((item) => ({
+                      value: item[lang === "km" ? "km" : "en"],
+                      label: item[lang === "km" ? "km" : "en"],
+                    }))}
+                    placeholder={lang === "km" ? "ជ្រើសឈ្មោះសម្ភារៈ" : "Select accessory name"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកឈ្មោះ..." : "Search name..."}
+                    emptyText={lang === "km" ? "មិនមានឈ្មោះ" : "No name found."}
+                  />
+                  <label className="field">
+                    <span>{lang === "km" ? "កែឈ្មោះសម្ភារៈ" : "Edit accessory name"}</span>
+                    <input
+                      className="input"
+                      value={locationTagItemName}
+                      onChange={(e) => setLocationTagItemName(e.target.value)}
+                      placeholder={lang === "km" ? "វាយឈ្មោះស្លាក..." : "Type label name..."}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>{lang === "km" ? "ចំនួនស្លាក" : "Label quantity"}</span>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={locationTagCopies}
+                      onChange={(e) => setLocationTagCopies(e.target.value)}
+                    />
+                  </label>
+                </>
+              ) : null}
               {reportType === "staff_borrowing" ? (
                 <>
                   <SearchableMultiSelectPicker
@@ -73680,6 +73874,14 @@ function formatTicketRequestSource(value?: string) {
                 {qrLabelEntityType === "rental_printer"
                   ? (lang === "km" ? "ស្កេន QR ដើម្បីបើកទំព័រស្នើជួសជុលសម្រាប់ម៉ាស៊ីនបោះពុម្ពជួលនេះ។" : "scan QR to open the maintenance request page for this rental printer.")
                   : (lang === "km" ? "ស្កេន QR ដើម្បីបើកទំព័រព័ត៌មានទ្រព្យសម្បត្តិនេះដោយផ្ទាល់។" : "scan QR to open this asset detail page directly.")}
+              </div>
+            )}
+            {reportType === "location_tags" && (
+              <div className="panel-note">
+                <strong>{lang === "km" ? "ស្លាកសាមញ្ញតាមទីតាំង" : "Simple location tags"}:</strong>{" "}
+                {lang === "km"
+                  ? "ជ្រើសសាខា ទីតាំង និងឈ្មោះសម្ភារៈ រួចបោះពុម្ពសម្រាប់កាត់ និងបិតលើសម្ភារៈដោយផ្ទាល់។"
+                  : "Select campus, location, and accessory name, then print ready-to-cut tags for direct sticker use."}
               </div>
             )}
             {reportType === "school_key_control" && (
@@ -75608,6 +75810,49 @@ function formatTicketRequestSource(value?: string) {
                       : "No assets match selected filters."}
                   </div>
                 )}
+              </div>
+            )}
+
+            {reportType === "location_tags" && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isPhoneView ? "1fr" : "repeat(3, minmax(0, 1fr))",
+                  gap: 12,
+                }}
+              >
+                {locationTagPreviewRows.map((row) => (
+                  <article
+                    key={row.key}
+                    style={{
+                      minHeight: 118,
+                      border: "1.5px dashed rgba(150, 180, 225, 0.55)",
+                      borderRadius: 16,
+                      padding: "16px 18px",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(236,242,251,0.92))",
+                      color: "#17304f",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      boxShadow: "0 10px 30px rgba(5, 11, 24, 0.12)",
+                    }}
+                  >
+                    <strong style={{ fontSize: isPhoneView ? 20 : 22, lineHeight: 1.1 }}>{locationTagResolvedName}</strong>
+                    <div style={{ marginTop: 10, fontWeight: 700, fontSize: 13 }}>{locationTagCampusLabel}</div>
+                    <div style={{ marginTop: 4, fontSize: 15 }}>{locationTagLocationLabel}</div>
+                    <div
+                      style={{
+                        marginTop: 10,
+                        fontSize: 11,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "#6b7890",
+                      }}
+                    >
+                      {lang === "km" ? `ស្លាកទី ${row.index + 1}` : `Tag ${row.index + 1}`}
+                    </div>
+                  </article>
+                ))}
               </div>
             )}
 
