@@ -2932,8 +2932,9 @@ const DEFAULT_ASSET_MASTER_COLUMN_WIDTHS = {
   linkedTo: 14,
   itemName: 12,
   category: 8,
+  quantity: 7,
   campus: 14,
-  itemDescription: 24,
+  itemDescription: 22,
   note: 16,
   location: 12,
   purchaseDate: 9,
@@ -10543,6 +10544,7 @@ export default function App() {
     | "linkedTo"
     | "itemName"
     | "category"
+    | "quantity"
     | "campus"
     | "itemDescription"
     | "note"
@@ -12100,6 +12102,7 @@ export default function App() {
     "assetId",
     "linkedTo",
     "category",
+    "quantity",
     "itemDescription",
     "campus",
     "location",
@@ -33673,7 +33676,9 @@ export default function App() {
       : String(editingAsset?.type || "").trim().toUpperCase();
     const payload = {
       type: normalizedEditType,
-      name: assetItemName(String(editingAsset?.category || "").trim(), normalizedEditType),
+      // Preserve custom asset names/codes on edit. Some campuses use `name`
+      // as a human-facing label that intentionally differs from `assetId`.
+      name: String(editingAsset?.name || "").trim() || assetItemName(String(editingAsset?.category || "").trim(), normalizedEditType),
       campus: nextCampusForEdit,
       location: assetEditForm.location.trim(),
       pcType: editingIsDesktop ? assetEditForm.pcType.trim() : "",
