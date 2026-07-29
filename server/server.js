@@ -13732,6 +13732,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const body = await parseBody(req);
+      const current = db.assets[idx];
       const currentAssetId = toText(current.assetId).trim().toUpperCase();
       const requestedAssetId = toText(body.assetId).trim().toUpperCase();
       const wantsAssetIdChange = Boolean(requestedAssetId) && requestedAssetId !== currentAssetId;
@@ -13752,7 +13753,6 @@ const server = http.createServer(async (req, res) => {
       }
       const notifyScheduleAssignment = Boolean(body && body.notifyScheduleAssignment);
       const preventDuplicateSchedule = Boolean(body && body.preventDuplicateSchedule);
-      const current = db.assets[idx];
       const cleaned = validateAsset({
         ...current,
         ...body,
