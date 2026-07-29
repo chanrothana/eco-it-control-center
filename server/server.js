@@ -2959,6 +2959,31 @@ function migrateAssetIdsAndLinkedReferences(assetsInput, ticketsInput, notificat
   return { assets, tickets, notifications };
 }
 
+function replaceAssetIdText(value, oldId, newId) {
+  if (Array.isArray(value)) return value.map((entry) => replaceAssetIdText(entry, oldId, newId));
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [key, entry] of Object.entries(value)) {
+      out[key] = replaceAssetIdText(entry, oldId, newId);
+    }
+    return out;
+  }
+  if (typeof value === "string") {
+    return value.split(oldId).join(newId);
+  }
+  return value;
+}
+
+function renameAssetIdAcrossDb(db, oldId, newId) {
+  if (!db || typeof db !== "object") return db;
+  if (!oldId || !newId || oldId === newId) return db;
+  db.assets = Array.isArray(db.assets) ? replaceAssetIdText(db.assets, oldId, newId) : [];
+  db.tickets = Array.isArray(db.tickets) ? replaceAssetIdText(db.tickets, oldId, newId) : [];
+  db.notifications = Array.isArray(db.notifications) ? replaceAssetIdText(db.notifications, oldId, newId) : [];
+  db.auditLogs = Array.isArray(db.auditLogs) ? replaceAssetIdText(db.auditLogs, oldId, newId) : [];
+  return db;
+}
+
 function normalizeImportedDb(input) {
   const parsed = input && typeof input === "object" ? input : {};
   const settings =
@@ -13707,6 +13732,24 @@ const server = http.createServer(async (req, res) => {
       }
 
       const body = await parseBody(req);
+      const currentAssetId = toText(current.assetId).trim().toUpperCase();
+      const requestedAssetId = toText(body.assetId).trim().toUpperCase();
+      const wantsAssetIdChange = Boolean(requestedAssetId) && requestedAssetId !== currentAssetId;
+      if (wantsAssetIdChange && toText(admin.role) !== "Super Admin") {
+        sendJson(res, 403, { error: "Only Super Admin can change Asset ID" });
+        return;
+      }
+      if (wantsAssetIdChange) {
+        const duplicateAssetId = (Array.isArray(db.assets) ? db.assets : []).find(
+          (row) => Number(row && row.id) !== id && toText(row && row.assetId).trim().toUpperCase() === requestedAssetId
+        );
+        if (duplicateAssetId) {
+          sendJson(res, 409, {
+            error: `Asset ID already exists (${toText(duplicateAssetId.assetId) || "existing asset"})`,
+          });
+          return;
+        }
+      }
       const notifyScheduleAssignment = Boolean(body && body.notifyScheduleAssignment);
       const preventDuplicateSchedule = Boolean(body && body.preventDuplicateSchedule);
       const current = db.assets[idx];
@@ -13876,12 +13919,19 @@ const server = http.createServer(async (req, res) => {
           ]
         : currentStatusHistory;
       const photoChanged = toText(current.photo) !== toText(mainPhoto);
+      const finalAssetId = wantsAssetIdChange ? requestedAssetId : currentAssetId;
+      const requestedName = toText(body.name).trim();
+      const finalName = wantsAssetIdChange
+        ? requestedName || finalAssetId
+        : requestedName
+          ? requestedName
+          : toText(current.name);
       db.assets[idx] = {
         ...current,
         ...cleaned,
-        // Asset identity must stay fixed for the whole life of the machine.
+        // Asset identity can only be changed by Super Admin.
         id,
-        assetId: toText(current.assetId),
+        assetId: finalAssetId,
         seq: Number(current.seq) || 0,
         created: toText(current.created),
         assignedTo: incomingAssignedTo,
@@ -13892,12 +13942,15 @@ const server = http.createServer(async (req, res) => {
         statusHistory: nextStatusHistory,
         custodyHistory: finalCustodyHistory,
         custodyStatus: nextCustodyStatus,
-        name: toText(current.name),
+        name: finalName,
       };
+      if (wantsAssetIdChange) {
+        renameAssetIdAcrossDb(db, currentAssetId, finalAssetId);
+      }
       if (campusChanged || previousLocation !== nextLocation) {
         for (const asset of db.assets) {
           if (!asset || Number(asset.id) === id) continue;
-          if (toText(asset.parentAssetId) !== toText(current.assetId)) continue;
+          if (toText(asset.parentAssetId) !== finalAssetId) continue;
           asset.campus = nextCampus;
           asset.location = nextLocation;
         }
@@ -13915,7 +13968,7 @@ const server = http.createServer(async (req, res) => {
         "UPDATE",
         "asset",
         db.assets[idx].assetId || String(id),
-        `${db.assets[idx].campus} | ${db.assets[idx].location}${campusChanged ? ` | campus corrected: ${campusChangeRemark}` : ""}${photoChanged ? " | photo updated" : ""}${cascadedChildren ? ` | child assignment synced: ${cascadedChildren}` : ""}`
+        `${db.assets[idx].campus} | ${db.assets[idx].location}${wantsAssetIdChange ? ` | asset id renamed: ${currentAssetId} -> ${finalAssetId}` : ""}${campusChanged ? ` | campus corrected: ${campusChangeRemark}` : ""}${photoChanged ? " | photo updated" : ""}${cascadedChildren ? ` | child assignment synced: ${cascadedChildren}` : ""}`
       );
       ensureMaintenanceScheduleNotifications(db);
       await writeDb(db);
