@@ -22788,9 +22788,23 @@ export default function App() {
       const bootstrapRes = await requestJson<BootstrapPayload>(`/api/bootstrap?${params.toString()}`, {
         timeoutMs: shouldIncludeAssets ? ASSET_DATA_REQUEST_TIMEOUT_MS : 12000,
       });
-      const serverAssets = shouldIncludeAssets
+      let serverAssets = shouldIncludeAssets
         ? normalizeArray<Asset>(bootstrapRes.assets).map(normalizeAssetForUi)
         : [];
+      if (shouldIncludeAssets && !serverAssets.length) {
+        const assetFallbackParams = new URLSearchParams();
+        assetFallbackParams.set("detail", assetDetail);
+        if (LOCALHOST_FAST_ASSET_MODE && assetDetail === "summary") {
+          assetFallbackParams.set("compact", "1");
+        }
+        if (campusFilter !== "ALL") {
+          assetFallbackParams.set("campus", campusFilter);
+        }
+        const assetRes = await requestJson<{ assets: Asset[] }>(`/api/assets?${assetFallbackParams.toString()}`, {
+          timeoutMs: ASSET_DATA_REQUEST_TIMEOUT_MS,
+        });
+        serverAssets = normalizeArray<Asset>(assetRes.assets).map(normalizeAssetForUi);
+      }
       const locationList = normalizeLocationEntries(bootstrapRes.locations);
       const serverStats =
         bootstrapRes.stats || {
@@ -72873,21 +72887,6 @@ function formatTicketRequestSource(value?: string) {
                     searchPlaceholder={lang === "km" ? "ស្វែងរកជួរឈរ..." : "Search columns..."}
                     emptyText={lang === "km" ? "មិនមានជួរឈរ" : "No columns found."}
                   />
-                  <div className="report-maintenance-note-wrap">
-                    <label className="field field-wide report-maintenance-note-field">
-                      <span>{lang === "km" ? "កំណត់ចំណាំរបាយការណ៍" : "Report Note"}</span>
-                      <textarea
-                        className="textarea"
-                        value={maintenanceReportNote}
-                        onChange={(e) => setMaintenanceReportNote(e.target.value)}
-                        placeholder={
-                          lang === "km"
-                            ? "បញ្ចូលកំណត់ចំណាំសម្រាប់របាយការណ៍នេះ..."
-                            : "Add a note for this report..."
-                        }
-                      />
-                    </label>
-                  </div>
                 </>
               ) : null}
               {reportType === "schedule_calendar" ? (
