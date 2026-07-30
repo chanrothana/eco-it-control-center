@@ -15012,7 +15012,7 @@ export default function App() {
   const [toolReviewBorrowPhotoName, setToolReviewBorrowPhotoName] = useState("");
   const toolReviewBorrowInitKeyRef = useRef("");
   const [toolReviewModalOpen, setToolReviewModalOpen] = useState(false);
-  const [toolReviewControlMode, setToolReviewControlMode] = useState<"verify" | "borrow" | "return">("verify");
+  const [toolReviewControlMode, setToolReviewControlMode] = useState<"verify" | "borrow" | "transfer" | "return">("verify");
   const [toolReviewForm, setToolReviewForm] = useState({
     itemId: "",
     action: "good" as "good" | "add_more" | "take_out",
@@ -20049,13 +20049,21 @@ export default function App() {
     [toolReviewBorrowForm.qty]
   );
   const toolReviewBorrowStockMessage = useMemo(() => {
-    if (toolReviewControlMode !== "borrow") return "";
+    if (toolReviewControlMode !== "borrow" && toolReviewControlMode !== "transfer") return "";
     if (!toolReviewSourceCampusEntry) return "";
     if (!toolReviewBorrowRequestedQty) return "";
     if (toolReviewBorrowRequestedQty <= toolReviewBorrowAvailableStock) return "";
-    return lang === "km"
-      ? `មិនអាចខ្ចីបានទេ។ ${toolReviewSourceCampusEntry.campusLabel} មានតែ ${toolReviewBorrowAvailableStock} ${toolReviewSelectedItem?.unit || "pcs"} ប៉ុណ្ណោះ ប៉ុន្តែអ្នកស្នើ ${toolReviewBorrowRequestedQty}។`
-      : `Cannot save borrow. ${toolReviewSourceCampusEntry.campusLabel} only has ${toolReviewBorrowAvailableStock} ${toolReviewSelectedItem?.unit || "pcs"} in stock, but requested is ${toolReviewBorrowRequestedQty}.`;
+    return toolReviewControlMode === "transfer"
+      ? (
+        lang === "km"
+          ? `មិនអាចផ្ទេរបានទេ។ ${toolReviewSourceCampusEntry.campusLabel} មានតែ ${toolReviewBorrowAvailableStock} ${toolReviewSelectedItem?.unit || "pcs"} ប៉ុណ្ណោះ ប៉ុន្តែអ្នកស្នើ ${toolReviewBorrowRequestedQty}។`
+          : `Cannot transfer. ${toolReviewSourceCampusEntry.campusLabel} only has ${toolReviewBorrowAvailableStock} ${toolReviewSelectedItem?.unit || "pcs"} in stock, but requested is ${toolReviewBorrowRequestedQty}.`
+      )
+      : (
+        lang === "km"
+          ? `មិនអាចខ្ចីបានទេ។ ${toolReviewSourceCampusEntry.campusLabel} មានតែ ${toolReviewBorrowAvailableStock} ${toolReviewSelectedItem?.unit || "pcs"} ប៉ុណ្ណោះ ប៉ុន្តែអ្នកស្នើ ${toolReviewBorrowRequestedQty}។`
+          : `Cannot save borrow. ${toolReviewSourceCampusEntry.campusLabel} only has ${toolReviewBorrowAvailableStock} ${toolReviewSelectedItem?.unit || "pcs"} in stock, but requested is ${toolReviewBorrowRequestedQty}.`
+      );
   }, [lang, toolReviewBorrowAvailableStock, toolReviewBorrowRequestedQty, toolReviewControlMode, toolReviewSelectedItem?.unit, toolReviewSourceCampusEntry]);
   const inventoryDailyItemOptions = useMemo(() => {
     const q = String(inventoryDailyForm.search || "").trim().toLowerCase();
@@ -22346,7 +22354,7 @@ export default function App() {
     setToolReviewBorrowPhotoFileKey((key) => key + 1);
   }, [authUser?.displayName, authUser?.username, toolReviewCampusItemOptions, toolReviewModalOpen, toolReviewSelectedItem]);
   useEffect(() => {
-    if (toolReviewControlMode !== "borrow") return;
+    if (toolReviewControlMode !== "borrow" && toolReviewControlMode !== "transfer") return;
     const campusUsers = staffUsersForCampus(users, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.requestedBy);
     if (!campusUsers.length) return;
     const selected = String(toolReviewBorrowForm.requestedBy || "").trim();
@@ -22354,7 +22362,7 @@ export default function App() {
     setToolReviewBorrowForm((prev) => ({ ...prev, requestedBy: campusUsers[0]?.fullName || "" }));
   }, [toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.requestedBy, toolReviewControlMode, users]);
   useEffect(() => {
-    if (toolReviewControlMode !== "borrow") return;
+    if (toolReviewControlMode !== "borrow" && toolReviewControlMode !== "transfer") return;
     if (!toolReviewBorrowApproverOptions.length) return;
     const selected = String(toolReviewBorrowForm.approvedBy || "").trim();
     if (selected && toolReviewBorrowApproverOptions.some((user) => user.fullName === selected)) return;
@@ -29612,6 +29620,47 @@ export default function App() {
         note: toolReviewBorrowForm.note,
         toCampus: toolReviewBorrowForm.destinationCampus,
         expectedReturnDate: normalizeYmdInput(toolReviewBorrowForm.expectedReturnDate) || "",
+        requestedBy: toolReviewBorrowForm.requestedBy,
+        approvedBy: toolReviewBorrowForm.approvedBy,
+        photo: toolReviewBorrowForm.photo,
+        transferToCampus: destinationEntry.campusName,
+        transferToItemId: String(destinationEntry.itemId),
+      });
+      if (!saved.ok) return;
+    } else if (toolReviewControlMode === "transfer") {
+      const sourceEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.sourceCampus) || null;
+      const destinationEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.destinationCampus) || null;
+      if (!sourceEntry?.itemId) {
+        setError(lang === "km" ? "សូមជ្រើសសាខាដើម។" : "Please choose the source campus.");
+        return;
+      }
+      if (!toolReviewBorrowForm.destinationCampus || toolReviewBorrowForm.destinationCampus === toolReviewBorrowForm.sourceCampus) {
+        setError(lang === "km" ? "សូមជ្រើសសាខាទទួលខុសពីសាខាដើម។" : "Please choose a different destination campus.");
+        return;
+      }
+      if (!destinationEntry?.itemId) {
+        setError(
+          lang === "km"
+            ? "មិនទាន់មានកូដឧបករណ៍ត្រូវគ្នានៅសាខាទទួលទេ។ សូមបង្កើត Tool Setup សម្រាប់សាខាទទួលជាមុន។"
+            : "No matching tool record exists on the destination campus yet. Please create the destination campus tool setup first."
+        );
+        return;
+      }
+      if (toolReviewBorrowRequestedQty > Number(sourceEntry.stock || 0)) {
+        const stockMessage = lang === "km"
+          ? `មិនអាចផ្ទេរបានទេ។ ${sourceEntry.campusLabel} មានស្តុកតែ ${sourceEntry.stock} ប៉ុណ្ណោះ។`
+          : `Cannot transfer. ${sourceEntry.campusLabel} only has ${sourceEntry.stock} in stock.`;
+        setError(stockMessage);
+        window.alert(stockMessage);
+        return;
+      }
+      const saved = await saveInventoryTxnEntry({
+        itemId: String(sourceEntry.itemId),
+        date: normalizedDate,
+        type: "OUT",
+        qty: toolReviewBorrowForm.qty,
+        by: recorder || toolReviewBorrowForm.requestedBy,
+        note: toolReviewBorrowForm.note,
         requestedBy: toolReviewBorrowForm.requestedBy,
         approvedBy: toolReviewBorrowForm.approvedBy,
         photo: toolReviewBorrowForm.photo,
@@ -61870,8 +61919,8 @@ function formatTicketRequestSource(value?: string) {
                     <h2>{inventoryBusinessGroupLabel(inventoryDashboardGroup)} {lang === "km" ? "Monthly Controller" : "Monthly Controller"}</h2>
                     <p className="tiny">
                       {lang === "km"
-                        ? "Phone-friendly monthly controller for staff. ចុចកាតមួយ ដើម្បី Verify, Borrow, ឬ Return."
-                        : "Phone-friendly monthly controller for staff. Tap one tool card to verify, borrow, or return."}
+                        ? "Phone-friendly monthly controller for staff. ចុចកាតមួយ ដើម្បី Verify, Borrow, Transfer, ឬ Return."
+                        : "Phone-friendly monthly controller for staff. Tap one tool card to verify, borrow, transfer, or return."}
                     </p>
                   </div>
                   {!maintenanceQuickMode ? <div className="detail-value">{toolReviewMonth}</div> : null}
@@ -83390,7 +83439,7 @@ function formatTicketRequestSource(value?: string) {
                     <div className="tool-review-selected-side-card">
                       <small>{lang === "km" ? "ចំនួន" : "Amount"}</small>
                       <strong>
-                        {toolReviewControlMode === "borrow"
+                        {toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer"
                           ? `${toolReviewBorrowAvailableStock} ${toolReviewSelectedItem.unit || "pcs"}`
                           : `${Number(toolReviewSelectedItem.currentStock || 0)} ${toolReviewSelectedItem.unit || "pcs"}`}
                       </strong>
@@ -83421,6 +83470,14 @@ function formatTicketRequestSource(value?: string) {
                 >
                   <ArrowLeftRight size={18} aria-hidden={true} />
                   <span>{lang === "km" ? "ខ្ចី" : "Borrow"}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`tab tool-review-controller-tab tool-review-controller-tab-transfer ${toolReviewControlMode === "transfer" ? "active" : ""}`}
+                  onClick={() => setToolReviewControlMode("transfer")}
+                >
+                  <ArrowLeftRight size={18} aria-hidden={true} />
+                  <span>{lang === "km" ? "ផ្ទេរ" : "Transfer"}</span>
                 </button>
                 <button
                   type="button"
@@ -83645,7 +83702,13 @@ function formatTicketRequestSource(value?: string) {
                     <section className="tool-review-borrow-section">
                       <div className="tool-review-borrow-section-head">
                         <strong>{lang === "km" ? "ព័ត៌មានមូលដ្ឋាន" : "Basic"}</strong>
-                        <span>{lang === "km" ? "កាលបរិច្ឆេទ បរិមាណ និងថ្ងៃត្រឡប់" : "Date, quantity, and return timing."}</span>
+                        <span>
+                          {toolReviewControlMode === "borrow"
+                            ? (lang === "km" ? "កាលបរិច្ឆេទ បរិមាណ និងថ្ងៃត្រឡប់" : "Date, quantity, and return timing.")
+                            : toolReviewControlMode === "transfer"
+                              ? (lang === "km" ? "កាលបរិច្ឆេទ បរិមាណ និងការផ្ទេរអចិន្ត្រៃយ៍" : "Date, quantity, and permanent move.")
+                              : (lang === "km" ? "កាលបរិច្ឆេទ បរិមាណ និងការទទួលត្រឡប់" : "Date, quantity, and return timing.")}
+                        </span>
                       </div>
                       <div className="form-grid tool-review-form-grid tool-review-borrow-grid tool-review-borrow-grid-basic">
                         <label className="field">
@@ -83701,9 +83764,11 @@ function formatTicketRequestSource(value?: string) {
                           <span>
                             {toolReviewControlMode === "borrow"
                               ? (lang === "km" ? "ខ្ចីពីសាខា" : "Borrow From Campus")
-                              : (lang === "km" ? "ត្រឡប់ពីសាខា" : "Return From Campus")}
+                              : toolReviewControlMode === "transfer"
+                                ? (lang === "km" ? "ផ្ទេរពីសាខា" : "Transfer From Campus")
+                                : (lang === "km" ? "ត្រឡប់ពីសាខា" : "Return From Campus")}
                           </span>
-                          {toolReviewControlMode === "borrow" ? (
+                          {toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer" ? (
                             <input
                               className="input"
                               value={
@@ -83732,7 +83797,9 @@ function formatTicketRequestSource(value?: string) {
                           <span>
                             {toolReviewControlMode === "borrow"
                               ? (lang === "km" ? "ទៅសាខា" : "To Campus")
-                              : (lang === "km" ? "ត្រឡប់ចូលសាខា" : "Return To Campus")}
+                              : toolReviewControlMode === "transfer"
+                                ? (lang === "km" ? "ផ្ទេរទៅសាខា" : "Transfer To Campus")
+                                : (lang === "km" ? "ត្រឡប់ចូលសាខា" : "Return To Campus")}
                           </span>
                           <LocationPicker
                             value={toolReviewBorrowForm.destinationCampus}
@@ -83749,9 +83816,9 @@ function formatTicketRequestSource(value?: string) {
                             emptyText={lang === "km" ? "មិនមានសាខា" : "No campus found."}
                           />
                         </label>
-                        {toolReviewControlMode === "borrow" ? (
+                        {toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer" ? (
                           <label className="field">
-                            <span>{lang === "km" ? "ស្នើដោយ" : "Requested By"}</span>
+                            <span>{toolReviewControlMode === "transfer" ? (lang === "km" ? "ផ្ទេរដោយ" : "Transferred By") : (lang === "km" ? "ស្នើដោយ" : "Requested By")}</span>
                             <UserPicker
                               value={toolReviewBorrowForm.requestedBy}
                               users={toolReviewBorrowRequesterOptions}
@@ -83768,18 +83835,22 @@ function formatTicketRequestSource(value?: string) {
                           </label>
                         ) : null}
                         <label className="field">
-                          <span>{toolReviewControlMode === "borrow" ? (lang === "km" ? "អនុម័តដោយ" : "Approved By") : (lang === "km" ? "ទទួលត្រឡប់ដោយ" : "Received By")}</span>
+                          <span>
+                            {toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer"
+                              ? (lang === "km" ? "អនុម័តដោយ" : "Approved By")
+                              : (lang === "km" ? "ទទួលត្រឡប់ដោយ" : "Received By")}
+                          </span>
                           <UserPicker
-                            value={toolReviewControlMode === "borrow" ? toolReviewBorrowForm.approvedBy : toolReviewBorrowForm.receivedBy}
-                            users={toolReviewControlMode === "borrow" ? toolReviewBorrowApproverOptions : toolReviewReturnReceiverOptions}
+                            value={toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer" ? toolReviewBorrowForm.approvedBy : toolReviewBorrowForm.receivedBy}
+                            users={toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer" ? toolReviewBorrowApproverOptions : toolReviewReturnReceiverOptions}
                             onChange={(value) =>
                               setToolReviewBorrowForm((prev) => ({
                                 ...prev,
-                                [toolReviewControlMode === "borrow" ? "approvedBy" : "receivedBy"]: value,
+                                [toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer" ? "approvedBy" : "receivedBy"]: value,
                               }))
                             }
                             placeholder={
-                              toolReviewControlMode === "borrow"
+                              toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer"
                                 ? (lang === "km" ? "ជ្រើសអ្នកអនុម័ត" : "Select approver")
                                 : (lang === "km" ? "ជ្រើសអ្នកទទួលត្រឡប់" : "Select receiver")
                             }
@@ -83796,7 +83867,13 @@ function formatTicketRequestSource(value?: string) {
                       </div>
                       <div className="form-grid tool-review-form-grid tool-review-borrow-grid tool-review-borrow-grid-people">
                         <label className="field tool-review-borrow-photo-field">
-                          <span>{toolReviewControlMode === "borrow" ? (lang === "km" ? "រូបឧបករណ៍ពេលខ្ចី" : "Borrow Tool Photo") : (lang === "km" ? "រូបឧបករណ៍ពេលត្រឡប់" : "Return Tool Photo")}</span>
+                          <span>
+                            {toolReviewControlMode === "borrow"
+                              ? (lang === "km" ? "រូបឧបករណ៍ពេលខ្ចី" : "Borrow Tool Photo")
+                              : toolReviewControlMode === "transfer"
+                                ? (lang === "km" ? "រូបឧបករណ៍ពេលផ្ទេរ" : "Transfer Tool Photo")
+                                : (lang === "km" ? "រូបឧបករណ៍ពេលត្រឡប់" : "Return Tool Photo")}
+                          </span>
                           <div className="tool-review-borrow-photo-inline">
                             <input
                               id={`tool-review-borrow-photo-row-${toolReviewBorrowPhotoFileKey}`}
@@ -83822,7 +83899,13 @@ function formatTicketRequestSource(value?: string) {
                                 loading="lazy"
                                 decoding="async"
                                 src={toolReviewBorrowForm.photo}
-                                alt={toolReviewControlMode === "borrow" ? "Borrow tool preview" : "Return tool preview"}
+                                alt={
+                                  toolReviewControlMode === "borrow"
+                                    ? "Borrow tool preview"
+                                    : toolReviewControlMode === "transfer"
+                                      ? "Transfer tool preview"
+                                      : "Return tool preview"
+                                }
                                 className="table-photo"
                               />
                             ) : null}
@@ -83842,6 +83925,8 @@ function formatTicketRequestSource(value?: string) {
                             placeholder={
                               toolReviewControlMode === "borrow"
                                 ? (lang === "km" ? "មូលហេតុខ្ចីឧបករណ៍ទៅសាខាផ្សេង ឬ បុគ្គលិកផ្សេង" : "Reason for borrowing to another campus or staff")
+                                : toolReviewControlMode === "transfer"
+                                  ? (lang === "km" ? "មូលហេតុផ្ទេរឧបករណ៍ទៅសាខាផ្សេងជាអចិន្ត្រៃយ៍" : "Reason for permanently transferring this tool to another campus")
                                 : (lang === "km" ? "កំណត់ចំណាំពេលត្រឡប់ឧបករណ៍" : "Return note")
                             }
                           />
@@ -83859,7 +83944,7 @@ function formatTicketRequestSource(value?: string) {
                                 !toolReviewBorrowForm.sourceCampus ||
                                 !toolReviewBorrowForm.destinationCampus ||
                                 Boolean(toolReviewBorrowStockMessage) ||
-                                (toolReviewControlMode === "borrow"
+                                (toolReviewControlMode === "borrow" || toolReviewControlMode === "transfer"
                                   ? (!toolReviewBorrowForm.requestedBy || !toolReviewBorrowForm.approvedBy)
                                   : !toolReviewBorrowForm.receivedBy)
                               }
@@ -83867,6 +83952,8 @@ function formatTicketRequestSource(value?: string) {
                             >
                               {toolReviewControlMode === "borrow"
                                 ? (lang === "km" ? "រក្សាទុកការខ្ចី" : "Save Borrow")
+                                : toolReviewControlMode === "transfer"
+                                  ? (lang === "km" ? "រក្សាទុកការផ្ទេរ" : "Save Transfer")
                                 : (lang === "km" ? "រក្សាទុកការត្រឡប់" : "Save Return")}
                             </button>
                           </div>
@@ -83887,6 +83974,8 @@ function formatTicketRequestSource(value?: string) {
                   <div className="tiny tool-review-submit-helper">
                     {toolReviewControlMode === "borrow"
                       ? (lang === "km" ? "ប្រើសម្រាប់ការខ្ចីឧបករណ៍ឆ្លងសាខា។ ជ្រើសអ្នកស្នើតាមសាខាទទួល និងបន្ថែមរូបឧបករណ៍ពេលខ្ចីបើចាំបាច់។" : "Use this for cross-campus borrowing. Requested By follows the destination campus, and you can attach a borrow photo.")
+                      : toolReviewControlMode === "transfer"
+                        ? (lang === "km" ? "ប្រើសម្រាប់ផ្ទេរឧបករណ៍ទៅសាខាថ្មីជាអចិន្ត្រៃយ៍។ ស្តុកសាខាដើមនឹងថយ ហើយស្តុកសាខាទទួលនឹងកើន ដោយមិនចាំបាច់ត្រឡប់វិញ។" : "Use this for a permanent move to another campus. Source stock goes down, destination stock goes up, and no return is required.")
                       : (lang === "km" ? "ប្រើសម្រាប់កត់ត្រាឧបករណ៍ត្រឡប់ចូលវិញ និងអាចបន្ថែមរូបភាពពេលត្រឡប់បាន។" : "Use this to record returned tools, and attach a return photo if needed.")}
                   </div>
                 </>
