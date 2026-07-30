@@ -2837,7 +2837,7 @@ function campusApproverUsersForCampus(users: StaffUser[], campusName = "", selec
   const selected = String(selectedName || "").trim();
   if (selected) {
     const selectedUser = scopedUsers.find((user) => user.fullName === selected) || users.find((user) => user.fullName === selected);
-    if (selectedUser) return sortUsersByName([selectedUser]);
+    if (selectedUser) return [selectedUser];
   }
   return [];
 }
@@ -22370,7 +22370,7 @@ export default function App() {
     if (toolReviewControlMode !== "borrow" && toolReviewControlMode !== "transfer") return;
     if (!toolReviewBorrowApproverOptions.length) return;
     const selected = String(toolReviewBorrowForm.approvedBy || "").trim();
-    if (selected && toolReviewBorrowApproverOptions.some((user) => user.fullName === selected)) return;
+    if (selected && toolReviewBorrowApproverOptions.some((user: StaffUser) => user.fullName === selected)) return;
     setToolReviewBorrowForm((prev) => ({ ...prev, approvedBy: toolReviewBorrowApproverOptions[0]?.fullName || "" }));
   }, [toolReviewBorrowApproverOptions, toolReviewBorrowForm.approvedBy, toolReviewControlMode]);
   useEffect(() => {
