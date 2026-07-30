@@ -5023,13 +5023,22 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
+  gap: 8px;
+  min-width: 124px;
   height: 56px;
+  padding: 0 16px;
   border: 0;
   border-radius: 18px;
   background: linear-gradient(135deg, #4e8cff, #2e63ff);
   color: #fff;
   box-shadow: 0 14px 28px rgba(41, 92, 198, 0.34);
+}
+
+.report-inventory-mobile-print-btn span {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .report-inventory-mobile-toolbar-controls {

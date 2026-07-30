@@ -29617,6 +29617,76 @@ export default function App() {
     }
   }
 
+  async function ensureToolReviewDestinationItem(
+    selectedItem: NonNullable<typeof toolReviewSelectedItem>,
+    targetCampus: string
+  ) {
+    const normalizedCampus = String(targetCampus || "").trim();
+    if (!normalizedCampus) {
+      throw new Error(lang === "km" ? "សូមជ្រើសសាខាទទួល។" : "Please choose the destination campus.");
+    }
+    const sourceCodeKey = inventoryTransferMatchCode(selectedItem.itemCode);
+    const sourceNameKey = inventoryTransferMatchName(selectedItem.itemName);
+    const existingItem =
+      inventoryVisibleItems.find(
+        (item) =>
+          String(item.campus || "").trim() === normalizedCampus &&
+          inventoryTransferMatchCode(item.itemCode) === sourceCodeKey &&
+          inventoryTransferMatchName(item.itemName) === sourceNameKey &&
+          String(item.category || "").trim() === String(selectedItem.category || "").trim() &&
+          String(item.unit || "").trim().toLowerCase() === String(selectedItem.unit || "").trim().toLowerCase()
+      ) || null;
+    if (existingItem) return existingItem;
+
+    const nextItemCode = buildClonedInventoryItemCode(
+      inventoryItems,
+      selectedItem.itemCode,
+      normalizedCampus,
+      selectedItem.category
+    );
+    const draftRow: InventoryItem = {
+      ...selectedItem,
+      id: Date.now(),
+      campus: normalizedCampus,
+      itemCode: nextItemCode,
+      openingQty: 0,
+      minStock: Math.max(0, Number(selectedItem.minStock || 0)),
+      created: new Date().toISOString(),
+    };
+
+    try {
+      const res = await requestJson<{ item: InventoryItem }>("/api/inventory/items", {
+        method: "POST",
+        body: JSON.stringify({
+          campus: normalizedCampus,
+          category: selectedItem.category,
+          itemCode: nextItemCode,
+          itemName: selectedItem.itemName,
+          unit: selectedItem.unit || "pcs",
+          openingQty: 0,
+          minStock: Math.max(0, Number(selectedItem.minStock || 0)),
+          area: selectedItem.area || "",
+          location: selectedItem.location || "",
+          ownerType: selectedItem.ownerType || "SCHOOL",
+          responsibleParty: selectedItem.responsibleParty || "",
+          vendor: selectedItem.vendor || "",
+          notes: selectedItem.notes || "",
+          photo: selectedItem.photo || "",
+        }),
+      });
+      setInventoryItems((prev) => [res.item, ...prev.filter((item) => item.id !== res.item.id)]);
+      appendUiAudit("CREATE", "inventory_item", res.item.itemCode, `${res.item.campus} | ${res.item.itemName}`);
+      return res.item;
+    } catch (err) {
+      if (!isMissingRouteError(err)) throw err;
+      const nextItems = [draftRow, ...inventoryItems];
+      setInventoryItems(nextItems);
+      await persistInventorySettings(nextItems, inventoryTxns);
+      appendUiAudit("CREATE", "inventory_item", draftRow.itemCode, `${draftRow.campus} | ${draftRow.itemName}`);
+      return draftRow;
+    }
+  }
+
   async function saveToolReviewBorrowAction() {
     if (!requireAdminAction()) return;
     const selectedItem = toolReviewSelectedItem;
@@ -29628,7 +29698,7 @@ export default function App() {
     const recorder = authUser?.displayName || authUser?.username || "";
     if (toolReviewControlMode === "borrow") {
       const sourceEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.sourceCampus) || null;
-      const destinationEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.destinationCampus) || null;
+      let destinationEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.destinationCampus) || null;
       if (!sourceEntry?.itemId) {
         setError(lang === "km" ? "សូមជ្រើសសាខាដើម។" : "Please choose the source campus.");
         return;
@@ -29638,12 +29708,14 @@ export default function App() {
         return;
       }
       if (!destinationEntry?.itemId) {
-        setError(
-          lang === "km"
-            ? "មិនទាន់មានកូដឧបករណ៍ត្រូវគ្នានៅសាខាទទួលទេ។ សូមបង្កើត Tool Setup សម្រាប់សាខាទទួលជាមុន។"
-            : "No matching tool record exists on the destination campus yet. Please create the destination campus tool setup first."
-        );
-        return;
+        const destinationItem = await ensureToolReviewDestinationItem(selectedItem, toolReviewBorrowForm.destinationCampus);
+        destinationEntry = {
+          itemId: Number(destinationItem.id || 0),
+          campusName: String(destinationItem.campus || "").trim(),
+          campusLabel: inventoryCampusLabel(destinationItem.campus),
+          location: String(destinationItem.location || "").trim(),
+          stock: Number(inventoryStockMap.get(Number(destinationItem.id || 0)) || 0),
+        };
       }
       if (toolReviewBorrowRequestedQty > Number(sourceEntry.stock || 0)) {
         const stockMessage = lang === "km"
@@ -29671,7 +29743,7 @@ export default function App() {
       if (!saved.ok) return;
     } else if (toolReviewControlMode === "transfer") {
       const sourceEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.sourceCampus) || null;
-      const destinationEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.destinationCampus) || null;
+      let destinationEntry = toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.destinationCampus) || null;
       if (!sourceEntry?.itemId) {
         setError(lang === "km" ? "សូមជ្រើសសាខាដើម។" : "Please choose the source campus.");
         return;
@@ -29681,12 +29753,14 @@ export default function App() {
         return;
       }
       if (!destinationEntry?.itemId) {
-        setError(
-          lang === "km"
-            ? "មិនទាន់មានកូដឧបករណ៍ត្រូវគ្នានៅសាខាទទួលទេ។ សូមបង្កើត Tool Setup សម្រាប់សាខាទទួលជាមុន។"
-            : "No matching tool record exists on the destination campus yet. Please create the destination campus tool setup first."
-        );
-        return;
+        const destinationItem = await ensureToolReviewDestinationItem(selectedItem, toolReviewBorrowForm.destinationCampus);
+        destinationEntry = {
+          itemId: Number(destinationItem.id || 0),
+          campusName: String(destinationItem.campus || "").trim(),
+          campusLabel: inventoryCampusLabel(destinationItem.campus),
+          location: String(destinationItem.location || "").trim(),
+          stock: Number(inventoryStockMap.get(Number(destinationItem.id || 0)) || 0),
+        };
       }
       if (toolReviewBorrowRequestedQty > Number(sourceEntry.stock || 0)) {
         const stockMessage = lang === "km"
@@ -72539,11 +72613,15 @@ function formatTicketRequestSource(value?: string) {
                       <button
                         type="button"
                         className="report-inventory-mobile-print-btn"
-                        onClick={() => window.print()}
-                        aria-label={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print report"}
-                        title={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print report"}
+                        onClick={() => {
+                          setReportMobileFiltersOpen(false);
+                          printCurrentReport(true);
+                        }}
+                        aria-label={lang === "km" ? "បោះពុម្ព ឬ រក្សាទុកជា PDF" : "Print or Export PDF"}
+                        title={lang === "km" ? "បោះពុម្ព ឬ រក្សាទុកជា PDF" : "Print or Export PDF"}
                       >
                         <Printer size={18} aria-hidden={true} />
+                        <span>{lang === "km" ? "បោះពុម្ព / PDF" : "Print / PDF"}</span>
                       </button>
                     </div>
                     <div className="report-inventory-mobile-toolbar-controls">
