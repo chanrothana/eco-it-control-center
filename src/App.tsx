@@ -72781,11 +72781,11 @@ function formatTicketRequestSource(value?: string) {
                           setReportMobileFiltersOpen(false);
                           printCurrentReport(true);
                         }}
-                        aria-label={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
-                        title={lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}
+                        aria-label={lang === "km" ? "បោះពុម្ព ឬ រក្សាទុកជា PDF" : "Print / Export PDF"}
+                        title={lang === "km" ? "បោះពុម្ព ឬ រក្សាទុកជា PDF" : "Print / Export PDF"}
                       >
                         <Printer size={16} aria-hidden={true} />
-                        {isPhoneView || reportType === "it_vault" ? <span>{lang === "km" ? "បោះពុម្ពរបាយការណ៍" : "Print Report"}</span> : null}
+                        {isPhoneView || reportType === "it_vault" ? <span>{lang === "km" ? "បោះពុម្ព / PDF" : "Print / Export PDF"}</span> : null}
                       </button>
                       <button
                         type="button"
