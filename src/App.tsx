@@ -20037,10 +20037,36 @@ export default function App() {
     () => toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.sourceCampus) || null,
     [toolReviewCampusItemOptions, toolReviewBorrowForm.sourceCampus]
   );
-  const toolReviewBorrowApproverOptions = useMemo(
-    () => campusApproverUsersForCampus(users, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.approvedBy),
-    [toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.approvedBy, users]
-  );
+  const toolReviewBorrowApproverOptions = useMemo(() => {
+    const options = campusApproverUsersForCampus(users, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.approvedBy);
+    const preferredName = String(authUser?.displayName || "").trim();
+    if (!preferredName) return options;
+    const existingPreferred =
+      options.find((user) => user.fullName === preferredName) ||
+      users.find((user) => user.fullName === preferredName) ||
+      null;
+    if (existingPreferred) {
+      return [
+        {
+          ...existingPreferred,
+          position: String(existingPreferred.position || "").trim() || "IT and Facility Manager",
+        },
+        ...options.filter((user) => user.fullName !== preferredName),
+      ];
+    }
+    return [
+      {
+        id: -1,
+        fullName: preferredName,
+        position: "IT and Facility Manager",
+        status: "Active",
+        campus: toolReviewBorrowForm.destinationCampus || "ALL",
+        campuses: toolReviewBorrowForm.destinationCampus ? [toolReviewBorrowForm.destinationCampus] : ["ALL"],
+        email: "",
+      },
+      ...options,
+    ];
+  }, [authUser?.displayName, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.approvedBy, users]);
   const toolReviewReturnReceiverOptions = useMemo(
     () => staffUsersForCampus(users, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.receivedBy),
     [toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.receivedBy, users]
@@ -22370,9 +22396,19 @@ export default function App() {
     if (toolReviewControlMode !== "borrow" && toolReviewControlMode !== "transfer") return;
     if (!toolReviewBorrowApproverOptions.length) return;
     const selected = String(toolReviewBorrowForm.approvedBy || "").trim();
+    const preferredName = String(authUser?.displayName || "").trim();
+    if (
+      toolReviewControlMode === "transfer" &&
+      preferredName &&
+      toolReviewBorrowApproverOptions.some((user: StaffUser) => user.fullName === preferredName) &&
+      selected !== preferredName
+    ) {
+      setToolReviewBorrowForm((prev) => ({ ...prev, approvedBy: preferredName }));
+      return;
+    }
     if (selected && toolReviewBorrowApproverOptions.some((user: StaffUser) => user.fullName === selected)) return;
     setToolReviewBorrowForm((prev) => ({ ...prev, approvedBy: toolReviewBorrowApproverOptions[0]?.fullName || "" }));
-  }, [toolReviewBorrowApproverOptions, toolReviewBorrowForm.approvedBy, toolReviewControlMode]);
+  }, [authUser?.displayName, toolReviewBorrowApproverOptions, toolReviewBorrowForm.approvedBy, toolReviewControlMode]);
   useEffect(() => {
     if (inventoryCodeManual) return;
     setInventoryItemForm((f) => ({ ...f, itemCode: autoInventoryItemCode }));
