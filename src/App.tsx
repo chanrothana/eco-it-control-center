@@ -20037,7 +20037,7 @@ export default function App() {
     () => toolReviewCampusItemOptions.find((entry) => entry.campusName === toolReviewBorrowForm.sourceCampus) || null,
     [toolReviewCampusItemOptions, toolReviewBorrowForm.sourceCampus]
   );
-  const toolReviewBorrowApproverOptions = useMemo(() => {
+  const toolReviewBorrowApproverOptions = useMemo<StaffUser[]>(() => {
     const options = campusApproverUsersForCampus(users, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.approvedBy);
     const preferredName = String(authUser?.displayName || "").trim();
     if (!preferredName) return options;
@@ -20054,16 +20054,17 @@ export default function App() {
         ...options.filter((user) => user.fullName !== preferredName),
       ];
     }
+    const fallbackPreferred: StaffUser = {
+      id: -1,
+      fullName: preferredName,
+      position: "IT and Facility Manager",
+      status: "Active",
+      campus: toolReviewBorrowForm.destinationCampus || "ALL",
+      campuses: toolReviewBorrowForm.destinationCampus ? [toolReviewBorrowForm.destinationCampus] : ["ALL"],
+      email: "",
+    };
     return [
-      {
-        id: -1,
-        fullName: preferredName,
-        position: "IT and Facility Manager",
-        status: "Active",
-        campus: toolReviewBorrowForm.destinationCampus || "ALL",
-        campuses: toolReviewBorrowForm.destinationCampus ? [toolReviewBorrowForm.destinationCampus] : ["ALL"],
-        email: "",
-      },
+      fallbackPreferred,
       ...options,
     ];
   }, [authUser?.displayName, toolReviewBorrowForm.destinationCampus, toolReviewBorrowForm.approvedBy, users]);
