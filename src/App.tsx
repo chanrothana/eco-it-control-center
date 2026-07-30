@@ -2831,10 +2831,15 @@ function staffUsersForCampus(users: StaffUser[], campusName = "", selectedName =
 
 function campusApproverUsersForCampus(users: StaffUser[], campusName = "", selectedName = "") {
   const scopedUsers = staffUsersForCampus(users, campusName, selectedName);
-  const approverRolePattern = /\b(admin|supervisor|head|manager|lead|coordinator|director|chief|officer in charge)\b/i;
+  const approverRolePattern = /\b(super admin|admin|supervisor|head|manager|lead|coordinator|director|chief|officer in charge)\b/i;
   const filtered = scopedUsers.filter((user) => approverRolePattern.test(String(user.position || "").trim()));
   if (filtered.length) return filtered;
-  return scopedUsers;
+  const selected = String(selectedName || "").trim();
+  if (selected) {
+    const selectedUser = scopedUsers.find((user) => user.fullName === selected) || users.find((user) => user.fullName === selected);
+    if (selectedUser) return sortUsersByName([selectedUser]);
+  }
+  return [];
 }
 
 function renderStaffAvatar(photo: string | undefined, fullName: string, sex: unknown, className = "staff-user-avatar") {

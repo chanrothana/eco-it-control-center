@@ -112,7 +112,7 @@
   }
 
   .tool-review-modal-panel-transfer .tool-review-controller-switch {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
     gap: 8px !important;
     margin-bottom: 8px !important;
   }
@@ -15910,7 +15910,7 @@ label.backup-action-btn {
   }
 
   .tool-review-modal-panel-transfer .tool-review-controller-switch {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 10px !important;
   }
@@ -16536,18 +16536,19 @@ label.backup-action-btn {
 }
 
 .tool-review-controller-switch {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .tool-review-controller-tab {
   min-width: 0;
-  min-height: 52px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  border-radius: 16px;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 14px;
   border: 1px solid rgba(182, 204, 236, 0.28);
   background: rgba(255, 255, 255, 0.06);
   color: #dce7fb;
@@ -16574,6 +16575,11 @@ label.backup-action-btn {
   color: #8bc7ff;
 }
 
+.tool-review-controller-tab-transfer {
+  border-color: rgba(122, 184, 255, 0.42);
+  color: #c7e0ff;
+}
+
 .tool-review-controller-tab-return {
   border-color: rgba(255, 191, 94, 0.4);
   color: #ffd489;
@@ -16592,6 +16598,11 @@ label.backup-action-btn {
 .tool-review-controller-tab-borrow.active {
   background: linear-gradient(135deg, rgba(45, 118, 231, 0.92), rgba(84, 170, 255, 0.82));
   border-color: rgba(128, 193, 255, 0.85);
+}
+
+.tool-review-controller-tab-transfer.active {
+  background: linear-gradient(135deg, rgba(70, 116, 205, 0.92), rgba(126, 173, 255, 0.82));
+  border-color: rgba(170, 205, 255, 0.88);
 }
 
 .tool-review-controller-tab-return.active {
