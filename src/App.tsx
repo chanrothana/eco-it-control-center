@@ -48877,6 +48877,14 @@ export default function App() {
       ? `<section class="report-signature-section report-signature-section-count-${reportSignatureCards.length}">${reportSignatureCards.join("")}</section>`
       : "";
     const printWindowTitle = appendCampusToPrintTitle(title, resolveCurrentReportPrintCampusLabel());
+    const isPestServiceCalendarPrint =
+      reportType === "schedule_calendar" && reportScheduleGroupFilter === "pest_service";
+    const previewBodyClassName = [
+      reportType === "qr_labels" ? "qr-print-mode" : "",
+      isPestServiceCalendarPrint ? "schedule-pest-print" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     const html = `
       <html>
@@ -49417,6 +49425,58 @@ export default function App() {
           body.preview-density-tight .report-summary-card-value {
             font-size: 11px;
           }
+          body.schedule-pest-print .preview-shell {
+            padding: 10px;
+          }
+          body.schedule-pest-print .report-document-shell {
+            padding: 14px 16px 12px;
+            border-radius: 18px;
+          }
+          body.schedule-pest-print .report-head {
+            min-height: 64px;
+            margin-bottom: 4px;
+            padding: 6px 150px 0 150px;
+          }
+          body.schedule-pest-print .report-head h1 {
+            font-size: 12px;
+            margin-bottom: 4px;
+          }
+          body.schedule-pest-print .report-head h2 {
+            font-size: 18px;
+          }
+          body.schedule-pest-print .report-head-logo {
+            width: 116px;
+            max-width: 16vw;
+            max-height: 42px;
+            right: 6px;
+            top: 4px;
+          }
+          body.schedule-pest-print .report-meta-stack {
+            gap: 3px;
+            margin-bottom: 8px;
+          }
+          body.schedule-pest-print p.meta {
+            margin-bottom: 6px;
+            font-size: 10px;
+            line-height: 1.28;
+          }
+          body.schedule-pest-print .report-summary-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 6px;
+            margin-bottom: 8px;
+          }
+          body.schedule-pest-print .report-summary-card {
+            padding: 6px 8px;
+            border-radius: 10px;
+          }
+          body.schedule-pest-print .report-summary-card-label {
+            font-size: 8px;
+            margin-bottom: 2px;
+          }
+          body.schedule-pest-print .report-summary-card-value {
+            font-size: 11px;
+            line-height: 1.2;
+          }
           .compare-stock-print-cell.is-zero {
             background: rgba(226, 92, 92, 0.12);
             color: #bf4444;
@@ -49703,6 +49763,53 @@ export default function App() {
             border-radius: 4px;
             border: 1px solid rgba(72, 63, 45, 0.18);
           }
+          body.schedule-pest-print .schedule-calendar-grid-wrap {
+            border-radius: 12px;
+          }
+          body.schedule-pest-print .schedule-calendar-weekday {
+            padding: 4px 3px;
+            font-size: 9px;
+          }
+          body.schedule-pest-print .schedule-calendar-day {
+            min-height: 76px;
+            padding: 3px;
+            gap: 3px;
+          }
+          body.schedule-pest-print .schedule-calendar-day-number {
+            font-size: 10px;
+          }
+          body.schedule-pest-print .schedule-calendar-day-body {
+            gap: 3px;
+          }
+          body.schedule-pest-print .schedule-calendar-entry {
+            border-radius: 7px;
+            padding: 3px 4px;
+            min-height: 0;
+          }
+          body.schedule-pest-print .schedule-calendar-entry strong {
+            font-size: 8px;
+            margin-bottom: 1px;
+          }
+          body.schedule-pest-print .schedule-calendar-entry span {
+            font-size: 7px;
+            line-height: 1.12;
+          }
+          body.schedule-pest-print .schedule-calendar-entry-empty {
+            min-height: 0;
+          }
+          body.schedule-pest-print .schedule-calendar-legend {
+            margin-top: 6px;
+            gap: 6px 10px;
+          }
+          body.schedule-pest-print .schedule-calendar-legend-item {
+            gap: 5px;
+            font-size: 9px;
+          }
+          body.schedule-pest-print .schedule-calendar-legend-swatch {
+            width: 12px;
+            height: 8px;
+            border-radius: 3px;
+          }
           .asset-full-print { display: grid; gap: 18px; }
           .asset-full-print-head { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: start; }
           .asset-full-print-photo img, .asset-full-print-photo-empty { width: 180px; height: 180px; object-fit: cover; border-radius: 14px; border: 1px solid #cfded0; background: #fff; display: grid; place-items: center; color: #6f7d73; font-weight: 700; }
@@ -49776,6 +49883,7 @@ export default function App() {
           .qr-sticker-4 .qr-sticker-id { width: 4cm; min-height: 0.3cm; font-size: 8.8px; line-height: 1.02; }
           .qr-sticker-6 .qr-sticker-id { width: 6cm; min-height: 0.52cm; font-size: 14px; line-height: 1.08; }
           ${qrLabelPageCss}
+          ${isPestServiceCalendarPrint ? "@page { size: landscape; margin: 8mm; }" : ""}
           @media print {
             body { margin: 0; background: #fff; }
             .preview-toolbar { display: none !important; }
@@ -49799,14 +49907,18 @@ export default function App() {
           }
         </style>
       </head>
-      <body>
+      <body class="${escapeHtml(previewBodyClassName)}">
         <div class="preview-toolbar">
           <div>
             <div><strong>${escapeHtml(lang === "km" ? "មើលមុនពេលបោះពុម្ព" : "Print Preview")}</strong></div>
             <div class="preview-toolbar-note">${
               reportType === "qr_labels"
                 ? escapeHtml(lang === "km" ? "សូមពិនិត្យទម្រង់នេះ រួចចុច បោះពុម្ពឥឡូវ។" : "Review this layout, then click Print Now.")
-                : escapeHtml(lang === "km" ? "អូសគែមក្បាលតារាង ដើម្បីកែទំហំជួរឈរ មុនបោះពុម្ព។" : "Drag table header edges to adjust column widths before printing.")
+                : escapeHtml(
+                    lang === "km"
+                      ? "អូសគែមក្បាលតារាង ដើម្បីកែទំហំជួរឈរ មុនបោះពុម្ព។ សម្រាប់ពណ៌ដូច Preview សូមបើក Background graphics នៅក្នុង Print / Save as PDF។"
+                      : "Drag table header edges to adjust column widths before printing. For the same colors as the preview, turn on Background graphics in Print / Save as PDF."
+                  )
             }</div>
           </div>
           <div class="preview-toolbar-actions">
@@ -49863,6 +49975,7 @@ export default function App() {
             const closeBtn = document.getElementById("close-preview-btn");
             const resetBtn = document.getElementById("reset-widths-btn");
             const densityButtons = Array.from(document.querySelectorAll("[data-density]"));
+            const initialDensity = ${JSON.stringify(isPestServiceCalendarPrint ? "tight" : "normal")};
             if (printBtn) printBtn.addEventListener("click", () => window.print());
             if (closeBtn) closeBtn.addEventListener("click", () => window.close());
 
@@ -49881,6 +49994,7 @@ export default function App() {
                 applyDensity(button.getAttribute("data-density") || "normal");
               });
             });
+            applyDensity(initialDensity);
 
             if (resetBtn) {
               resetBtn.addEventListener("click", () => {
