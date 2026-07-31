@@ -53,6 +53,8 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import QRCode from "qrcode";
 import "./App.css";
 import CalendarGridTemplate from "./components/CalendarGridTemplate";
@@ -48885,6 +48887,125 @@ export default function App() {
     ]
       .filter(Boolean)
       .join(" ");
+    const sanitizePdfFileName = (value: string) =>
+      String(value || "report")
+        .replace(/[\\/:*?"<>|]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim() || "report";
+    const exportColorPdfGlobalKey = `__ecoExportColorPdf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const openerWindow = window as Window & Record<string, unknown>;
+    openerWindow[exportColorPdfGlobalKey] = async (previewWindowRef?: Window | null) => {
+      const previewWindow = previewWindowRef && !previewWindowRef.closed ? previewWindowRef : null;
+      if (!previewWindow) {
+        alert("Preview window is not available.");
+        return;
+      }
+      const previewDoc = previewWindow.document;
+      const previewShell = previewDoc.querySelector(".report-document-shell") as HTMLElement | null;
+      if (!previewShell) {
+        alert("Preview content is not ready yet.");
+        return;
+      }
+
+      try {
+        if ((previewDoc as Document & { fonts?: FontFaceSet }).fonts?.ready) {
+          await (previewDoc as Document & { fonts?: FontFaceSet }).fonts!.ready;
+        }
+      } catch {
+        // ignore font readiness issues
+      }
+
+      await Promise.all(
+        Array.from(previewDoc.images || []).map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              if (img.complete) {
+                resolve();
+                return;
+              }
+              const done = () => resolve();
+              img.addEventListener("load", done, { once: true });
+              img.addEventListener("error", done, { once: true });
+            })
+        )
+      );
+
+      const exportButton = previewDoc.getElementById("export-color-pdf-btn") as HTMLButtonElement | null;
+      const previousLabel = exportButton?.textContent || "";
+      if (exportButton) {
+        exportButton.disabled = true;
+        exportButton.textContent = lang === "km" ? "កំពុងបង្កើត PDF..." : "Building PDF...";
+      }
+
+      try {
+        const canvas = await html2canvas(previewShell, {
+          backgroundColor: "#ffffff",
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          windowWidth: Math.max(previewShell.scrollWidth, previewShell.offsetWidth, previewDoc.documentElement.clientWidth),
+          windowHeight: Math.max(previewShell.scrollHeight, previewShell.offsetHeight, previewDoc.documentElement.clientHeight),
+          scrollX: 0,
+          scrollY: 0,
+        });
+
+        const orientation = canvas.width > canvas.height ? "landscape" : "portrait";
+        const pdf = new jsPDF({
+          orientation,
+          unit: "pt",
+          format: "a4",
+          compress: true,
+        });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 18;
+        const usableWidth = pageWidth - margin * 2;
+        const usableHeight = pageHeight - margin * 2;
+        const sliceHeightPx = Math.max(1, Math.floor((usableHeight * canvas.width) / usableWidth));
+
+        let offsetY = 0;
+        let pageIndex = 0;
+        while (offsetY < canvas.height) {
+          const remainingHeight = canvas.height - offsetY;
+          const currentSliceHeight = Math.min(sliceHeightPx, remainingHeight);
+          const pageCanvas = document.createElement("canvas");
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = currentSliceHeight;
+          const pageCtx = pageCanvas.getContext("2d");
+          if (!pageCtx) throw new Error("Unable to prepare PDF page.");
+          pageCtx.fillStyle = "#ffffff";
+          pageCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+          pageCtx.drawImage(
+            canvas,
+            0,
+            offsetY,
+            canvas.width,
+            currentSliceHeight,
+            0,
+            0,
+            canvas.width,
+            currentSliceHeight
+          );
+          const pageImage = pageCanvas.toDataURL("image/png");
+          const renderedHeight = (currentSliceHeight * usableWidth) / canvas.width;
+          if (pageIndex > 0) pdf.addPage("a4", orientation);
+          pdf.addImage(pageImage, "PNG", margin, margin, usableWidth, renderedHeight, undefined, "FAST");
+          offsetY += currentSliceHeight;
+          pageIndex += 1;
+        }
+
+        pdf.save(`${sanitizePdfFileName(printWindowTitle || title)}.pdf`);
+      } catch (error) {
+        console.error("[REPORT PDF EXPORT] Failed to export color PDF", error);
+        alert(error instanceof Error ? error.message : "Unable to export color PDF.");
+      } finally {
+        if (exportButton) {
+          exportButton.disabled = false;
+          exportButton.textContent = previousLabel;
+        }
+      }
+    };
 
     const html = `
       <html>
@@ -49721,7 +49842,6 @@ export default function App() {
             padding: 5px 6px;
             color: #223128;
             min-height: 36px;
-            box-shadow: inset 0 0 0 1px rgba(72, 63, 45, 0.08);
           }
           .schedule-calendar-entry.is-complete {
             opacity: 0.68;
@@ -49937,6 +50057,13 @@ export default function App() {
             ${
               reportType === "qr_labels"
                 ? ""
+                : `<button type="button" class="preview-btn preview-btn-primary" id="export-color-pdf-btn">${escapeHtml(
+                    lang === "km" ? "ទាញយក PDF ពណ៌" : "Export Color PDF"
+                  )}</button>`
+            }
+            ${
+              reportType === "qr_labels"
+                ? ""
                 : `<button type="button" class="preview-btn" id="reset-widths-btn">${escapeHtml(lang === "km" ? "កំណត់ទំហំឡើងវិញ" : "Reset Widths")}</button>`
             }
             <button type="button" class="preview-btn" id="close-preview-btn">${escapeHtml(t.close)}</button>
@@ -49972,11 +50099,20 @@ export default function App() {
         <script>
           (function () {
             const printBtn = document.getElementById("print-now-btn");
+            const exportBtn = document.getElementById("export-color-pdf-btn");
             const closeBtn = document.getElementById("close-preview-btn");
             const resetBtn = document.getElementById("reset-widths-btn");
             const densityButtons = Array.from(document.querySelectorAll("[data-density]"));
             const initialDensity = ${JSON.stringify(isPestServiceCalendarPrint ? "tight" : "normal")};
             if (printBtn) printBtn.addEventListener("click", () => window.print());
+            if (exportBtn) {
+              exportBtn.addEventListener("click", () => {
+                const openerExport = window.opener && window.opener[${JSON.stringify(exportColorPdfGlobalKey)}];
+                if (typeof openerExport === "function") {
+                  openerExport(window);
+                }
+              });
+            }
             if (closeBtn) closeBtn.addEventListener("click", () => window.close());
 
             const applyDensity = (density) => {
@@ -50076,6 +50212,9 @@ export default function App() {
     win.document.write(html);
     win.document.close();
     win.focus();
+    win.addEventListener("beforeunload", () => {
+      delete openerWindow[exportColorPdfGlobalKey];
+    });
   }
 
   async function handleLogin() {
