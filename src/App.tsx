@@ -48893,7 +48893,9 @@ export default function App() {
         .replace(/\s+/g, " ")
         .trim() || "report";
     const exportColorPdfGlobalKey = `__ecoExportColorPdf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const openerWindow = window as Window & Record<string, unknown>;
+    const openerWindow = window as unknown as {
+      [key: string]: unknown;
+    };
     openerWindow[exportColorPdfGlobalKey] = async (previewWindowRef?: Window | null) => {
       const previewWindow = previewWindowRef && !previewWindowRef.closed ? previewWindowRef : null;
       if (!previewWindow) {
@@ -48908,9 +48910,7 @@ export default function App() {
       }
 
       try {
-        if ((previewDoc as Document & { fonts?: FontFaceSet }).fonts?.ready) {
-          await (previewDoc as Document & { fonts?: FontFaceSet }).fonts!.ready;
-        }
+        await previewDoc.fonts.ready;
       } catch {
         // ignore font readiness issues
       }
