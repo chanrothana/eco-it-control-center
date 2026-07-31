@@ -47137,7 +47137,10 @@ export default function App() {
         ]);
       }
     } else if (reportType === "schedule_calendar") {
-      title = lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar";
+      title =
+        reportScheduleGroupFilter === "pest_service"
+          ? (lang === "km" ? "ប្រតិទិនកម្ចាត់សត្វល្អិត" : "Pest Service Calendar")
+          : (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar");
       columns = [];
       rows = [];
     } else if (reportType === "overdue") {
@@ -47662,21 +47665,33 @@ export default function App() {
               { label: lang === "km" ? "ស្តុកទាប" : "Low Stock", value: reportInventoryRows.filter((row) => row.lowStock).length },
             ])
         : reportType === "schedule_calendar"
-        ? buildPrintSummaryGrid([
-            { label: lang === "km" ? "ខែ" : "Month", value: reportScheduleMonthLabel || "-" },
-            {
-              label: lang === "km" ? "សាខា" : "Campus",
-              value: reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter),
-            },
-            { label: lang === "km" ? "ក្រុម" : "Group", value: reportScheduleGroupLabel(reportScheduleGroupFilter) },
-            {
-              label: lang === "km" ? "របៀបបោះពុម្ព" : "Print View",
-              value: reportScheduleViewLabel,
-            },
-            { label: lang === "km" ? "ថ្ងៃមានកាលវិភាគ" : "Scheduled Days", value: reportScheduleDisplaySummary.totalDays },
-            { label: lang === "km" ? "ក្រុមការងារ" : "Calendar Entries", value: reportScheduleDisplaySummary.totalGroups },
-            { label: lang === "km" ? "ទ្រព្យសរុប" : "Total Assets", value: reportScheduleDisplaySummary.totalAssets },
-          ])
+        ? buildPrintSummaryGrid(
+            reportScheduleGroupFilter === "pest_service"
+              ? [
+                  { label: lang === "km" ? "ខែ" : "Month", value: reportScheduleMonthLabel || "-" },
+                  {
+                    label: lang === "km" ? "សាខា" : "Campus",
+                    value: reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter),
+                  },
+                  { label: lang === "km" ? "ថ្ងៃមានកាលវិភាគ" : "Scheduled Days", value: reportScheduleDisplaySummary.totalDays },
+                  { label: lang === "km" ? "ក្រុមការងារ" : "Calendar Entries", value: reportScheduleDisplaySummary.totalGroups },
+                ]
+              : [
+                  { label: lang === "km" ? "ខែ" : "Month", value: reportScheduleMonthLabel || "-" },
+                  {
+                    label: lang === "km" ? "សាខា" : "Campus",
+                    value: reportScheduleCampusFilter === "ALL" ? t.allCampuses : reportCampusName(reportScheduleCampusFilter),
+                  },
+                  { label: lang === "km" ? "ក្រុម" : "Group", value: reportScheduleGroupLabel(reportScheduleGroupFilter) },
+                  {
+                    label: lang === "km" ? "របៀបបោះពុម្ព" : "Print View",
+                    value: reportScheduleViewLabel,
+                  },
+                  { label: lang === "km" ? "ថ្ងៃមានកាលវិភាគ" : "Scheduled Days", value: reportScheduleDisplaySummary.totalDays },
+                  { label: lang === "km" ? "ក្រុមការងារ" : "Calendar Entries", value: reportScheduleDisplaySummary.totalGroups },
+                  { label: lang === "km" ? "ទ្រព្យសរុប" : "Total Assets", value: reportScheduleDisplaySummary.totalAssets },
+                ]
+          )
         : reportType === "staff_borrowing"
         ? buildPrintSummaryGrid([
             { label: lang === "km" ? "ទ្រព្យដែលខ្ចី/ប្រគល់" : "Borrowed / Assigned Assets", value: sortedStaffBorrowingRows.length },
@@ -47981,7 +47996,11 @@ export default function App() {
       reportType === "maintenance_completion"
         ? "Maintenance Report for ED"
         : reportType === "schedule_calendar"
-          ? (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar")
+          ? (
+              reportScheduleGroupFilter === "pest_service"
+                ? (lang === "km" ? "ប្រតិទិនកម្ចាត់សត្វល្អិត" : "Pest Service Calendar")
+                : (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar")
+            )
           : reportType === "location_tags"
             ? (lang === "km" ? "ស្លាកឈ្មោះសម្ភារៈតាមទីតាំង" : "Simple Location Tags")
           : reportType === "inventory_balance" && reportInventoryIsToolGroup
