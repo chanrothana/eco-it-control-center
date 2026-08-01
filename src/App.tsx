@@ -40257,6 +40257,26 @@ export default function App() {
     if (Number.isNaN(parsed.getTime())) return maintenanceMonthFilter;
     return formatKhmerMonthYear(parsed);
   }, [maintenanceMonthFilter, maintenanceDateFrom, maintenanceDateTo, lang]);
+  const printMaintenanceLogBook = useCallback(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+    const originalTitle = document.title;
+    const campusText =
+      maintenanceCampusFilter === "ALL" ? "គ្រប់សាខា" : String(campusLabel(maintenanceCampusFilter) || "").trim() || "គ្រប់សាខា";
+    const monthText = String(maintenanceMonthLabel || "").trim() || "គ្រប់ខែ";
+    const nextTitle = `សៀវភៅកត់ត្រា ការងារជួសជុលទូទៅ ខែ ${monthText} សាខា ${campusText}`;
+    let restored = false;
+    const restoreTitle = () => {
+      if (restored) return;
+      restored = true;
+      document.title = originalTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+
+    document.title = nextTitle;
+    window.addEventListener("afterprint", restoreTitle, { once: true });
+    window.setTimeout(() => window.print(), 40);
+    window.setTimeout(restoreTitle, 30000);
+  }, [maintenanceCampusFilter, maintenanceMonthLabel, campusLabel]);
   const latestMaintenanceRows = useMemo(
     () => allMaintenanceRows.slice(0, 5),
     [allMaintenanceRows]
@@ -46907,6 +46927,34 @@ export default function App() {
       if (!normalizedCampus) return normalizedTitle;
       return `${normalizedTitle} - ${normalizedCampus}`;
     };
+    const resolveMaintenanceFileMonthLabel = () => {
+      const from = normalizeYmdInput(reportDateFrom);
+      const to = normalizeYmdInput(reportDateTo);
+      if (from) {
+        const fromDate = new Date(`${from}T00:00:00`);
+        const toDate = to ? new Date(`${to}T00:00:00`) : null;
+        if (!Number.isNaN(fromDate.getTime())) {
+          if (
+            toDate &&
+            !Number.isNaN(toDate.getTime()) &&
+            fromDate.getFullYear() === toDate.getFullYear() &&
+            fromDate.getMonth() === toDate.getMonth()
+          ) {
+            return formatKhmerMonthYear(fromDate);
+          }
+          if (toDate && !Number.isNaN(toDate.getTime())) {
+            return `${formatKhmerDateYmd(from)} ដល់ ${formatKhmerDateYmd(to)}`;
+          }
+          return formatKhmerMonthYear(fromDate);
+        }
+      }
+      const fallbackDate = new Date();
+      return Number.isNaN(fallbackDate.getTime()) ? toKhmerDigits(new Date().getFullYear()) : formatKhmerMonthYear(fallbackDate);
+    };
+    const resolveMaintenanceFileCampusLabel = () => {
+      if (reportMaintenanceCampusFilter === "ALL") return "គ្រប់សាខា";
+      return String(campusLabel(reportMaintenanceCampusFilter) || "").trim() || "គ្រប់សាខា";
+    };
     const resolveCurrentReportPrintCampusLabel = () => {
       if (reportType === "inventory_balance") {
         return String(reportInventoryCampusFilterLabel || "").trim() || t.allCampuses;
@@ -48878,7 +48926,11 @@ export default function App() {
     const reportSignatureHtml = reportSignatureCards.length
       ? `<section class="report-signature-section report-signature-section-count-${reportSignatureCards.length}">${reportSignatureCards.join("")}</section>`
       : "";
-    const printWindowTitle = appendCampusToPrintTitle(title, resolveCurrentReportPrintCampusLabel());
+    const defaultPrintWindowTitle = appendCampusToPrintTitle(title, resolveCurrentReportPrintCampusLabel());
+    const printWindowTitle =
+      reportType === "maintenance_completion"
+        ? `សៀវភៅកត់ត្រា ការងារជួសជុលទូទៅ ខែ ${resolveMaintenanceFileMonthLabel()} សាខា ${resolveMaintenanceFileCampusLabel()}`
+        : defaultPrintWindowTitle;
     const isPestServiceCalendarPrint =
       reportType === "schedule_calendar" && reportScheduleGroupFilter === "pest_service";
     const previewBodyClassName = [
@@ -69192,7 +69244,7 @@ function formatTicketRequestSource(value?: string) {
             <div className="maintenance-title-row">
               <h2>{lang === "km" ? "សៀវភៅកំណត់ត្រាថែទាំ" : "Maintenance Log Book"}</h2>
               <div className="maintenance-title-actions">
-                <button className="btn-primary report-print-btn report-title-print-btn maintenance-print-btn" type="button" onClick={() => window.print()}>
+                <button className="btn-primary report-print-btn report-title-print-btn maintenance-print-btn" type="button" onClick={printMaintenanceLogBook}>
                   <Printer size={16} aria-hidden={true} />
                   <span>{lang === "km" ? "បោះពុម្ព / PDF" : "Print / PDF"}</span>
                 </button>
