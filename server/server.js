@@ -1806,6 +1806,27 @@ function normalizeArray(input) {
   return Array.isArray(input) ? input : [];
 }
 
+function normalizeStringArray(input) {
+  return Array.from(
+    new Set(
+      normalizeArray(input)
+        .map((value) => toText(value).trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function splitServiceTaskStaffNames(value) {
+  return Array.from(
+    new Set(
+      toText(value)
+        .split(/\n|,|;|\/|&|\band\b/gi)
+        .map((item) => toText(item).trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 function normalizeCustomDocuments(input) {
   return normalizeArray(input)
     .filter((row) => row && typeof row === "object")
@@ -6279,6 +6300,165 @@ async function sendTelegramMaintenanceBatch(rows, db = null) {
   return sent;
 }
 
+function formatTelegramStaffMention(db, fullName) {
+  const name = toText(fullName).trim();
+  if (!name) return "";
+  const staff = findStaffUserByFullName(db, name);
+  const chatId = toText(staff && staff.telegramChatId).trim();
+  if (/^-?\d+$/.test(chatId)) {
+    return `<a href="tg://user?id=${escapeTelegramHtml(chatId)}">${escapeTelegramHtml(name)}</a>`;
+  }
+  return escapeTelegramHtml(name);
+}
+
+async function sendTelegramServiceTaskReminderBatch(rows, db = null) {
+  if (!Array.isArray(rows) || !rows.length) return false;
+  const snapshotText = formatTelegramAlertSnapshot(new Date());
+  let sent = false;
+  for (const row of rows) {
+    const pendingStaff = Array.isArray(row.pendingStaff) ? row.pendingStaff : [];
+    if (!pendingStaff.length) continue;
+    const mentionText = pendingStaff.map((name) => formatTelegramStaffMention(db, name)).filter(Boolean).join(", ");
+    const campusText = toText(row.campusLabel || row.campus || "-");
+    const title = toText(row.title) || "Service Task";
+    const note = toText(row.note) || "-";
+    const dueDateTime = formatMaintenanceScheduleDateTime(toText(row.scheduleDate), normalizeMaintenanceScheduleTime(row.scheduleTime));
+    const completionText = `${Number(row.completedCount || 0)}/${Number(row.totalAssigned || pendingStaff.length)}`;
+    const text = [
+      `🔔 <b>ECO Service Task Reminder</b>`,
+      `Time: ${escapeTelegramHtml(snapshotText)}`,
+      `<b>Task</b>: ${escapeTelegramHtml(title)}`,
+      `<b>Campus</b>: ${escapeTelegramHtml(campusText)}`,
+      `<b>Due Date / Time</b>: ${escapeTelegramHtml(dueDateTime)}`,
+      `<b>Area / Note</b>: ${escapeTelegramHtml(note)}`,
+      `<b>Done</b>: ${escapeTelegramHtml(completionText)}`,
+      `<b>Pending Staff</b>: ${mentionText || escapeTelegramHtml(pendingStaff.join(", "))}`,
+      `Please complete the task and record it in the system.`,
+    ].join("\n");
+    // eslint-disable-next-line no-await-in-loop
+    const report = await sendTelegramMaintenanceMessage(text, {
+      db,
+      parseMode: "HTML",
+    });
+    sent = Boolean(report) || sent;
+  }
+  return sent;
+}
+
+function normalizeServiceTaskTelegramDailyLog(settings) {
+  const input = settings && typeof settings === "object" && settings.serviceTaskTelegramDailyLog && typeof settings.serviceTaskTelegramDailyLog === "object"
+    ? settings.serviceTaskTelegramDailyLog
+    : {};
+  const output = {};
+  for (const [key, value] of Object.entries(input)) {
+    const normalizedKey = toText(key).trim();
+    const normalizedValue = toText(value).trim();
+    if (!normalizedKey || !normalizedValue) continue;
+    output[normalizedKey] = normalizedValue;
+  }
+  return output;
+}
+
+function buildServiceTaskReminderRows(db) {
+  const settings =
+    db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+      ? db.settings
+      : {};
+  const slotInfo = getMaintenanceAlertSlotInfo(new Date());
+  const todayYmd = getAppTodayYmd(new Date());
+  const dailyLog = normalizeServiceTaskTelegramDailyLog(settings);
+  const reminderRows = [];
+  let changed = false;
+  for (const [key, value] of Object.entries(dailyLog)) {
+    const sentDate = normalizeLooseDateToYmd(String(value).split("@")[0]);
+    if (!sentDate || sentDate < todayYmd) {
+      delete dailyLog[key];
+      changed = true;
+    }
+  }
+  if (!slotInfo) {
+    settings.serviceTaskTelegramDailyLog = dailyLog;
+    if (db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)) {
+      db.settings.serviceTaskTelegramDailyLog = dailyLog;
+    } else if (db) {
+      db.settings = { serviceTaskTelegramDailyLog: dailyLog };
+    }
+    return { rows: reminderRows, changed };
+  }
+  let stage = "";
+  const morningStart = 7 * 60;
+  const afternoonStart = 13 * 60;
+  if (slotInfo.currentMinutes >= morningStart && slotInfo.currentMinutes < morningStart + MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES) {
+    stage = "morning";
+  } else if (slotInfo.currentMinutes >= afternoonStart && slotInfo.currentMinutes < afternoonStart + MAINTENANCE_ALERT_SWEEP_INTERVAL_MINUTES) {
+    stage = "afternoon";
+  }
+  if (!stage) {
+    settings.serviceTaskTelegramDailyLog = dailyLog;
+    if (db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)) {
+      db.settings.serviceTaskTelegramDailyLog = dailyLog;
+    } else if (db) {
+      db.settings = { serviceTaskTelegramDailyLog: dailyLog };
+    }
+    return { rows: reminderRows, changed };
+  }
+
+  const users = normalizeStaffUsers(settings.staffUsers);
+  const events = normalizeCalendarEvents(settings.calendarEvents).filter((row) => isServiceTaskCalendarType(row.type));
+  for (const event of events) {
+    const scheduleDate = normalizeLooseDateToYmd(event.date);
+    const assignedStaff = normalizeStringArray(event.assignedStaff);
+    if (!scheduleDate || !assignedStaff.length || !event.telegramReminderEnabled) continue;
+    if (scheduleDate > todayYmd) continue;
+    const campus = toText(event.campus);
+    const completedStaff = new Set();
+    for (const asset of Array.isArray(db && db.assets) ? db.assets : []) {
+      const assetCampus = toText(asset && asset.campus);
+      if (campus && campus !== "ALL" && assetCampus && assetCampus !== campus) continue;
+      const history = Array.isArray(asset && asset.maintenanceHistory) ? asset.maintenanceHistory : [];
+      for (const entry of history) {
+        if (toText(entry && entry.completion) !== "Done") continue;
+        if (toText(entry && entry.scheduleTaskKind) !== "service") continue;
+        if (toText(entry && entry.scheduleTaskId) !== toText(event.id)) continue;
+        const sourceDate = normalizeLooseDateToYmd(entry && (entry.scheduleSourceDate || entry.date));
+        if (sourceDate !== scheduleDate) continue;
+        splitServiceTaskStaffNames(entry && entry.by).forEach((name) => completedStaff.add(name.toLowerCase()));
+        const directBy = toText(entry && entry.by).trim().toLowerCase();
+        if (directBy) completedStaff.add(directBy);
+      }
+    }
+    const pendingStaff = assignedStaff.filter((name) => !completedStaff.has(name.toLowerCase()));
+    if (!pendingStaff.length) continue;
+    const slotStamp = `${slotInfo.ymd}@${stage}`;
+    const dedupeKey = `${toText(event.id)}:${scheduleDate}:${stage}`;
+    if (dailyLog[dedupeKey] === slotStamp) continue;
+    const serviceUserRows = assignedStaff
+      .map((name) => users.find((user) => toText(user.fullName).trim().toLowerCase() === name.toLowerCase()) || null)
+      .filter(Boolean);
+    reminderRows.push({
+      key: dedupeKey,
+      eventId: Number(event.id) || 0,
+      scheduleDate,
+      scheduleTime: normalizeMaintenanceScheduleTime(event.time),
+      campus,
+      campusLabel: campus && campus !== "ALL" ? formatTelegramCampusKhmer(campus) : "គ្រប់សាខា / All Campuses",
+      title: toText(event.name),
+      note: toText(event.note),
+      pendingStaff,
+      totalAssigned: assignedStaff.length,
+      completedCount: assignedStaff.length - pendingStaff.length,
+      staff: serviceUserRows,
+    });
+  }
+  settings.serviceTaskTelegramDailyLog = dailyLog;
+  if (db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)) {
+    db.settings.serviceTaskTelegramDailyLog = dailyLog;
+  } else if (db) {
+    db.settings = { serviceTaskTelegramDailyLog: dailyLog };
+  }
+  return { rows: reminderRows, changed };
+}
+
 function normalizeMaintenanceTelegramDailyLog(settings) {
   const input = settings && typeof settings === "object" && settings.maintenanceTelegramDailyLog && typeof settings.maintenanceTelegramDailyLog === "object"
     ? settings.maintenanceTelegramDailyLog
@@ -6395,7 +6575,8 @@ async function maybeRunMaintenanceAlertSweep() {
     const createdNotifications = [];
     const changed = ensureMaintenanceScheduleNotifications(db, createdNotifications);
     const reminderResult = buildMaintenanceTelegramReminderRows(db);
-    if (changed || reminderResult.changed) {
+    const serviceReminderResult = buildServiceTaskReminderRows(db);
+    if (changed || reminderResult.changed || serviceReminderResult.changed) {
       await writeDb(db);
     }
     if (reminderResult.rows.length) {
@@ -6413,6 +6594,25 @@ async function maybeRunMaintenanceAlertSweep() {
             dailyLog[toText(row.key)] = slotStamp;
           });
           db.settings = { ...(db.settings || {}), maintenanceTelegramDailyLog: dailyLog };
+          await writeDb(db);
+        }
+      }
+    }
+    if (serviceReminderResult.rows.length) {
+      const sent = await sendTelegramServiceTaskReminderBatch(serviceReminderResult.rows, db);
+      if (sent) {
+        const slotInfo = getMaintenanceAlertSlotInfo(new Date());
+        const settings =
+          db && db.settings && typeof db.settings === "object" && !Array.isArray(db.settings)
+            ? db.settings
+            : {};
+        const dailyLog = normalizeServiceTaskTelegramDailyLog(settings);
+        if (slotInfo) {
+          const slotStamp = `${slotInfo.ymd}@${slotInfo.slot}`;
+          serviceReminderResult.rows.forEach((row) => {
+            dailyLog[toText(row.key)] = slotStamp;
+          });
+          db.settings = { ...(db.settings || {}), serviceTaskTelegramDailyLog: dailyLog };
           await writeDb(db);
         }
       }
@@ -9398,8 +9598,8 @@ function validateAsset(body, settings) {
   if (requiresUser && !sharedLocation && !assignedTo) {
     return `User is required for type ${type}`;
   }
-  if (!["NONE", "MONTHLY_WEEKDAY", "EVERY_6_MONTHS", "EVERY_12_MONTHS", "WDP_FILTER_CYCLE"].includes(repeatMode)) {
-    return "repeatMode must be NONE, MONTHLY_WEEKDAY, EVERY_6_MONTHS, EVERY_12_MONTHS, or WDP_FILTER_CYCLE";
+  if (!["NONE", "MONTHLY_WEEKDAY", "EVERY_3_MONTHS", "EVERY_6_MONTHS", "EVERY_12_MONTHS", "WDP_FILTER_CYCLE"].includes(repeatMode)) {
+    return "repeatMode must be NONE, MONTHLY_WEEKDAY, EVERY_3_MONTHS, EVERY_6_MONTHS, EVERY_12_MONTHS, or WDP_FILTER_CYCLE";
   }
   if (repeatMode === "MONTHLY_WEEKDAY") {
     if (!(repeatWeekOfMonth >= 1 && repeatWeekOfMonth <= 5)) {
@@ -9552,6 +9752,10 @@ function normalizeCalendarEventTime(value) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+function isServiceTaskCalendarType(type) {
+  return ["pest_service", "pool_clean", "submit_report", "monthly_submit_request"].includes(toText(type));
+}
+
 function isNonWorkingCalendarEventType(type) {
   return type === "public" || type === "break";
 }
@@ -9597,6 +9801,10 @@ function normalizeCalendarEvents(input) {
       name,
       type: normalizeCalendarEventType(row.type),
       time,
+      campus: toText(row.campus),
+      note: toText(row.note),
+      assignedStaff: normalizeStringArray(row.assignedStaff),
+      telegramReminderEnabled: Boolean(row.telegramReminderEnabled),
     });
   }
   return out.sort((a, b) => {

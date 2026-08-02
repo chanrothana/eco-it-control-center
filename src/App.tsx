@@ -73,7 +73,11 @@ const POOL_TOOL_CAMPUSES = ["Chaktomuk Campus (C2.2)", "Veng Sreng Campus"] as c
 const TONER_OLD_STATUS_OPTIONS = ["Empty", "Low", "Leaking", "Defective"] as const;
 const SCHEDULE_GROUP_PRESET_OPTIONS = [
   { value: "", en: "Auto by asset type", km: "ស្វ័យប្រវត្តិតាមប្រភេទទ្រព្យ" },
+  { value: "AC Filter Monthly", en: "AC Filter Monthly", km: "សម្អាតហ្វីលទ័រម៉ាស៊ីនត្រជាក់ប្រចាំខែ" },
+  { value: "AC Water Spray 3 Months", en: "AC Water Spray 3 Months", km: "បាញ់ទឹកសម្អាតម៉ាស៊ីនត្រជាក់រៀងរាល់ ៣ ខែ" },
   { value: "Computer Maintenance", en: "Computer Maintenance", km: "កាលវិភាគថែទាំកុំព្យូទ័រ" },
+  { value: "Computer Monthly", en: "Computer Monthly", km: "កុំព្យូទ័រ និង Laptop ប្រចាំខែ" },
+  { value: "iPad / Speaker / TV 3 Months", en: "iPad / Speaker / TV 3 Months", km: "iPad / Speaker / TV រៀងរាល់ ៣ ខែ" },
   { value: "Safety Maintenance", en: "Safety Maintenance", km: "កាលវិភាគថែទាំសុវត្ថិភាព" },
   { value: "Internet / CCTV Maintenance", en: "Internet / CCTV Maintenance", km: "កាលវិភាគអ៊ីនធឺណិត / CCTV" },
   { value: "Air-Con Maintenance", en: "Air-Con Maintenance", km: "កាលវិភាគម៉ាស៊ីនត្រជាក់" },
@@ -126,7 +130,7 @@ type Asset = {
   scheduleNote?: string;
   scheduleAssignedTo?: string;
   scheduleGroup?: string;
-  repeatMode?: "NONE" | "MONTHLY_WEEKDAY" | "EVERY_6_MONTHS" | "EVERY_12_MONTHS" | "WDP_FILTER_CYCLE";
+  repeatMode?: "NONE" | "MONTHLY_WEEKDAY" | "EVERY_3_MONTHS" | "EVERY_6_MONTHS" | "EVERY_12_MONTHS" | "WDP_FILTER_CYCLE";
   repeatWeekOfMonth?: number;
   repeatWeekday?: number;
   repeatCycleStep?: number;
@@ -618,6 +622,7 @@ type ToolOwnerTypeOption = {
   value: string;
   label: string;
 };
+type ProviderHandoverAction = "KEEP" | "MOVE_NEW" | "USE_OLD";
 type ReportInventoryPropertyFilter = "AUTO" | "SCHOOL" | "PROVIDER";
 type ToolReviewCondition =
   | "Good"
@@ -1570,6 +1575,10 @@ type CalendarEvent = {
   name: string;
   type: CalendarEventType;
   time?: string;
+  campus?: string;
+  note?: string;
+  assignedStaff?: string[];
+  telegramReminderEnabled?: boolean;
 };
 type ServiceTaskScheduleType =
   | "pest_service"
@@ -4140,6 +4149,7 @@ function addMonthsToYmd(ymd: string, months: number) {
 
 function maintenanceRepeatLabel(mode: string, weekOfMonth: number, weekday: number) {
   if (mode === "MONTHLY_WEEKDAY") return monthlyRepeatLabel(weekOfMonth, weekday);
+  if (mode === "EVERY_3_MONTHS") return "Every 3 months";
   if (mode === "EVERY_6_MONTHS") return "Every 6 months";
   if (mode === "EVERY_12_MONTHS") return "Every 12 months";
   if (mode === "WDP_FILTER_CYCLE") return "WDP filter cycle (6 months / full set yearly)";
@@ -6312,6 +6322,16 @@ function normalizeInventoryEditableCategory(
 function isProviderToolOwnerType(value?: string) {
   return String(value || "").trim().toUpperCase() !== "SCHOOL";
 }
+function suggestedProviderOwnerTypeForCategory(
+  category?: InventoryItem["category"] | InventoryBusinessGroup | string,
+  currentOwnerType?: string
+) {
+  if (isProviderToolOwnerType(currentOwnerType)) return String(currentOwnerType || "").trim().toUpperCase() || "OTHER_PROVIDER";
+  const normalized = String(category || "").trim().toUpperCase();
+  if (normalized === "CLEAN_TOOL") return "CLEANING_PROVIDER";
+  if (normalized === "GARDEN_TOOL") return "GARDEN_PROVIDER";
+  return "OTHER_PROVIDER";
+}
 function normalizeToolReviewReportsClient(input: unknown): ToolReviewReport[] {
   return normalizeArray<ToolReviewReport>(input).map((row) => ({
     id: Number(row.id) || Date.now(),
@@ -7065,6 +7085,18 @@ function normalizeCalendarEvents(input: unknown, fallback: CalendarEvent[] = [])
       name,
       type: normalizeCalendarEventType((row as { type?: unknown })?.type || classifyHolidayEvent(name)),
       time,
+      campus: String((row as { campus?: unknown })?.campus || "").trim(),
+      note: String((row as { note?: unknown })?.note || "").trim(),
+      assignedStaff: Array.isArray((row as { assignedStaff?: unknown })?.assignedStaff)
+        ? Array.from(
+            new Set(
+              ((row as { assignedStaff?: unknown[] }).assignedStaff || [])
+                .map((value) => String(value || "").trim())
+                .filter(Boolean)
+            )
+          )
+        : [],
+      telegramReminderEnabled: Boolean((row as { telegramReminderEnabled?: unknown })?.telegramReminderEnabled),
     });
   }
   return out.sort((a, b) => {
@@ -7073,6 +7105,26 @@ function normalizeCalendarEvents(input: unknown, fallback: CalendarEvent[] = [])
     if (timeCompare !== 0) return timeCompare;
     return a.name.localeCompare(b.name);
   });
+}
+
+function serviceTaskAssigneeSummary(names: string[], lang: string) {
+  const selected = Array.from(new Set((names || []).map((value) => String(value || "").trim()).filter(Boolean)));
+  if (!selected.length) return lang === "km" ? "ជ្រើសបុគ្គលិក" : "Select staff";
+  if (selected.length <= 2) return selected.join(", ");
+  return lang === "km"
+    ? `${selected[0]}, ${selected[1]} និង ${selected.length - 2} ផ្សេងទៀត`
+    : `${selected[0]}, ${selected[1]} +${selected.length - 2} more`;
+}
+
+function splitServiceTaskStaffNames(value: unknown) {
+  return Array.from(
+    new Set(
+      String(value || "")
+        .split(/\n|,|;|\/|&|\band\b/gi)
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+    )
+  );
 }
 
 function nthWeekdayOfMonth(
@@ -7107,6 +7159,9 @@ function resolveNextScheduleDate(asset: Asset, fromYmd: string) {
     }
     return "";
   }
+  if (asset.repeatMode === "EVERY_3_MONTHS") {
+    return asset.nextMaintenanceDate || addMonthsToYmd(fromYmd, 3);
+  }
   if (asset.repeatMode === "EVERY_6_MONTHS") {
     return asset.nextMaintenanceDate || addMonthsToYmd(fromYmd, 6);
   }
@@ -7122,6 +7177,9 @@ function resolveNextScheduleDate(asset: Asset, fromYmd: string) {
 function advanceRepeatScheduleDate(asset: Asset, fromYmd: string) {
   if (asset.repeatMode === "MONTHLY_WEEKDAY") {
     return resolveNextScheduleDate(asset, fromYmd);
+  }
+  if (asset.repeatMode === "EVERY_3_MONTHS") {
+    return addMonthsToYmd(fromYmd, 3);
   }
   if (asset.repeatMode === "EVERY_6_MONTHS") {
     return addMonthsToYmd(fromYmd, 6);
@@ -14908,6 +14966,8 @@ export default function App() {
     time: "09:00",
     name: "",
     note: "",
+    assignedStaff: [] as string[],
+    telegramReminderEnabled: true,
   });
   const [editingBulkServiceScheduleId, setEditingBulkServiceScheduleId] = useState<number | null>(null);
   const [scheduleScopeModal, setScheduleScopeModal] = useState<null | {
@@ -14948,6 +15008,13 @@ export default function App() {
     sourceItemId: "ALL",
     targetCampuses: [] as string[],
   });
+  const [inventoryProviderHandoverForm, setInventoryProviderHandoverForm] = useState({
+    fromCompany: "",
+    toCompany: "",
+    date: toYmd(new Date()),
+    note: "",
+  });
+  const [inventoryProviderHandoverActions, setInventoryProviderHandoverActions] = useState<Record<number, ProviderHandoverAction>>({});
   const deferredInventoryItemName = useDeferredValue(inventoryItemForm.itemName);
   const [inventoryTxnForm, setInventoryTxnForm] = useState({
     itemId: "",
@@ -16207,6 +16274,8 @@ export default function App() {
       time: "09:00",
       name: "",
       note: "",
+      assignedStaff: [] as string[],
+      telegramReminderEnabled: true,
     }),
     []
   );
@@ -16238,15 +16307,18 @@ export default function App() {
         }
       }
       const title = parts[0] || defaultName;
-      const note = parts
+      const legacyNote = parts
         .filter((_, index) => index > 0 && index !== campusPartIndex)
         .join(" - ");
+      const note = String(row.note || "").trim() || legacyNote;
       return {
         serviceType,
         title,
-        campus,
+        campus: String(row.campus || "").trim() || campus,
         note,
         customName: title !== defaultName ? title : "",
+        assignedStaff: Array.isArray(row.assignedStaff) ? row.assignedStaff : [],
+        telegramReminderEnabled: Boolean(row.telegramReminderEnabled),
       };
     },
     [campusLabel, campusOptions, t.allCampuses]
@@ -17536,6 +17608,51 @@ export default function App() {
     lang,
     ownerTypeLabel,
   ]);
+  const inventoryProviderCompanyOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          inventoryItemRows
+            .map((row) => String(row.responsibleParty || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [inventoryItemRows]
+  );
+  const inventoryProviderHandoverRows = useMemo(() => {
+    const selectedCompany = String(inventoryProviderHandoverForm.fromCompany || "").trim().toLowerCase();
+    return inventoryItemRows.filter((row) => {
+      if (!selectedCompany) return true;
+      return String(row.responsibleParty || "").trim().toLowerCase() === selectedCompany;
+    });
+  }, [inventoryItemRows, inventoryProviderHandoverForm.fromCompany]);
+  const providerHandoverActionForRow = useCallback(
+    (row: InventoryItem): ProviderHandoverAction => {
+      const saved = inventoryProviderHandoverActions[row.id];
+      if (saved) return saved;
+      const selectedCompany = String(inventoryProviderHandoverForm.fromCompany || "").trim().toLowerCase();
+      if (
+        selectedCompany &&
+        String(row.responsibleParty || "").trim().toLowerCase() === selectedCompany
+      ) {
+        return "MOVE_NEW";
+      }
+      return "KEEP";
+    },
+    [inventoryProviderHandoverActions, inventoryProviderHandoverForm.fromCompany]
+  );
+  const inventoryProviderHandoverSummary = useMemo(() => {
+    let keep = 0;
+    let moveNew = 0;
+    let useOld = 0;
+    for (const row of inventoryProviderHandoverRows) {
+      const action = providerHandoverActionForRow(row);
+      if (action === "MOVE_NEW") moveNew += 1;
+      else if (action === "USE_OLD") useOld += 1;
+      else keep += 1;
+    }
+    return { keep, moveNew, useOld, total: inventoryProviderHandoverRows.length };
+  }, [inventoryProviderHandoverRows, providerHandoverActionForRow]);
   const inventoryItemsTableSection = useMemo(
     () => (
       <>
@@ -30061,6 +30178,126 @@ export default function App() {
     }
   }
 
+  async function saveInventoryProviderHandover() {
+    if (!requireAdminAction()) return;
+    if (!isInventoryToolCategory(inventoryDashboardGroup)) {
+      setError("Provider handover is only available for tool groups.");
+      return;
+    }
+    const rowsToUpdate = inventoryProviderHandoverRows
+      .map((row) => ({ row, action: providerHandoverActionForRow(row) }))
+      .filter(({ action }) => action !== "KEEP");
+    if (!rowsToUpdate.length) {
+      setError("Please choose at least one tool action before confirming handover.");
+      return;
+    }
+    const fromCompany = String(inventoryProviderHandoverForm.fromCompany || "").trim();
+    const toCompany = String(inventoryProviderHandoverForm.toCompany || "").trim();
+    if (rowsToUpdate.some(({ action }) => action === "MOVE_NEW") && !toCompany) {
+      setError("Please enter the new company name.");
+      return;
+    }
+    if (rowsToUpdate.some(({ action }) => action === "USE_OLD") && !fromCompany) {
+      setError("Please choose the old company name first.");
+      return;
+    }
+    const confirmText = [
+      `Provider handover on ${inventoryProviderHandoverForm.date || toYmd(new Date())}`,
+      `Move to new company: ${rowsToUpdate.filter((entry) => entry.action === "MOVE_NEW").length}`,
+      `Return to old company: ${rowsToUpdate.filter((entry) => entry.action === "USE_OLD").length}`,
+      "",
+      "Save these changes now?",
+    ].join("\n");
+    if (!window.confirm(confirmText)) return;
+
+    let nextItems = [...inventoryItems];
+    let usedFallback = false;
+    let updatedCount = 0;
+    const handoverDate = String(inventoryProviderHandoverForm.date || toYmd(new Date())).trim() || toYmd(new Date());
+    const handoverNote = String(inventoryProviderHandoverForm.note || "").trim();
+    setBusy(true);
+    setError("");
+    try {
+      for (const { row, action } of rowsToUpdate) {
+        const current = nextItems.find((item) => Number(item.id) === Number(row.id));
+        if (!current) continue;
+        const targetCompany = action === "MOVE_NEW" ? toCompany : fromCompany;
+        if (!targetCompany) continue;
+        const previousCompany = String(current.responsibleParty || "").trim();
+        const extraNote = [
+          handoverDate,
+          "Provider handover",
+          `${previousCompany || "Unassigned"} -> ${targetCompany}`,
+          handoverNote,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+        const mergedNotes = [String(current.notes || "").trim(), extraNote].filter(Boolean).join("\n");
+        const payload = {
+          campus: current.campus,
+          category: current.category,
+          itemCode: current.itemCode,
+          itemName: current.itemName,
+          unit: current.unit,
+          area: current.area || "",
+          location: current.location,
+          openingQty: Math.max(0, Math.round(Number(current.openingQty || 0))),
+          minStock: Math.max(0, Math.round(Number(current.minStock || 0))),
+          ownerType: suggestedProviderOwnerTypeForCategory(current.category, current.ownerType),
+          responsibleParty: targetCompany,
+          vendor: current.vendor || "",
+          notes: mergedNotes,
+          photo: current.photo || "",
+        };
+        try {
+          const res = await requestJson<{ item: InventoryItem }>(`/api/inventory/items/${current.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          });
+          nextItems = nextItems.map((item) => (item.id === res.item.id ? res.item : item));
+        } catch (err) {
+          if (!isMissingRouteError(err)) throw err;
+          usedFallback = true;
+          nextItems = nextItems.map((item) =>
+            item.id === current.id
+              ? {
+                  ...item,
+                  ownerType: payload.ownerType,
+                  responsibleParty: payload.responsibleParty,
+                  notes: payload.notes,
+                }
+              : item
+          );
+        }
+        appendUiAudit(
+          "UPDATE",
+          "inventory_item",
+          current.itemCode,
+          `${current.campus} | Provider handover | ${previousCompany || "-"} -> ${targetCompany}`
+        );
+        updatedCount += 1;
+      }
+      setInventoryItems(nextItems);
+      if (usedFallback) {
+        await persistInventorySettings(nextItems, inventoryTxns, toolReviewReports);
+      }
+      setInventoryProviderHandoverActions({});
+      setInventoryProviderHandoverForm((prev) => ({ ...prev, note: "", toCompany: "" }));
+      setSuccessToast({
+        id: Date.now(),
+        title: lang === "km" ? "បានរក្សាទុកការផ្ទេរក្រុមហ៊ុន" : "Provider Handover Saved",
+        message:
+          lang === "km"
+            ? `បានអាប់ដេត ${updatedCount} ឧបករណ៍`
+            : `Updated ${updatedCount} tool item(s).`,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save provider handover.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function downloadInventoryBulkTemplate() {
     const templateCategory = inventoryItemForm.category;
     const templateLines = [
@@ -35188,6 +35425,9 @@ export default function App() {
     }
     const customName = String(bulkServiceScheduleForm.name || "").trim();
     const note = String(bulkServiceScheduleForm.note || "").trim();
+    const assignedStaff = Array.from(
+      new Set((bulkServiceScheduleForm.assignedStaff || []).map((value) => String(value || "").trim()).filter(Boolean))
+    );
     const campusText =
       bulkServiceScheduleForm.campus !== "ALL"
         ? campusLabel(bulkServiceScheduleForm.campus)
@@ -35210,6 +35450,10 @@ export default function App() {
           time: normalizedTime,
           type: option.value,
           name: eventName,
+          campus: bulkServiceScheduleForm.campus,
+          note,
+          assignedStaff,
+          telegramReminderEnabled: Boolean(bulkServiceScheduleForm.telegramReminderEnabled && assignedStaff.length),
         },
       ],
       defaultCalendarEvents
@@ -35232,7 +35476,7 @@ export default function App() {
         editingBulkServiceScheduleId === null ? "SCHEDULE_SERVICE_CREATE" : "SCHEDULE_SERVICE_UPDATE",
         "calendar_event",
         `${normalizedDate} ${normalizedTime || ""}`.trim(),
-        `${option.value} | ${eventName}`
+        `${option.value} | ${eventName}${assignedStaff.length ? ` | staff: ${assignedStaff.join(", ")}` : ""}`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save service/task schedule");
@@ -35274,6 +35518,8 @@ export default function App() {
       time: normalizeCalendarEventTime(row.time),
       name: parsed.customName,
       note: parsed.note,
+      assignedStaff: parsed.assignedStaff,
+      telegramReminderEnabled: parsed.telegramReminderEnabled,
     });
   }
 
@@ -35526,7 +35772,11 @@ export default function App() {
             const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
             const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
             nextMaintenanceDate = advanceRepeatScheduleDate(asset, shiftYmd(doneRef, 1));
-          } else if (asset.repeatMode === "EVERY_6_MONTHS" || asset.repeatMode === "EVERY_12_MONTHS") {
+          } else if (
+            asset.repeatMode === "EVERY_3_MONTHS" ||
+            asset.repeatMode === "EVERY_6_MONTHS" ||
+            asset.repeatMode === "EVERY_12_MONTHS"
+          ) {
             const scheduleRef = String(asset.nextMaintenanceDate || "").trim();
             const doneRef = scheduleRef && scheduleRef > entry.date ? scheduleRef : entry.date;
             nextMaintenanceDate = advanceRepeatScheduleDate(asset, doneRef);
@@ -41234,6 +41484,29 @@ export default function App() {
       ),
     [users, selectedQuickScheduleAsset, scheduleQuickFilterCampus, scheduleQuickForm.assignedTo]
   );
+  const bulkServiceScheduleAssignableUsers = useMemo(
+    () =>
+      staffUsersForCampus(
+        users,
+        bulkServiceScheduleForm.campus !== "ALL" ? bulkServiceScheduleForm.campus : "",
+        ""
+      ),
+    [users, bulkServiceScheduleForm.campus]
+  );
+  const bulkServiceScheduleStaffOptions = useMemo(
+    () =>
+      bulkServiceScheduleAssignableUsers.map((user) => ({
+        value: String(user.fullName || "").trim(),
+        label: user.fullName,
+        description: `${user.position}${staffCampusSummary(user) ? ` • ${staffCampusSummary(user)}` : ""}`,
+        searchText: `${user.fullName} ${user.position} ${staffCampusList(user).join(" ")} ${user.email || ""}`,
+      })),
+    [bulkServiceScheduleAssignableUsers]
+  );
+  const bulkServiceScheduleStaffSummary = useMemo(
+    () => serviceTaskAssigneeSummary(bulkServiceScheduleForm.assignedStaff, lang),
+    [bulkServiceScheduleForm.assignedStaff, lang]
+  );
   const scheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     // Prefer current in-memory/server assets, use fallback only to fill missing fields.
@@ -41343,19 +41616,42 @@ export default function App() {
     });
     return doneKeys;
   }, [resolvedAssets]);
-  const completedScheduleServiceKeys = useMemo(() => {
-    const doneKeys = new Set<string>();
+  const completedScheduleServiceStaffMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
     resolvedAssets.forEach((asset) => {
       (asset.maintenanceHistory || []).forEach((entry) => {
         if (String(entry.completion || "") !== "Done") return;
         const sourceDate = String(entry.scheduleSourceDate || entry.date || "").trim();
         const taskId = String(entry.scheduleTaskId || "").trim();
         if (!sourceDate || !taskId || String(entry.scheduleTaskKind || "").trim() !== "service") return;
-        doneKeys.add(`${asset.campus}||${sourceDate}||${taskId}`);
+        const key = `${asset.campus}||${sourceDate}||${taskId}`;
+        const current = map.get(key) || new Set<string>();
+        splitServiceTaskStaffNames(entry.by).forEach((name) => current.add(name.toLowerCase()));
+        if (String(entry.by || "").trim()) {
+          current.add(String(entry.by || "").trim().toLowerCase());
+        }
+        map.set(key, current);
       });
     });
-    return doneKeys;
+    return map;
   }, [resolvedAssets]);
+  const completedScheduleServiceKeys = useMemo(() => {
+    const doneKeys = new Set<string>();
+    calendarEvents.forEach((row) => {
+      if (!isServiceTaskCalendarType(normalizeCalendarEventType(row.type))) return;
+      const parsed = parseServiceScheduleEvent(row);
+      const key = `${parsed.campus}||${String(row.date || "").trim()}||${String(row.id || "").trim()}`;
+      const completedStaff = completedScheduleServiceStaffMap.get(key) || new Set<string>();
+      const assignedStaff = Array.from(
+        new Set((parsed.assignedStaff || []).map((name) => String(name || "").trim().toLowerCase()).filter(Boolean))
+      );
+      const isCompleted = assignedStaff.length
+        ? assignedStaff.every((name) => completedStaff.has(name))
+        : completedStaff.size > 0;
+      if (isCompleted) doneKeys.add(key);
+    });
+    return doneKeys;
+  }, [calendarEvents, completedScheduleServiceStaffMap, isServiceTaskCalendarType, parseServiceScheduleEvent]);
   const latestCompletedAssetMap = useMemo(() => {
     const map = new Map<string, string>();
     resolvedAssets.forEach((asset) => {
@@ -46927,34 +47223,6 @@ export default function App() {
       if (!normalizedCampus) return normalizedTitle;
       return `${normalizedTitle} - ${normalizedCampus}`;
     };
-    const resolveMaintenanceFileMonthLabel = () => {
-      const from = normalizeYmdInput(reportDateFrom);
-      const to = normalizeYmdInput(reportDateTo);
-      if (from) {
-        const fromDate = new Date(`${from}T00:00:00`);
-        const toDate = to ? new Date(`${to}T00:00:00`) : null;
-        if (!Number.isNaN(fromDate.getTime())) {
-          if (
-            toDate &&
-            !Number.isNaN(toDate.getTime()) &&
-            fromDate.getFullYear() === toDate.getFullYear() &&
-            fromDate.getMonth() === toDate.getMonth()
-          ) {
-            return formatKhmerMonthYear(fromDate);
-          }
-          if (toDate && !Number.isNaN(toDate.getTime())) {
-            return `${formatKhmerDateYmd(from)} ដល់ ${formatKhmerDateYmd(to)}`;
-          }
-          return formatKhmerMonthYear(fromDate);
-        }
-      }
-      const fallbackDate = new Date();
-      return Number.isNaN(fallbackDate.getTime()) ? toKhmerDigits(new Date().getFullYear()) : formatKhmerMonthYear(fallbackDate);
-    };
-    const resolveMaintenanceFileCampusLabel = () => {
-      if (reportMaintenanceCampusFilter === "ALL") return "គ្រប់សាខា";
-      return String(campusLabel(reportMaintenanceCampusFilter) || "").trim() || "គ្រប់សាខា";
-    };
     const resolveCurrentReportPrintCampusLabel = () => {
       if (reportType === "inventory_balance") {
         return String(reportInventoryCampusFilterLabel || "").trim() || t.allCampuses;
@@ -48927,10 +49195,7 @@ export default function App() {
       ? `<section class="report-signature-section report-signature-section-count-${reportSignatureCards.length}">${reportSignatureCards.join("")}</section>`
       : "";
     const defaultPrintWindowTitle = appendCampusToPrintTitle(title, resolveCurrentReportPrintCampusLabel());
-    const printWindowTitle =
-      reportType === "maintenance_completion"
-        ? `សៀវភៅកត់ត្រា ការងារជួសជុលទូទៅ ខែ ${resolveMaintenanceFileMonthLabel()} សាខា ${resolveMaintenanceFileCampusLabel()}`
-        : defaultPrintWindowTitle;
+    const printWindowTitle = defaultPrintWindowTitle;
     const isPestServiceCalendarPrint =
       reportType === "schedule_calendar" && reportScheduleGroupFilter === "pest_service";
     const previewBodyClassName = [
@@ -61846,6 +62111,165 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                   </div>
                 ) : null}
+                {!isInventoryItemEditing && isInventoryToolCategory(inventoryItemForm.category) ? (
+                  <div className="inventory-tool-clone-panel" style={{ marginTop: 12 }}>
+                    <div className="panel-row">
+                      <div>
+                        <strong>Provider Handover</strong>
+                        <div className="tiny">
+                          Choose tool by tool, then save everything with one confirm button.
+                        </div>
+                      </div>
+                      <div className="detail-value">
+                        {inventoryProviderHandoverSummary.moveNew} to new • {inventoryProviderHandoverSummary.useOld} to old
+                      </div>
+                    </div>
+                    <div className="form-grid" style={{ marginTop: 10 }}>
+                      <label className="field">
+                        <span>Old Company</span>
+                        <LocationPicker
+                          value={inventoryProviderHandoverForm.fromCompany}
+                          options={inventoryProviderCompanyOptions.map((name) => ({ value: name, label: name }))}
+                          onChange={(value) => setInventoryProviderHandoverForm((prev) => ({ ...prev, fromCompany: value }))}
+                          placeholder="Select old company"
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកក្រុមហ៊ុនចាស់..." : "Search old company..."}
+                          emptyText={lang === "km" ? "មិនមានក្រុមហ៊ុន" : "No company found."}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>New Company</span>
+                        <input
+                          className="input"
+                          value={inventoryProviderHandoverForm.toCompany}
+                          onChange={(e) => setInventoryProviderHandoverForm((prev) => ({ ...prev, toCompany: e.target.value }))}
+                          placeholder="Enter new company"
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Date</span>
+                        <input
+                          className="input"
+                          type="date"
+                          value={inventoryProviderHandoverForm.date}
+                          onChange={(e) => setInventoryProviderHandoverForm((prev) => ({ ...prev, date: e.target.value }))}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Note</span>
+                        <input
+                          className="input"
+                          value={inventoryProviderHandoverForm.note}
+                          onChange={(e) => setInventoryProviderHandoverForm((prev) => ({ ...prev, note: e.target.value }))}
+                          placeholder="Reason / contract / remark"
+                        />
+                      </label>
+                    </div>
+                    <div className="asset-actions" style={{ marginTop: 8 }}>
+                      <div className="tiny">
+                        Current filter decides which tools appear below. You control each tool one by one.
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          className="tab"
+                          type="button"
+                          onClick={() =>
+                            setInventoryProviderHandoverActions(
+                              Object.fromEntries(inventoryProviderHandoverRows.map((row) => [row.id, "MOVE_NEW" as ProviderHandoverAction]))
+                            )
+                          }
+                        >
+                          Set All → New
+                        </button>
+                        <button
+                          className="tab"
+                          type="button"
+                          onClick={() =>
+                            setInventoryProviderHandoverActions(
+                              Object.fromEntries(inventoryProviderHandoverRows.map((row) => [row.id, "USE_OLD" as ProviderHandoverAction]))
+                            )
+                          }
+                        >
+                          Set All → Old
+                        </button>
+                        <button
+                          className="tab"
+                          type="button"
+                          onClick={() =>
+                            setInventoryProviderHandoverActions(
+                              Object.fromEntries(inventoryProviderHandoverRows.map((row) => [row.id, "KEEP" as ProviderHandoverAction]))
+                            )
+                          }
+                        >
+                          Set All → Keep
+                        </button>
+                      </div>
+                    </div>
+                    <div className="table-wrap" style={{ marginTop: 12 }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Current Company</th>
+                            <th>Campus</th>
+                            <th>Location</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inventoryProviderHandoverRows.length ? (
+                            inventoryProviderHandoverRows.map((row) => (
+                              <tr key={`provider-handover-${row.id}`}>
+                                <td><strong>{row.itemCode}</strong></td>
+                                <td>{inventoryDisplayName(row.itemName, lang)}</td>
+                                <td>{row.responsibleParty || "-"}</td>
+                                <td>{inventoryCampusLabel(row.campus)}</td>
+                                <td>{row.location || "-"}</td>
+                                <td>
+                                  <select
+                                    className="input"
+                                    value={providerHandoverActionForRow(row)}
+                                    onChange={(e) =>
+                                      setInventoryProviderHandoverActions((prev) => ({
+                                        ...prev,
+                                        [row.id]: e.target.value as ProviderHandoverAction,
+                                      }))
+                                    }
+                                  >
+                                    <option value="KEEP">Keep Current</option>
+                                    <option value="MOVE_NEW">Move to New Company</option>
+                                    <option value="USE_OLD">Return to Old Company</option>
+                                  </select>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={6}>
+                                {inventoryProviderHandoverForm.fromCompany
+                                  ? "No tools match this old company in the current filter."
+                                  : "No tools available in the current filter."}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="asset-actions" style={{ marginTop: 12 }}>
+                      <div className="tiny">
+                        Summary: keep {inventoryProviderHandoverSummary.keep}, move to new {inventoryProviderHandoverSummary.moveNew}, return to old {inventoryProviderHandoverSummary.useOld}.
+                      </div>
+                      <button
+                        className="btn-primary"
+                        type="button"
+                        disabled={!isAdmin || busy || !inventoryProviderHandoverRows.length}
+                        onClick={() => void saveInventoryProviderHandover()}
+                      >
+                        Confirm Handover
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {inventoryItemsTableSection}
                 </>
                 ) : null}
@@ -65473,6 +65897,7 @@ function formatTicketRequestSource(value?: string) {
                   <option value="MONTHLY_WEEKDAY">
                     {monthlyRepeatLabel(bulkScheduleForm.repeatWeekOfMonth, bulkScheduleForm.repeatWeekday)}
                   </option>
+                  <option value="EVERY_3_MONTHS">Every 3 months</option>
                   <option value="EVERY_6_MONTHS">Every 6 months</option>
                   <option value="EVERY_12_MONTHS">Every 12 months</option>
                   {bulkScheduleIsWdpOnly ? (
@@ -65627,6 +66052,45 @@ function formatTicketRequestSource(value?: string) {
                   onChange={(e) => setBulkServiceScheduleForm((f) => ({ ...f, note: e.target.value }))}
                   placeholder="Example: Main Pool / Admin report / Building A"
                 />
+              </label>
+              <label className="field field-wide">
+                <span>{lang === "km" ? "បុគ្គលិកទទួលខុសត្រូវ" : "Assigned Staff"}</span>
+                <SearchableMultiSelectPicker
+                  summary={bulkServiceScheduleStaffSummary}
+                  options={bulkServiceScheduleStaffOptions}
+                  selectedValues={bulkServiceScheduleForm.assignedStaff}
+                  onToggleValue={(value, checked) =>
+                    setBulkServiceScheduleForm((f) => {
+                      const current = Array.from(new Set((f.assignedStaff || []).map((item) => String(item || "").trim()).filter(Boolean)));
+                      const next = checked
+                        ? [...current, value].filter((item, index, arr) => arr.indexOf(item) === index)
+                        : current.filter((item) => item !== value);
+                      return { ...f, assignedStaff: next };
+                    })
+                  }
+                  searchPlaceholder={lang === "km" ? "ស្វែងរកបុគ្គលិក..." : "Search staff..."}
+                  emptyText={lang === "km" ? "មិនមានបុគ្គលិក" : "No staff found."}
+                />
+                <div className="tiny">
+                  {lang === "km"
+                    ? "អាចជ្រើសបានច្រើននាក់។ ការរំលឹក Telegram នឹងបង្ហាញតែអ្នកដែលមិនទាន់ Done ប៉ុណ្ណោះ។"
+                    : "You can select many staff. Telegram reminders will mention only staff who are still not done."}
+                </div>
+              </label>
+              <label className="field field-wide">
+                <span>{lang === "km" ? "ការរំលឹក Telegram" : "Telegram Reminder"}</span>
+                <label className="checkline">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(bulkServiceScheduleForm.telegramReminderEnabled)}
+                    onChange={(e) => setBulkServiceScheduleForm((f) => ({ ...f, telegramReminderEnabled: e.target.checked }))}
+                  />
+                  <span>
+                    {lang === "km"
+                      ? "រំលឹកទៅក្រុម MO ពេលព្រឹក និងរសៀល រហូតដល់អ្នកទទួលខុសត្រូវទាំងអស់ Done"
+                      : "Remind MO Telegram group every morning and afternoon until all assigned staff are done"}
+                  </span>
+                </label>
               </label>
             </div>
             <div className="asset-actions">
@@ -65865,6 +66329,7 @@ function formatTicketRequestSource(value?: string) {
                   <option value="MONTHLY_WEEKDAY">
                     {monthlyRepeatLabel(scheduleForm.repeatWeekOfMonth, scheduleForm.repeatWeekday)}
                   </option>
+                  <option value="EVERY_3_MONTHS">Every 3 months</option>
                   <option value="EVERY_6_MONTHS">Every 6 months</option>
                   <option value="EVERY_12_MONTHS">Every 12 months</option>
                   {selectedScheduleAsset?.type === "WDP" ? (
@@ -81826,6 +82291,120 @@ function formatTicketRequestSource(value?: string) {
 	                        </div>
 	                      </div>
                       <div className="form-grid schedule-maintenance-modal-grid">
+	                        {maintenanceRecordSelectedAsset ? (
+	                          <div className="field field-wide">
+	                            <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
+	                            <div className={`maintenance-latest-service-card ${maintenanceRecordSameDayEntries.length ? "is-warning" : ""}`}>
+                              <div className="maintenance-latest-service-head">
+                                <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
+                                {maintenanceRecordSameDayEntries.length ? (
+                                  <span className="maintenance-latest-service-badge">
+                                    {lang === "km" ? "បានកត់ត្រារួចហើយថ្ងៃនេះ" : "Already recorded today"}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {maintenanceRecordSelectedAssetDetailLoading ? (
+                                <div className="tiny maintenance-latest-service-warning-text">
+                                  {lang === "km"
+                                    ? "កំពុងទាញប្រវត្តិថែទាំចុងក្រោយរបស់ Asset នេះ..."
+                                    : "Loading latest maintenance history for this asset..."}
+                                </div>
+                              ) : null}
+                              {maintenanceRecordSameDayEntries.length ? (
+                                <div className="tiny maintenance-latest-service-warning-text">
+                                  {lang === "km"
+                                    ? "Asset នេះមានកំណត់ត្រាថែទាំរួចហើយក្នុងថ្ងៃនេះ។ ប្រព័ន្ធនឹងសួរបញ្ជាក់មុនពេលរក្សាទុកម្ដងទៀត។"
+                                    : "This asset already has a maintenance record today. The system will ask you to confirm before saving again."}
+                                </div>
+                              ) : null}
+                              {maintenanceRecordLatestEntry ? (
+                                <div className="maintenance-latest-service-summary">
+                                  <div className="maintenance-latest-service-summary-item">
+                                    <strong>{lang === "km" ? "ចុងក្រោយ" : "Latest"}</strong>
+                                    <span>
+                                      {formatDate(maintenanceRecordLatestEntry.date || "-")}
+                                      {maintenanceEntryDisplayTime(maintenanceRecordLatestEntry)
+                                        ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordLatestEntry) || "")}`
+                                        : ""}
+                                    </span>
+                                  </div>
+                                  <div className="maintenance-latest-service-summary-item">
+                                    <strong>{lang === "km" ? "ប្រភេទ" : "Type"}</strong>
+                                    <span>{maintenanceRecordLatestEntry.type || "-"}</span>
+                                  </div>
+                                  <div className="maintenance-latest-service-summary-item">
+                                    <strong>{lang === "km" ? "ដោយ" : "By"}</strong>
+                                    <span>{maintenanceRecordLatestEntry.by || "-"}</span>
+                                  </div>
+                                  <div className="maintenance-latest-service-summary-item">
+                                    <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
+                                    <span>{maintenanceRecordLatestEntry.note || "-"}</span>
+                                  </div>
+                                </div>
+                              ) : maintenanceRecordSelectedAssetDetailLoading ? (
+                                <div className="tiny">
+                                  {lang === "km" ? "សូមរង់ចាំប្រព័ន្ធកំពុងទាញទិន្នន័យ..." : "Please wait while the system loads the asset record..."}
+                                </div>
+                              ) : (
+	                                <div className="tiny">
+	                                  {lang === "km" ? "មិនទាន់មានប្រវត្តិថែទាំសម្រាប់ Asset នេះទេ។" : "No maintenance history for this asset yet."}
+	                                </div>
+	                              )}
+	                            </div>
+	                          </div>
+	                        ) : scheduleMaintenanceUsesGeneralTask ? (
+	                          <div className="field field-wide">
+	                            <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
+	                            <div className={`maintenance-latest-service-card ${maintenanceRecordGeneralTaskSameDayEntries.length ? "is-warning" : ""}`}>
+	                              <div className="maintenance-latest-service-head">
+	                                <strong>{scheduleMaintenanceGeneralContext?.title || (lang === "km" ? "ការងារសេវាកម្ម" : "Service Task")}</strong>
+	                                {maintenanceRecordGeneralTaskSameDayEntries.length ? (
+	                                  <span className="maintenance-latest-service-badge">
+	                                    {lang === "km" ? "បានកត់ត្រារួចហើយថ្ងៃនេះ" : "Already recorded today"}
+	                                  </span>
+	                                ) : null}
+	                              </div>
+	                              {maintenanceRecordGeneralTaskSameDayEntries.length ? (
+	                                <div className="tiny maintenance-latest-service-warning-text">
+	                                  {lang === "km"
+	                                    ? "សេវាកម្មសម្រាប់សាខានេះមានកំណត់ត្រារួចហើយក្នុងថ្ងៃនេះ។ ប្រព័ន្ធនឹងសួរបញ្ជាក់មុនពេលរក្សាទុកម្ដងទៀត។"
+	                                    : "This campus service task already has a maintenance record today. The system will ask you to confirm before saving again."}
+	                                </div>
+	                              ) : null}
+	                              {maintenanceRecordGeneralTaskLatestEntry ? (
+	                                <div className="maintenance-latest-service-summary">
+	                                  <div className="maintenance-latest-service-summary-item">
+	                                    <strong>{lang === "km" ? "ចុងក្រោយ" : "Latest"}</strong>
+	                                    <span>
+	                                      {formatDate(maintenanceRecordGeneralTaskLatestEntry.date || "-")}
+	                                      {maintenanceEntryDisplayTime(maintenanceRecordGeneralTaskLatestEntry)
+	                                        ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordGeneralTaskLatestEntry) || "")}`
+	                                        : ""}
+	                                    </span>
+	                                  </div>
+	                                  <div className="maintenance-latest-service-summary-item">
+	                                    <strong>{lang === "km" ? "ប្រភេទ" : "Type"}</strong>
+	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.type || "-"}</span>
+	                                  </div>
+	                                  <div className="maintenance-latest-service-summary-item">
+	                                    <strong>{lang === "km" ? "ដោយ" : "By"}</strong>
+	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.by || "-"}</span>
+	                                  </div>
+	                                  <div className="maintenance-latest-service-summary-item">
+	                                    <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
+	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.note || "-"}</span>
+	                                  </div>
+	                                </div>
+	                              ) : (
+	                                <div className="tiny">
+	                                  {lang === "km"
+	                                    ? "មិនទាន់មានប្រវត្តិសេវាកម្មសម្រាប់សាខា និងការងារនេះទេ។"
+	                                    : "No previous service history for this campus task yet."}
+	                                </div>
+	                              )}
+	                            </div>
+	                          </div>
+	                        ) : null}
                         <div className="maintenance-record-inline-five field-wide">
                           <div className="field quickout-date-field eco-date-floating-field maintenance-record-datetime-field" ref={maintenanceRecordDateWrapRef}>
                             <span>{lang === "km" ? "កាលបរិច្ឆេទ និងម៉ោង" : "Date & Time"}</span>
@@ -81991,120 +82570,6 @@ function formatTicketRequestSource(value?: string) {
                               )}
                             </div>
                         </div>
-	                        {maintenanceRecordSelectedAsset ? (
-	                          <div className="field field-wide">
-	                            <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
-	                            <div className={`maintenance-latest-service-card ${maintenanceRecordSameDayEntries.length ? "is-warning" : ""}`}>
-                              <div className="maintenance-latest-service-head">
-                                <strong>{maintenanceRecordSelectedAsset.assetId}</strong>
-                                {maintenanceRecordSameDayEntries.length ? (
-                                  <span className="maintenance-latest-service-badge">
-                                    {lang === "km" ? "បានកត់ត្រារួចហើយថ្ងៃនេះ" : "Already recorded today"}
-                                  </span>
-                                ) : null}
-                              </div>
-                              {maintenanceRecordSelectedAssetDetailLoading ? (
-                                <div className="tiny maintenance-latest-service-warning-text">
-                                  {lang === "km"
-                                    ? "កំពុងទាញប្រវត្តិថែទាំចុងក្រោយរបស់ Asset នេះ..."
-                                    : "Loading latest maintenance history for this asset..."}
-                                </div>
-                              ) : null}
-                              {maintenanceRecordSameDayEntries.length ? (
-                                <div className="tiny maintenance-latest-service-warning-text">
-                                  {lang === "km"
-                                    ? "Asset នេះមានកំណត់ត្រាថែទាំរួចហើយក្នុងថ្ងៃនេះ។ ប្រព័ន្ធនឹងសួរបញ្ជាក់មុនពេលរក្សាទុកម្ដងទៀត។"
-                                    : "This asset already has a maintenance record today. The system will ask you to confirm before saving again."}
-                                </div>
-                              ) : null}
-                              {maintenanceRecordLatestEntry ? (
-                                <div className="maintenance-latest-service-summary">
-                                  <div className="maintenance-latest-service-summary-item">
-                                    <strong>{lang === "km" ? "ចុងក្រោយ" : "Latest"}</strong>
-                                    <span>
-                                      {formatDate(maintenanceRecordLatestEntry.date || "-")}
-                                      {maintenanceEntryDisplayTime(maintenanceRecordLatestEntry)
-                                        ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordLatestEntry) || "")}`
-                                        : ""}
-                                    </span>
-                                  </div>
-                                  <div className="maintenance-latest-service-summary-item">
-                                    <strong>{lang === "km" ? "ប្រភេទ" : "Type"}</strong>
-                                    <span>{maintenanceRecordLatestEntry.type || "-"}</span>
-                                  </div>
-                                  <div className="maintenance-latest-service-summary-item">
-                                    <strong>{lang === "km" ? "ដោយ" : "By"}</strong>
-                                    <span>{maintenanceRecordLatestEntry.by || "-"}</span>
-                                  </div>
-                                  <div className="maintenance-latest-service-summary-item">
-                                    <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
-                                    <span>{maintenanceRecordLatestEntry.note || "-"}</span>
-                                  </div>
-                                </div>
-                              ) : maintenanceRecordSelectedAssetDetailLoading ? (
-                                <div className="tiny">
-                                  {lang === "km" ? "សូមរង់ចាំប្រព័ន្ធកំពុងទាញទិន្នន័យ..." : "Please wait while the system loads the asset record..."}
-                                </div>
-                              ) : (
-	                                <div className="tiny">
-	                                  {lang === "km" ? "មិនទាន់មានប្រវត្តិថែទាំសម្រាប់ Asset នេះទេ។" : "No maintenance history for this asset yet."}
-	                                </div>
-	                              )}
-	                            </div>
-	                          </div>
-	                        ) : scheduleMaintenanceUsesGeneralTask ? (
-	                          <div className="field field-wide">
-	                            <span>{lang === "km" ? "សេវាថ្មីបំផុត" : "Latest Service Data"}</span>
-	                            <div className={`maintenance-latest-service-card ${maintenanceRecordGeneralTaskSameDayEntries.length ? "is-warning" : ""}`}>
-	                              <div className="maintenance-latest-service-head">
-	                                <strong>{scheduleMaintenanceGeneralContext?.title || (lang === "km" ? "ការងារសេវាកម្ម" : "Service Task")}</strong>
-	                                {maintenanceRecordGeneralTaskSameDayEntries.length ? (
-	                                  <span className="maintenance-latest-service-badge">
-	                                    {lang === "km" ? "បានកត់ត្រារួចហើយថ្ងៃនេះ" : "Already recorded today"}
-	                                  </span>
-	                                ) : null}
-	                              </div>
-	                              {maintenanceRecordGeneralTaskSameDayEntries.length ? (
-	                                <div className="tiny maintenance-latest-service-warning-text">
-	                                  {lang === "km"
-	                                    ? "សេវាកម្មសម្រាប់សាខានេះមានកំណត់ត្រារួចហើយក្នុងថ្ងៃនេះ។ ប្រព័ន្ធនឹងសួរបញ្ជាក់មុនពេលរក្សាទុកម្ដងទៀត។"
-	                                    : "This campus service task already has a maintenance record today. The system will ask you to confirm before saving again."}
-	                                </div>
-	                              ) : null}
-	                              {maintenanceRecordGeneralTaskLatestEntry ? (
-	                                <div className="maintenance-latest-service-summary">
-	                                  <div className="maintenance-latest-service-summary-item">
-	                                    <strong>{lang === "km" ? "ចុងក្រោយ" : "Latest"}</strong>
-	                                    <span>
-	                                      {formatDate(maintenanceRecordGeneralTaskLatestEntry.date || "-")}
-	                                      {maintenanceEntryDisplayTime(maintenanceRecordGeneralTaskLatestEntry)
-	                                        ? ` • ${formatTimeOnly(maintenanceEntryDisplayTime(maintenanceRecordGeneralTaskLatestEntry) || "")}`
-	                                        : ""}
-	                                    </span>
-	                                  </div>
-	                                  <div className="maintenance-latest-service-summary-item">
-	                                    <strong>{lang === "km" ? "ប្រភេទ" : "Type"}</strong>
-	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.type || "-"}</span>
-	                                  </div>
-	                                  <div className="maintenance-latest-service-summary-item">
-	                                    <strong>{lang === "km" ? "ដោយ" : "By"}</strong>
-	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.by || "-"}</span>
-	                                  </div>
-	                                  <div className="maintenance-latest-service-summary-item">
-	                                    <strong>{lang === "km" ? "កំណត់ចំណាំចុងក្រោយ" : "Latest Note"}</strong>
-	                                    <span>{maintenanceRecordGeneralTaskLatestEntry.note || "-"}</span>
-	                                  </div>
-	                                </div>
-	                              ) : (
-	                                <div className="tiny">
-	                                  {lang === "km"
-	                                    ? "មិនទាន់មានប្រវត្តិសេវាកម្មសម្រាប់សាខា និងការងារនេះទេ។"
-	                                    : "No previous service history for this campus task yet."}
-	                                </div>
-	                              )}
-	                            </div>
-	                          </div>
-	                        ) : null}
                         <div className="field field-wide">
                           <div className="tiny schedule-maintenance-modal-note-help">
                             {lang === "km"
@@ -82524,6 +82989,7 @@ function formatTicketRequestSource(value?: string) {
                   <option value="MONTHLY_WEEKDAY">
                       {monthlyRepeatLabel(scheduleQuickForm.repeatWeekOfMonth, scheduleQuickForm.repeatWeekday)}
                   </option>
+                    <option value="EVERY_3_MONTHS">Every 3 months</option>
                     <option value="EVERY_6_MONTHS">Every 6 months</option>
                     <option value="EVERY_12_MONTHS">Every 12 months</option>
                     {selectedQuickScheduleAsset?.type === "WDP" ? (
