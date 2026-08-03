@@ -896,7 +896,9 @@ function getRentalPrinterComparisonMonth(
 ) {
   const billingMonth = String(row.billingMonth || "").trim();
   const readingMonth = String(row.readingDate || "").trim().slice(0, 7);
-  if (options?.isFirstCounter && readingMonth && billingMonth && readingMonth > billingMonth) {
+  // For the first counter entry, report usage by the actual reading month so
+  // a first span like June 20 -> July 31 appears in the July comparison.
+  if (options?.isFirstCounter && readingMonth) {
     return readingMonth;
   }
   return billingMonth || readingMonth;
