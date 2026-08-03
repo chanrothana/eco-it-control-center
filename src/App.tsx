@@ -874,6 +874,7 @@ type RentalPrinterCounter = {
   photo?: string;
   note?: string;
   created: string;
+  comparisonMonth?: string;
 };
 type RentalPrinterCounterReset = {
   id: number;
@@ -888,6 +889,31 @@ type RentalPrinterCounterReset = {
   note?: string;
   created: string;
 };
+
+function getRentalPrinterComparisonMonth(
+  row: Pick<RentalPrinterCounter, "billingMonth" | "readingDate">,
+  options?: { isFirstCounter?: boolean }
+) {
+  const billingMonth = String(row.billingMonth || "").trim();
+  const readingMonth = String(row.readingDate || "").trim().slice(0, 7);
+  if (options?.isFirstCounter && readingMonth && billingMonth && readingMonth > billingMonth) {
+    return readingMonth;
+  }
+  return billingMonth || readingMonth;
+}
+
+function doesRentalPrinterContractCoverMonth(
+  printer: Pick<RentalPrinter, "contractStart" | "contractEnd">,
+  month: string
+) {
+  const targetMonth = String(month || "").trim();
+  if (!targetMonth) return true;
+  const startMonth = String(printer.contractStart || "").trim().slice(0, 7);
+  const endMonth = String(printer.contractEnd || "").trim().slice(0, 7);
+  if (startMonth && targetMonth < startMonth) return false;
+  if (endMonth && targetMonth > endMonth) return false;
+  return true;
+}
 type SchoolKeyHolder = "KEYBOX" | "SECURITY" | "PARTIAL";
 type SchoolKeyAction = "ASSIGN_SECURITY" | "RETURN_KEYBOX";
 type SchoolKey = {
@@ -15952,11 +15978,15 @@ export default function App() {
             : Number(printer?.openingMono) || Number(row.previousMono) || 0
       );
       const monoUsage = Math.max(0, currentMono - previousMono);
+      const comparisonMonth = getRentalPrinterComparisonMonth(row, {
+        isFirstCounter: !previousEffectiveRow,
+      });
       effectiveMap.set(Number(row.id), {
         ...row,
         previousMono,
         monoUsage,
         amount: printer ? monoUsage * Number(printer.monoRate || row.monoRate || 0) : row.amount,
+        comparisonMonth,
       });
     }
     return rows
@@ -16056,7 +16086,7 @@ export default function App() {
   }, [rentalReportCampusFilterOptions, rentalReportCampuses]);
   const rentalReportLatestMonth = useMemo(() => {
     const months = rentalPrinterEffectiveRows
-      .map((row) => String(row.billingMonth || "").trim())
+      .map((row) => String(row.comparisonMonth || row.billingMonth || "").trim())
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
     return months[months.length - 1] || toYmd(new Date()).slice(0, 7);
@@ -16064,7 +16094,7 @@ export default function App() {
   const rentalReportRows = useMemo(() => {
     return rentalPrinterEffectiveRows
       .filter((row) => {
-        const month = String(row.billingMonth || "").trim();
+        const month = String(row.comparisonMonth || row.billingMonth || "").trim();
         const campus = String(row.campus || "").trim();
         if (!month) return false;
         if (rentalReportRange.from && month < rentalReportRange.from) return false;
@@ -16073,7 +16103,9 @@ export default function App() {
         return true;
       })
       .sort((a, b) => {
-        const monthCompare = String(a.billingMonth || "").localeCompare(String(b.billingMonth || ""));
+        const monthCompare = String(a.comparisonMonth || a.billingMonth || "").localeCompare(
+          String(b.comparisonMonth || b.billingMonth || "")
+        );
         if (monthCompare !== 0) return monthCompare;
         const campusCompare = compareCampusByCode(a.campus, b.campus);
         if (campusCompare !== 0) return campusCompare;
@@ -16121,7 +16153,7 @@ export default function App() {
       Map<string, { previousMono: number; currentMono: number; monoUsage: number }>
     >();
     for (const row of rentalPrinterEffectiveRows) {
-      const month = String(row.billingMonth || "").trim();
+      const month = String(row.comparisonMonth || row.billingMonth || "").trim();
       const campus = String(row.campus || "").trim();
       if (!month || !campus) continue;
       if (rentalReportRange.from && month < rentalReportRange.from) continue;
@@ -16164,19 +16196,19 @@ export default function App() {
     const targetMonth = rentalReportRange.to;
     if (!targetMonth) return [];
     const reportSet = new Set(
-      rentalPrinterCounters
-        .map((row) => row)
-        .filter((row) => String(row.billingMonth || "").trim() === targetMonth)
+      rentalPrinterEffectiveRows
+        .filter((row) => String(row.comparisonMonth || row.billingMonth || "").trim() === targetMonth)
         .map((row) => Number(row.rentalPrinterId))
     );
     return rentalPrinters
       .filter((row) =>
         row.status === "Active" &&
+        doesRentalPrinterContractCoverMonth(row, targetMonth) &&
         !reportSet.has(Number(row.id)) &&
         (!rentalReportSelectedCampuses.length || rentalReportSelectedCampuses.includes(String(row.campus || "").trim()))
       )
       .sort((a, b) => compareCampusByCode(a.campus, b.campus));
-  }, [rentalPrinters, rentalPrinterCounters, rentalReportRange, rentalReportSelectedCampuses]);
+  }, [rentalPrinterEffectiveRows, rentalPrinters, rentalReportRange, rentalReportSelectedCampuses]);
   const rentalPrinterAutoMachineCode = useMemo(
     () =>
       buildRentalPrinterMachineCode(
