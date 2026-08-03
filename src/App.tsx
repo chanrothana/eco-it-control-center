@@ -15947,9 +15947,9 @@ export default function App() {
       list.push(reset);
       resetsByPrinter.set(printerId, list);
     }
-    for (const [printerId, resets] of resetsByPrinter.entries()) {
+    Array.from(resetsByPrinter.entries()).forEach(([printerId, resets]) => {
       const printer = rentalPrinters.find((item) => Number(item.id) === printerId);
-      if (!printer) continue;
+      if (!printer) return;
       const sortedResets = [...resets].sort((a, b) =>
         String(a.effectiveDate || "").localeCompare(String(b.effectiveDate || ""))
       );
@@ -15993,7 +15993,7 @@ export default function App() {
           created: currentReset.created || new Date().toISOString(),
         });
       }
-    }
+    });
     const rows = [...rentalPrinterCounters, ...syntheticRowsFromResets].sort((a, b) => {
       const aKey = `${a.readingDate || a.billingMonth}-${a.billingMonth}-${a.id}`;
       const bKey = `${b.readingDate || b.billingMonth}-${b.billingMonth}-${b.id}`;
