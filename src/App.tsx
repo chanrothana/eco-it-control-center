@@ -875,6 +875,7 @@ type RentalPrinterCounter = {
   note?: string;
   created: string;
   comparisonMonth?: string;
+  derivedFromResetCarryover?: boolean;
 };
 type RentalPrinterCounterReset = {
   id: number;
@@ -15991,6 +15992,7 @@ export default function App() {
           photo: "",
           note: `Derived from reset span ${previousDate} -> ${currentDate}`,
           created: currentReset.created || new Date().toISOString(),
+          derivedFromResetCarryover: true,
         });
       }
     });
@@ -16030,9 +16032,12 @@ export default function App() {
       const resetApplies =
         latestReset &&
         (!previousEffectiveRow || String(previousEffectiveRow.readingDate || "") < String(latestReset.effectiveDate || ""));
+      const preserveSyntheticCarryover = row.derivedFromResetCarryover === true;
       const previousMono = Math.max(
         0,
-        resetApplies
+        preserveSyntheticCarryover
+          ? Number(row.previousMono) || 0
+          : resetApplies
           ? Number(latestReset?.baselineMono) || 0
           : previousEffectiveRow
             ? Number(previousEffectiveRow.currentMono) || 0
