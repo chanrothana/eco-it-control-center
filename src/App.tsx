@@ -15935,7 +15935,66 @@ export default function App() {
     return `http://${rawIp}`;
   }, [selectedRentalPrinter]);
   const rentalPrinterEffectiveRows = useMemo(() => {
-    const rows = [...rentalPrinterCounters].sort((a, b) => {
+    const printersWithMonthlyCounters = new Set(
+      rentalPrinterCounters.map((row) => Number(row.rentalPrinterId) || 0).filter(Boolean)
+    );
+    const syntheticRowsFromResets: RentalPrinterCounter[] = [];
+    const resetsByPrinter = new Map<number, RentalPrinterCounterReset[]>();
+    for (const reset of rentalPrinterCounterResets) {
+      const printerId = Number(reset.rentalPrinterId) || 0;
+      if (!printerId || printersWithMonthlyCounters.has(printerId)) continue;
+      const list = resetsByPrinter.get(printerId) || [];
+      list.push(reset);
+      resetsByPrinter.set(printerId, list);
+    }
+    for (const [printerId, resets] of resetsByPrinter.entries()) {
+      const printer = rentalPrinters.find((item) => Number(item.id) === printerId);
+      if (!printer) continue;
+      const sortedResets = [...resets].sort((a, b) =>
+        String(a.effectiveDate || "").localeCompare(String(b.effectiveDate || ""))
+      );
+      for (let index = 1; index < sortedResets.length; index += 1) {
+        const previousReset = sortedResets[index - 1];
+        const currentReset = sortedResets[index];
+        const previousDate = String(previousReset.effectiveDate || "").trim();
+        const currentDate = String(currentReset.effectiveDate || "").trim();
+        const currentMonth = currentDate.slice(0, 7);
+        const previousMonth = previousDate.slice(0, 7);
+        if (!currentDate || !currentMonth || !previousDate) continue;
+        // Fallback only for first-time campuses that were entered as reset
+        // baselines instead of a monthly counter. The later reset becomes the
+        // current reading for that reading month.
+        if (currentMonth === previousMonth) continue;
+        const previousMono = Math.max(0, Number(previousReset.baselineMono) || 0);
+        const currentMono = Math.max(previousMono, Number(currentReset.baselineMono) || 0);
+        syntheticRowsFromResets.push({
+          id: -Number(currentReset.id || Date.now() + index),
+          rentalPrinterId: printer.id,
+          vendor: printer.vendor || currentReset.vendor || "LA",
+          machineCode: printer.machineCode || currentReset.machineCode,
+          machineName: printer.machineName || currentReset.machineName,
+          model: printer.model || "",
+          campus: printer.campus || currentReset.campus,
+          location: printer.location || currentReset.location,
+          billingMonth: currentMonth,
+          readingDate: currentDate,
+          previousMono,
+          currentMono,
+          monoUsage: Math.max(0, currentMono - previousMono),
+          previousColor: 0,
+          currentColor: 0,
+          colorUsage: 0,
+          monoRate: 0,
+          colorRate: 0,
+          amount: 0,
+          submittedBy: "Reset carryover",
+          photo: "",
+          note: `Derived from reset span ${previousDate} -> ${currentDate}`,
+          created: currentReset.created || new Date().toISOString(),
+        });
+      }
+    }
+    const rows = [...rentalPrinterCounters, ...syntheticRowsFromResets].sort((a, b) => {
       const aKey = `${a.readingDate || a.billingMonth}-${a.billingMonth}-${a.id}`;
       const bKey = `${b.readingDate || b.billingMonth}-${b.billingMonth}-${b.id}`;
       return aKey.localeCompare(bKey);
