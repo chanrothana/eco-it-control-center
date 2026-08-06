@@ -1624,6 +1624,7 @@ function normalizeInventoryItems(input) {
       ownerType: toUpper(row.ownerType) || "SCHOOL",
       responsibleParty: toText(row.responsibleParty),
       notes: toText(row.notes),
+      recordStatus: toUpper(row.recordStatus) === "RETURNED_PROVIDER" ? "RETURNED_PROVIDER" : "ACTIVE",
       itemGroup: toUpper(row.itemGroup) || "GENERAL",
       compatibleAssetTypes: Array.isArray(row.compatibleAssetTypes)
         ? row.compatibleAssetTypes.map((value) => toUpper(value)).filter(Boolean)
@@ -12090,6 +12091,7 @@ const server = http.createServer(async (req, res) => {
       const ownerType = toUpper(body.ownerType) || "SCHOOL";
       const responsibleParty = toText(body.responsibleParty);
       const notes = toText(body.notes);
+      const recordStatus = toUpper(body.recordStatus) === "RETURNED_PROVIDER" ? "RETURNED_PROVIDER" : "ACTIVE";
       if (!campus || !category || !itemCode || !itemName || !unit || !location) {
         sendJson(res, 400, { error: "campus, category, itemCode, itemName, unit, location are required" });
         return;
@@ -12138,6 +12140,7 @@ const server = http.createServer(async (req, res) => {
         ownerType,
         responsibleParty,
         notes,
+        recordStatus,
         itemGroup,
         compatibleAssetTypes,
         compatibleModels,
@@ -12189,6 +12192,7 @@ const server = http.createServer(async (req, res) => {
       const ownerType = toUpper(body.ownerType ?? current.ownerType) || "SCHOOL";
       const responsibleParty = toText(body.responsibleParty ?? current.responsibleParty);
       const notes = toText(body.notes ?? current.notes);
+      const recordStatus = toUpper(body.recordStatus ?? current.recordStatus) === "RETURNED_PROVIDER" ? "RETURNED_PROVIDER" : "ACTIVE";
       const itemGroup = toUpper(body.itemGroup ?? current.itemGroup) || "GENERAL";
       const compatibleAssetTypes = Array.isArray(body.compatibleAssetTypes)
         ? body.compatibleAssetTypes.map((value) => toUpper(value)).filter(Boolean)
@@ -12245,6 +12249,7 @@ const server = http.createServer(async (req, res) => {
         ownerType,
         responsibleParty,
         notes,
+        recordStatus,
         itemGroup,
         compatibleAssetTypes,
         compatibleModels,

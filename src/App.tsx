@@ -615,6 +615,7 @@ type InventoryItem = {
   compatibleModels?: string[];
   defaultUnitCost?: number;
   photo?: string;
+  recordStatus?: "ACTIVE" | "RETURNED_PROVIDER";
   created: string;
 };
 type ToolOwnerType = string;
@@ -6350,6 +6351,9 @@ function normalizeInventoryEditableCategory(
 }
 function isProviderToolOwnerType(value?: string) {
   return String(value || "").trim().toUpperCase() !== "SCHOOL";
+}
+function isInventoryItemReturnedToProvider(item: Pick<InventoryItem, "recordStatus"> | null | undefined) {
+  return String(item?.recordStatus || "").trim().toUpperCase() === "RETURNED_PROVIDER";
 }
 function suggestedProviderOwnerTypeForCategory(
   category?: InventoryItem["category"] | InventoryBusinessGroup | string,
@@ -17363,8 +17367,8 @@ export default function App() {
   const inventoryVisibleItems = useMemo(
     () =>
       inventoryVisibleCampusSet
-        ? inventoryItems.filter((item) => inventoryVisibleCampusSet.has(item.campus))
-        : inventoryItems,
+        ? inventoryItems.filter((item) => inventoryVisibleCampusSet.has(item.campus) && !isInventoryItemReturnedToProvider(item))
+        : inventoryItems.filter((item) => !isInventoryItemReturnedToProvider(item)),
     [inventoryItems, inventoryVisibleCampusSet]
   );
   const inventoryVisibleItemIds = useMemo(
@@ -30277,14 +30281,19 @@ export default function App() {
     }
   }
 
-  async function saveInventoryProviderHandover() {
+  async function saveInventoryProviderHandover(
+    overrideActions?: Partial<Record<number, ProviderHandoverAction>>
+  ) {
     if (!requireAdminAction()) return;
     if (!isInventoryToolCategory(inventoryDashboardGroup)) {
       setError("Provider handover is only available for tool groups.");
       return;
     }
     const rowsToUpdate = inventoryProviderHandoverRows
-      .map((row) => ({ row, action: providerHandoverActionForRow(row) }))
+      .map((row) => ({
+        row,
+        action: overrideActions?.[row.id] || providerHandoverActionForRow(row),
+      }))
       .filter(({ action }) => action !== "KEEP");
     if (!rowsToUpdate.length) {
       setError("Please choose at least one tool action before confirming handover.");
@@ -30303,7 +30312,7 @@ export default function App() {
     const confirmText = [
       `Provider handover on ${inventoryProviderHandoverForm.date || toYmd(new Date())}`,
       `Move to new company: ${rowsToUpdate.filter((entry) => entry.action === "MOVE_NEW").length}`,
-      `Return to school company: ${rowsToUpdate.filter((entry) => entry.action === "USE_OLD").length}`,
+      `Return to provider and hide: ${rowsToUpdate.filter((entry) => entry.action === "USE_OLD").length}`,
       "",
       "Save these changes now?",
     ].join("\n");
@@ -30321,14 +30330,13 @@ export default function App() {
         const current = nextItems.find((item) => Number(item.id) === Number(row.id));
         if (!current) continue;
         const previousCompany = String(current.responsibleParty || "").trim();
-        const returnToSchool = action === "USE_OLD";
-        const targetCompany = returnToSchool ? "" : toCompany;
-        if (!returnToSchool && !targetCompany) continue;
-        const nextOwnerType = returnToSchool
-          ? ("SCHOOL" as ToolOwnerType)
-          : suggestedProviderOwnerTypeForCategory(current.category, current.ownerType);
-        const nextResponsibleParty = returnToSchool ? "" : targetCompany;
-        const destinationLabel = returnToSchool ? "School" : targetCompany;
+        const returnToProvider = action === "USE_OLD";
+        const targetCompany = returnToProvider ? fromCompany : toCompany;
+        if (!targetCompany) continue;
+        const nextOwnerType = suggestedProviderOwnerTypeForCategory(current.category, current.ownerType);
+        const nextResponsibleParty = targetCompany;
+        const nextRecordStatus: InventoryItem["recordStatus"] = returnToProvider ? "RETURNED_PROVIDER" : "ACTIVE";
+        const destinationLabel = returnToProvider ? `${targetCompany} (returned)` : targetCompany;
         const extraNote = [
           handoverDate,
           "Provider handover",
@@ -30350,6 +30358,7 @@ export default function App() {
           minStock: Math.max(0, Math.round(Number(current.minStock || 0))),
           ownerType: nextOwnerType,
           responsibleParty: nextResponsibleParty,
+          recordStatus: nextRecordStatus,
           vendor: current.vendor || "",
           notes: mergedNotes,
           photo: current.photo || "",
@@ -30369,6 +30378,7 @@ export default function App() {
                   ...item,
                   ownerType: payload.ownerType,
                   responsibleParty: payload.responsibleParty,
+                  recordStatus: payload.recordStatus,
                   notes: payload.notes,
                 }
               : item
@@ -30401,6 +30411,23 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function returnAllInventoryProviderToolsToProvider() {
+    const fromCompany = String(inventoryProviderHandoverForm.fromCompany || "").trim();
+    if (!fromCompany) {
+      setError("Please choose the current provider company first.");
+      return;
+    }
+    if (!inventoryProviderHandoverRows.length) {
+      setError("No provider tools are available in the current filter.");
+      return;
+    }
+    const overrideActions = Object.fromEntries(
+      inventoryProviderHandoverRows.map((row) => [row.id, "USE_OLD" as ProviderHandoverAction])
+    );
+    setInventoryProviderHandoverActions(overrideActions);
+    await saveInventoryProviderHandover(overrideActions);
   }
 
   function downloadInventoryBulkTemplate() {
@@ -62222,12 +62249,12 @@ function formatTicketRequestSource(value?: string) {
                       <div>
                         <strong>Provider Handover</strong>
                         <div className="tiny">
-                          Open only when you need to move provider tools back to school or to a new company.
+                          Open only when you need to return school tools back to a provider or move them to a new company.
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                         <div className="detail-value">
-                          {inventoryProviderHandoverSummary.moveNew} to new • {inventoryProviderHandoverSummary.useOld} back to school
+                          {inventoryProviderHandoverSummary.moveNew} to new • {inventoryProviderHandoverSummary.useOld} return to provider
                         </div>
                         <button
                           className="tab"
@@ -62286,9 +62313,17 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                     <div className="asset-actions" style={{ marginTop: 8 }}>
                       <div className="tiny">
-                        Current filter decides which tools appear below. You control each tool one by one.
+                        Current filter decides which tools appear below. Use one-click return when the whole school batch is going back to the selected provider.
                       </div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          className="btn-primary"
+                          type="button"
+                          disabled={!isAdmin || busy || !inventoryProviderHandoverRows.length || !inventoryProviderHandoverForm.fromCompany}
+                          onClick={() => void returnAllInventoryProviderToolsToProvider()}
+                        >
+                          Return All to Provider
+                        </button>
                         <button
                           className="tab"
                           type="button"
@@ -62309,7 +62344,7 @@ function formatTicketRequestSource(value?: string) {
                             )
                           }
                         >
-                          Set All → School
+                          Set All → Return
                         </button>
                         <button
                           className="tab"
@@ -62358,7 +62393,7 @@ function formatTicketRequestSource(value?: string) {
                                   >
                                     <option value="KEEP">Keep Current</option>
                                     <option value="MOVE_NEW">Move to New Company</option>
-                                    <option value="USE_OLD">Return to School Company</option>
+                                    <option value="USE_OLD">Return to Current Provider and Hide</option>
                                   </select>
                                 </td>
                               </tr>
@@ -62367,7 +62402,7 @@ function formatTicketRequestSource(value?: string) {
                             <tr>
                               <td colSpan={6}>
                                 {inventoryProviderHandoverForm.fromCompany
-                                  ? "No tools match this old company in the current filter."
+                                  ? "No tools match this provider in the current filter."
                                   : "No tools available in the current filter."}
                               </td>
                             </tr>
@@ -62377,7 +62412,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                     <div className="asset-actions" style={{ marginTop: 12 }}>
                       <div className="tiny">
-                        Summary: keep {inventoryProviderHandoverSummary.keep}, move to new {inventoryProviderHandoverSummary.moveNew}, return to school {inventoryProviderHandoverSummary.useOld}.
+                        Summary: keep {inventoryProviderHandoverSummary.keep}, move to new {inventoryProviderHandoverSummary.moveNew}, return to provider {inventoryProviderHandoverSummary.useOld}.
                       </div>
                       <button
                         className="btn-primary"
