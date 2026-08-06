@@ -15043,6 +15043,7 @@ export default function App() {
     date: toYmd(new Date()),
     note: "",
   });
+  const [inventoryProviderHandoverOpen, setInventoryProviderHandoverOpen] = useState(false);
   const [inventoryProviderHandoverActions, setInventoryProviderHandoverActions] = useState<Record<number, ProviderHandoverAction>>({});
   const deferredInventoryItemName = useDeferredValue(inventoryItemForm.itemName);
   const [inventoryTxnForm, setInventoryTxnForm] = useState({
@@ -30296,13 +30297,13 @@ export default function App() {
       return;
     }
     if (rowsToUpdate.some(({ action }) => action === "USE_OLD") && !fromCompany) {
-      setError("Please choose the old company name first.");
+      setError("Please choose the current provider company first.");
       return;
     }
     const confirmText = [
       `Provider handover on ${inventoryProviderHandoverForm.date || toYmd(new Date())}`,
       `Move to new company: ${rowsToUpdate.filter((entry) => entry.action === "MOVE_NEW").length}`,
-      `Return to old company: ${rowsToUpdate.filter((entry) => entry.action === "USE_OLD").length}`,
+      `Return to school company: ${rowsToUpdate.filter((entry) => entry.action === "USE_OLD").length}`,
       "",
       "Save these changes now?",
     ].join("\n");
@@ -30319,13 +30320,19 @@ export default function App() {
       for (const { row, action } of rowsToUpdate) {
         const current = nextItems.find((item) => Number(item.id) === Number(row.id));
         if (!current) continue;
-        const targetCompany = action === "MOVE_NEW" ? toCompany : fromCompany;
-        if (!targetCompany) continue;
         const previousCompany = String(current.responsibleParty || "").trim();
+        const returnToSchool = action === "USE_OLD";
+        const targetCompany = returnToSchool ? "" : toCompany;
+        if (!returnToSchool && !targetCompany) continue;
+        const nextOwnerType = returnToSchool
+          ? ("SCHOOL" as ToolOwnerType)
+          : suggestedProviderOwnerTypeForCategory(current.category, current.ownerType);
+        const nextResponsibleParty = returnToSchool ? "" : targetCompany;
+        const destinationLabel = returnToSchool ? "School" : targetCompany;
         const extraNote = [
           handoverDate,
           "Provider handover",
-          `${previousCompany || "Unassigned"} -> ${targetCompany}`,
+          `${previousCompany || "Unassigned"} -> ${destinationLabel}`,
           handoverNote,
         ]
           .filter(Boolean)
@@ -30341,8 +30348,8 @@ export default function App() {
           location: current.location,
           openingQty: Math.max(0, Math.round(Number(current.openingQty || 0))),
           minStock: Math.max(0, Math.round(Number(current.minStock || 0))),
-          ownerType: suggestedProviderOwnerTypeForCategory(current.category, current.ownerType),
-          responsibleParty: targetCompany,
+          ownerType: nextOwnerType,
+          responsibleParty: nextResponsibleParty,
           vendor: current.vendor || "",
           notes: mergedNotes,
           photo: current.photo || "",
@@ -30371,7 +30378,7 @@ export default function App() {
           "UPDATE",
           "inventory_item",
           current.itemCode,
-          `${current.campus} | Provider handover | ${previousCompany || "-"} -> ${targetCompany}`
+          `${current.campus} | Provider handover | ${previousCompany || "-"} -> ${destinationLabel}`
         );
         updatedCount += 1;
       }
@@ -62215,22 +62222,37 @@ function formatTicketRequestSource(value?: string) {
                       <div>
                         <strong>Provider Handover</strong>
                         <div className="tiny">
-                          Choose tool by tool, then save everything with one confirm button.
+                          Open only when you need to move provider tools back to school or to a new company.
                         </div>
                       </div>
-                      <div className="detail-value">
-                        {inventoryProviderHandoverSummary.moveNew} to new • {inventoryProviderHandoverSummary.useOld} to old
+                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        <div className="detail-value">
+                          {inventoryProviderHandoverSummary.moveNew} to new • {inventoryProviderHandoverSummary.useOld} back to school
+                        </div>
+                        <button
+                          className="tab"
+                          type="button"
+                          onClick={() => setInventoryProviderHandoverOpen((prev) => !prev)}
+                          aria-expanded={inventoryProviderHandoverOpen}
+                        >
+                          {inventoryProviderHandoverOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          <span style={{ marginLeft: 6 }}>
+                            {inventoryProviderHandoverOpen ? "Hide Handover" : "Open Handover"}
+                          </span>
+                        </button>
                       </div>
                     </div>
+                    {inventoryProviderHandoverOpen ? (
+                    <>
                     <div className="form-grid" style={{ marginTop: 10 }}>
                       <label className="field">
-                        <span>Old Company</span>
+                          <span>Current Provider</span>
                         <LocationPicker
                           value={inventoryProviderHandoverForm.fromCompany}
                           options={inventoryProviderCompanyOptions.map((name) => ({ value: name, label: name }))}
                           onChange={(value) => setInventoryProviderHandoverForm((prev) => ({ ...prev, fromCompany: value }))}
-                          placeholder="Select old company"
-                          searchPlaceholder={lang === "km" ? "ស្វែងរកក្រុមហ៊ុនចាស់..." : "Search old company..."}
+                          placeholder="Select current provider"
+                          searchPlaceholder={lang === "km" ? "ស្វែងរកក្រុមហ៊ុនបច្ចុប្បន្ន..." : "Search current provider..."}
                           emptyText={lang === "km" ? "មិនមានក្រុមហ៊ុន" : "No company found."}
                         />
                       </label>
@@ -62287,7 +62309,7 @@ function formatTicketRequestSource(value?: string) {
                             )
                           }
                         >
-                          Set All → Old
+                          Set All → School
                         </button>
                         <button
                           className="tab"
@@ -62336,7 +62358,7 @@ function formatTicketRequestSource(value?: string) {
                                   >
                                     <option value="KEEP">Keep Current</option>
                                     <option value="MOVE_NEW">Move to New Company</option>
-                                    <option value="USE_OLD">Return to Old Company</option>
+                                    <option value="USE_OLD">Return to School Company</option>
                                   </select>
                                 </td>
                               </tr>
@@ -62355,7 +62377,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                     <div className="asset-actions" style={{ marginTop: 12 }}>
                       <div className="tiny">
-                        Summary: keep {inventoryProviderHandoverSummary.keep}, move to new {inventoryProviderHandoverSummary.moveNew}, return to old {inventoryProviderHandoverSummary.useOld}.
+                        Summary: keep {inventoryProviderHandoverSummary.keep}, move to new {inventoryProviderHandoverSummary.moveNew}, return to school {inventoryProviderHandoverSummary.useOld}.
                       </div>
                       <button
                         className="btn-primary"
@@ -62366,6 +62388,8 @@ function formatTicketRequestSource(value?: string) {
                         Confirm Handover
                       </button>
                     </div>
+                    </>
+                    ) : null}
                   </div>
                 ) : null}
                 {inventoryItemsTableSection}
