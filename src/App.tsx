@@ -45641,6 +45641,14 @@ export default function App() {
         return "-";
     }
   }, [vaultReportShowSensitive]);
+  const inventoryReportOwnerText = useCallback(
+    (row: (typeof reportInventoryRows)[number]) => {
+      const ownerLabel = ownerTypeLabel(row.ownerType);
+      const providerName = String(row.responsibleParty || "").trim();
+      return providerName ? `${ownerLabel} • ${providerName}` : ownerLabel;
+    },
+    [ownerTypeLabel]
+  );
   const inventoryReportCellText = useCallback(
     (row: (typeof reportInventoryRows)[number], key: InventoryReportColumnKey) => {
       switch (key) {
@@ -45657,7 +45665,7 @@ export default function App() {
         case "location":
           return row.location || "-";
         case "owner":
-          return ownerTypeLabel(row.ownerType);
+          return inventoryReportOwnerText(row);
         case "responsible":
           return row.responsibleParty || "-";
         case "unit":
@@ -45682,7 +45690,7 @@ export default function App() {
           return "-";
       }
     },
-    [inventoryCampusLabel, lang, latestToolReviewByItemId, ownerTypeLabel]
+    [inventoryCampusLabel, inventoryReportOwnerText, lang, latestToolReviewByItemId]
   );
   const assetMasterCampusTitle = useMemo(() => {
     if (assetMasterCampusFilter.includes("ALL")) return t.allCampuses;
