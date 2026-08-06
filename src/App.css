@@ -28856,9 +28856,9 @@ tr.row-maint-maintenance:hover td {
 }
 
 .maintenance-schedule-table {
-  width: max-content !important;
+  width: 100% !important;
   min-width: 100% !important;
-  table-layout: auto;
+  table-layout: fixed;
 }
 
 .maintenance-schedule-table th,
@@ -28884,7 +28884,8 @@ tr.row-maint-maintenance:hover td {
 
 .maintenance-schedule-table th:nth-child(2),
 .maintenance-schedule-table td:nth-child(2) {
-  min-width: 160px;
+  width: 200px;
+  min-width: 200px;
 }
 
 .maintenance-schedule-table th:nth-child(3),
@@ -28953,6 +28954,22 @@ tr.row-maint-maintenance:hover td {
   font-size: 12px;
   line-height: 1.4;
   color: #5c7093;
+}
+
+.maintenance-schedule-table td:nth-child(2) .maintenance-schedule-cell-title,
+.maintenance-schedule-table td:nth-child(2) .maintenance-schedule-cell-subtitle {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.maintenance-schedule-table td:nth-child(2) .maintenance-schedule-cell-title {
+  -webkit-line-clamp: 3;
+}
+
+.maintenance-schedule-table td:nth-child(2) .maintenance-schedule-cell-subtitle {
+  -webkit-line-clamp: 2;
 }
 
 .schedule-status-badge {
