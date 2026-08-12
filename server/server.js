@@ -361,6 +361,7 @@ let telegramToolLastSendReport = {
 let telegramLastDiscoveredChats = [];
 let telegramMaintenanceLastDiscoveredChats = [];
 let telegramToolLastDiscoveredChats = [];
+const telegramBotProfileCache = new Map();
 let maintenanceAlertSweepTimer = null;
 let maintenanceAlertSweepRunning = false;
 const PUBLIC_APP_URL = String(
@@ -4258,6 +4259,23 @@ async function sendTelegramMaintenanceMessage(text, options = {}) {
     }
     successCount = results.filter((row) => row.ok).length;
   }
+  const discoveredTargetIds = Array.from(
+    new Set(
+      discoveredChats
+        .map((chat) => toText(chat && chat.id))
+        .filter(Boolean)
+        .filter((chatId) => !targets.includes(chatId))
+    )
+  );
+  if (!successCount && discoveredTargetIds.length) {
+    for (const chatId of discoveredTargetIds) {
+      // eslint-disable-next-line no-await-in-loop
+      results.push(
+        await sendTelegramMessageToChatWithRetry(chatId, text, photoUrl, 3, primaryToken, parseMode)
+      );
+    }
+    successCount = results.filter((row) => row.ok).length;
+  }
   telegramMaintenanceLastSendReport = {
     at: new Date().toISOString(),
     ok: successCount > 0,
@@ -4375,6 +4393,30 @@ async function sendTelegramMaintenancePhotoBuffer(photoBuffer, options = {}) {
     }
     successCount = results.filter((row) => row.ok).length;
   }
+  const discoveredTargetIds = Array.from(
+    new Set(
+      discoveredChats
+        .map((chat) => toText(chat && chat.id))
+        .filter(Boolean)
+        .filter((chatId) => !targets.includes(chatId))
+    )
+  );
+  if (!successCount && discoveredTargetIds.length) {
+    for (const chatId of discoveredTargetIds) {
+      // eslint-disable-next-line no-await-in-loop
+      results.push(
+        await sendTelegramPhotoBufferToChatWithRetry(chatId, photoBuffer, {
+          attempts: 3,
+          botToken: primaryToken,
+          caption,
+          parseMode,
+          filename,
+          mimeType,
+        })
+      );
+    }
+    successCount = results.filter((row) => row.ok).length;
+  }
   telegramMaintenanceLastSendReport = {
     at: new Date().toISOString(),
     ok: successCount > 0,
@@ -4442,6 +4484,20 @@ async function sendTelegramMaintenanceMediaGroup(mediaItems = [], options = {}) 
     for (const chatId of targets) {
       // eslint-disable-next-line no-await-in-loop
       results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 2, TELEGRAM_BOT_TOKEN));
+    }
+  }
+  if (!results.some((row) => row.ok)) {
+    const discoveredTargetIds = Array.from(
+      new Set(
+        discoveredChats
+          .map((chat) => toText(chat && chat.id))
+          .filter(Boolean)
+          .filter((chatId) => !targets.includes(chatId))
+      )
+    );
+    for (const chatId of discoveredTargetIds) {
+      // eslint-disable-next-line no-await-in-loop
+      results.push(await sendTelegramMediaGroupToChatWithRetry(chatId, normalizedMedia, 3, primaryToken));
     }
   }
   if (includeResults) {
@@ -6236,6 +6292,61 @@ function discoverTelegramChatIds(botToken = TELEGRAM_BOT_TOKEN) {
     req.on("timeout", () => {
       req.destroy();
       resolve([]);
+    });
+    req.end();
+  });
+}
+
+function getTelegramBotProfile(botToken = TELEGRAM_BOT_TOKEN) {
+  return new Promise((resolve) => {
+    const token = toText(botToken).trim();
+    if (!token) return resolve(null);
+    const cached = telegramBotProfileCache.get(token);
+    if (cached && (Date.now() - cached.at) < 5 * 60 * 1000) {
+      resolve(cached.profile);
+      return;
+    }
+    const req = https.request(
+      {
+        hostname: "api.telegram.org",
+        path: `/bot${encodeURIComponent(token)}/getMe`,
+        method: "GET",
+        timeout: 5000,
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => {
+          body += String(chunk || "");
+        });
+        res.on("end", () => {
+          if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+            resolve(null);
+            return;
+          }
+          try {
+            const parsed = JSON.parse(body);
+            const result = parsed && parsed.ok && parsed.result && typeof parsed.result === "object"
+              ? parsed.result
+              : null;
+            const profile = result
+              ? {
+                  id: toText(result.id),
+                  username: toText(result.username),
+                  firstName: toText(result.first_name),
+                }
+              : null;
+            telegramBotProfileCache.set(token, { at: Date.now(), profile });
+            resolve(profile);
+          } catch {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
     });
     req.end();
   });
@@ -10658,12 +10769,20 @@ const server = http.createServer(async (req, res) => {
       telegramMaintenanceLastDiscoveredChats = maintenanceDiscoveredTargets;
       telegramToolLastDiscoveredChats = toolDiscoveredTargets;
       const db = await readDb();
+      const [supplyBotProfile, maintenanceBotProfile, toolBotProfile] = await Promise.all([
+        getTelegramBotProfile(TELEGRAM_BOT_TOKEN),
+        getTelegramBotProfile(TELEGRAM_MAINTENANCE_BOT_TOKEN || TELEGRAM_BOT_TOKEN),
+        getTelegramBotProfile(TELEGRAM_TOOL_BOT_TOKEN || TELEGRAM_BOT_TOKEN),
+      ]);
       sendJson(res, 200, {
         ok: true,
         enabled: TELEGRAM_ALERT_ENABLED,
         hasBotToken: Boolean(TELEGRAM_BOT_TOKEN),
         hasMaintenanceBotToken: Boolean(TELEGRAM_MAINTENANCE_BOT_TOKEN),
         hasToolBotToken: Boolean(TELEGRAM_TOOL_BOT_TOKEN),
+        supplyBotProfile,
+        maintenanceBotProfile,
+        toolBotProfile,
         configuredTargets: resolveTelegramConfiguredChatIds(db),
         maintenanceConfiguredTargets: resolveTelegramConfiguredChatIds(db, [], "maintenance"),
         toolConfiguredTargets: resolveTelegramConfiguredChatIds(db, [], "tools"),

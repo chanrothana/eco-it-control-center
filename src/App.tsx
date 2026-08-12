@@ -1126,6 +1126,21 @@ type TelegramStatus = {
   hasBotToken: boolean;
   hasMaintenanceBotToken?: boolean;
   hasToolBotToken?: boolean;
+  supplyBotProfile?: {
+    id?: string;
+    username?: string;
+    firstName?: string;
+  } | null;
+  maintenanceBotProfile?: {
+    id?: string;
+    username?: string;
+    firstName?: string;
+  } | null;
+  toolBotProfile?: {
+    id?: string;
+    username?: string;
+    firstName?: string;
+  } | null;
   configuredTargets: string[];
   maintenanceConfiguredTargets?: string[];
   toolConfiguredTargets?: string[];
@@ -25466,12 +25481,12 @@ export default function App() {
     }
   }
 
-  async function sendTelegramTestAlert(kind: "maintenance" | "tools" = "maintenance") {
+  async function sendTelegramTestAlert(kind: "supply" | "maintenance" | "tools" = "supply") {
     if (!requireAdminAction()) return;
     try {
       const res = await requestJson<{ ok: boolean; enabled: boolean; kind: string; chatTargets: string[] }>("/api/alerts/telegram/test", {
         method: "POST",
-        body: JSON.stringify({ kind }),
+        body: JSON.stringify({ kind: kind === "supply" ? "normal" : kind }),
       });
       await loadTelegramStatus();
       setSetupMessage(
@@ -25479,12 +25494,16 @@ export default function App() {
           ? (
             kind === "tools"
               ? (lang === "km" ? "បានផ្ញើ Tools Telegram test រួចរាល់។" : "Tools Telegram test sent.")
-              : (lang === "km" ? "បានផ្ញើ Maintenance Telegram test រួចរាល់។" : "Maintenance Telegram test sent.")
+              : kind === "maintenance"
+                ? (lang === "km" ? "បានផ្ញើ Maintenance Telegram test រួចរាល់។" : "Maintenance Telegram test sent.")
+                : (lang === "km" ? "បានផ្ញើ Supply Telegram test រួចរាល់។" : "Supply Telegram test sent.")
           )
           : (
             kind === "tools"
               ? (lang === "km" ? "Tools Telegram test មិនបានផ្ញើ។" : "Tools Telegram test failed to send.")
-              : (lang === "km" ? "Maintenance Telegram test មិនបានផ្ញើ។" : "Maintenance Telegram test failed to send.")
+              : kind === "maintenance"
+                ? (lang === "km" ? "Maintenance Telegram test មិនបានផ្ញើ។" : "Maintenance Telegram test failed to send.")
+                : (lang === "km" ? "Supply Telegram test មិនបានផ្ញើ។" : "Supply Telegram test failed to send.")
           )
       );
     } catch (err) {
@@ -78975,8 +78994,11 @@ function formatTicketRequestSource(value?: string) {
                 <button className="btn-primary btn-small" disabled={!isAdmin || busy} onClick={() => void saveTelegramAlertTargets()}>
                   {lang === "km" ? "រក្សាទុក Chat ID" : "Save Chat IDs"}
                 </button>
+                <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void sendTelegramTestAlert("supply")}>
+                  {lang === "km" ? "ផ្ញើ Supply Test" : "Send Supply Test"}
+                </button>
                 <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void sendTelegramTestAlert("maintenance")}>
-                  {lang === "km" ? "ផ្ញើ Test" : "Send Test"}
+                  {lang === "km" ? "ផ្ញើ Maintenance Test" : "Send Maintenance Test"}
                 </button>
                 <button className="tab btn-small" disabled={!isAdmin || busy} onClick={() => void sendTelegramTestAlert("tools")}>
                   {lang === "km" ? "ផ្ញើ Tools Test" : "Send Tools Test"}
@@ -78987,6 +79009,24 @@ function formatTicketRequestSource(value?: string) {
               </div>
               {telegramStatus ? (
                 <div style={{ marginTop: 12 }}>
+                  <div className="tiny">
+                    {lang === "km" ? "Supply bot" : "Supply bot"}:{" "}
+                    {telegramStatus.supplyBotProfile?.username
+                      ? `@${telegramStatus.supplyBotProfile.username}`
+                      : telegramStatus.supplyBotProfile?.firstName || "-"}
+                  </div>
+                  <div className="tiny">
+                    {lang === "km" ? "Maintenance bot" : "Maintenance bot"}:{" "}
+                    {telegramStatus.maintenanceBotProfile?.username
+                      ? `@${telegramStatus.maintenanceBotProfile.username}`
+                      : telegramStatus.maintenanceBotProfile?.firstName || "-"}
+                  </div>
+                  <div className="tiny">
+                    {lang === "km" ? "Tools bot" : "Tools bot"}:{" "}
+                    {telegramStatus.toolBotProfile?.username
+                      ? `@${telegramStatus.toolBotProfile.username}`
+                      : telegramStatus.toolBotProfile?.firstName || "-"}
+                  </div>
                   <div className="tiny">
                     {lang === "km" ? "Configured targets (supply)" : "Configured targets (supply alert)"}: {telegramStatus.configuredTargets.length ? telegramStatus.configuredTargets.join(", ") : "-"}
                   </div>
