@@ -7266,6 +7266,26 @@ function buildMaintenanceRecordTelegramPhotoAlerts(asset, entry) {
   return [];
 }
 
+async function readMaintenanceRecordTelegramPhotoBuffer(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const candidates = [
+    toText(entry.telegramPhoto || ""),
+    toText((entry.afterPhotos || [])[0] || entry.photo || ""),
+    toText((entry.beforePhotos || [])[0] || ""),
+  ];
+  for (const candidate of candidates) {
+    const absolutePath = resolveUploadedAbsolutePath(candidate);
+    if (!absolutePath) continue;
+    try {
+      const raw = await fs.readFile(absolutePath);
+      if (Buffer.isBuffer(raw) && raw.length) return raw;
+    } catch {
+      // Fall through to the next candidate or the text-only fallback.
+    }
+  }
+  return null;
+}
+
 async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, options = {}) {
   const dedupeKey = buildMaintenanceTelegramDedupeKey(asset, entry, options);
   const settings = getSettingsObject(db || {});
@@ -7299,11 +7319,21 @@ async function sendMaintenanceRecordTelegramAlert(db, asset, entry, user, option
   try {
     if (photoAlerts.length === 1) {
       const primaryText = message || photoAlerts[0].caption;
-      const report = await sendMaintenancePhoto(primaryText, {
+      let report = await sendMaintenancePhoto(primaryText, {
         photoUrl: photoAlerts[0].media,
         parseMode: message ? "HTML" : "",
         includeResults: true,
       });
+      if ((!report || !report.ok) && message) {
+        const photoBuffer = await readMaintenanceRecordTelegramPhotoBuffer(entry);
+        if (photoBuffer) {
+          report = await sendMaintenancePhotoBuffer(photoBuffer, {
+            caption: primaryText,
+            parseMode: "HTML",
+            includeResults: true,
+          });
+        }
+      }
       if (report && report.ok) {
         telegramAlertSent = true;
       } else if (message) {
