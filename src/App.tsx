@@ -49414,9 +49414,18 @@ export default function App() {
       }
 
       try {
+        const previewBody = previewDoc.body;
+        const isCalendarStyleExport =
+          previewBody.classList.contains("schedule-pest-print") ||
+          Boolean(previewDoc.querySelector(".schedule-calendar-grid-wrap"));
+        const targetScale = Math.min(
+          isCalendarStyleExport ? 4 : 3,
+          Math.max(2, Math.ceil((previewWindow.devicePixelRatio || window.devicePixelRatio || 1) * 2))
+        );
+
         const canvas = await html2canvas(previewShell, {
           backgroundColor: "#ffffff",
-          scale: 2,
+          scale: targetScale,
           useCORS: true,
           allowTaint: true,
           logging: false,
@@ -49426,19 +49435,31 @@ export default function App() {
           scrollY: 0,
         });
 
-        const orientation = canvas.width > canvas.height ? "landscape" : "portrait";
+        const orientation = isCalendarStyleExport ? "landscape" : canvas.width > canvas.height ? "landscape" : "portrait";
         const pdf = new jsPDF({
           orientation,
           unit: "pt",
           format: "a4",
-          compress: true,
+          compress: !isCalendarStyleExport,
         });
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
-        const margin = 18;
+        const margin = isCalendarStyleExport ? 10 : 18;
         const usableWidth = pageWidth - margin * 2;
         const usableHeight = pageHeight - margin * 2;
         const sliceHeightPx = Math.max(1, Math.floor((usableHeight * canvas.width) / usableWidth));
+
+        if (isCalendarStyleExport) {
+          const pageImage = canvas.toDataURL("image/png");
+          const ratio = Math.min(usableWidth / canvas.width, usableHeight / canvas.height);
+          const renderedWidth = canvas.width * ratio;
+          const renderedHeight = canvas.height * ratio;
+          const offsetX = margin + (usableWidth - renderedWidth) / 2;
+          const offsetY = margin + (usableHeight - renderedHeight) / 2;
+          pdf.addImage(pageImage, "PNG", offsetX, offsetY, renderedWidth, renderedHeight, undefined, "MEDIUM");
+          pdf.save(`${sanitizePdfFileName(printWindowTitle || title)}.pdf`);
+          return;
+        }
 
         let offsetY = 0;
         let pageIndex = 0;
@@ -49466,7 +49487,7 @@ export default function App() {
           const pageImage = pageCanvas.toDataURL("image/png");
           const renderedHeight = (currentSliceHeight * usableWidth) / canvas.width;
           if (pageIndex > 0) pdf.addPage("a4", orientation);
-          pdf.addImage(pageImage, "PNG", margin, margin, usableWidth, renderedHeight, undefined, "FAST");
+          pdf.addImage(pageImage, "PNG", margin, margin, usableWidth, renderedHeight, undefined, "MEDIUM");
           offsetY += currentSliceHeight;
           pageIndex += 1;
         }
@@ -49502,6 +49523,17 @@ export default function App() {
             --preview-empty-label-size: 11px;
           }
           body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f5f1e7; }
+          body,
+          body *,
+          .report-document-shell,
+          .schedule-calendar-grid-wrap,
+          .schedule-calendar-day,
+          .schedule-calendar-entry,
+          .schedule-calendar-legend-swatch {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
           .preview-toolbar {
             position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px;
             padding: 14px 18px; background: rgba(250,247,240,0.96); border-bottom: 1px solid #d9c39f; backdrop-filter: blur(10px);
@@ -50490,6 +50522,17 @@ export default function App() {
               box-shadow: none;
               padding: 0;
               background: #fff;
+            }
+            body,
+            body *,
+            .report-document-shell,
+            .schedule-calendar-grid-wrap,
+            .schedule-calendar-day,
+            .schedule-calendar-entry,
+            .schedule-calendar-legend-swatch {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
             }
             .report-two-column-summary { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); }
           }
