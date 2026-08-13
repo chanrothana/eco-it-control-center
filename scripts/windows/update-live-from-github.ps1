@@ -1,8 +1,12 @@
-param(
-  [string]$Branch = "hotfix-live-main"
-)
-
 $ErrorActionPreference = "Stop"
+
+$Branch = if ($args.Count -gt 0 -and $args[0]) {
+  [string]$args[0]
+} elseif ($env:LIVE_UPDATE_BRANCH) {
+  [string]$env:LIVE_UPDATE_BRANCH
+} else {
+  "hotfix-live-main"
+}
 
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $root
