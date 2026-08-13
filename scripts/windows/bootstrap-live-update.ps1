@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 Set-Location $root
 
 $updateScriptPath = Join-Path $root "scripts\windows\update-live-from-github.ps1"
@@ -16,7 +16,7 @@ $Branch = if ($args.Count -gt 0 -and $args[0]) {
   "hotfix-live-main"
 }
 
-$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 Set-Location $root
 
 function Require-Command($name) {
