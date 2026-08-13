@@ -34,6 +34,7 @@
     "start:prod": "node server/server.js",
     "start:all": "npm run start",
     "live:start:windows": "powershell -ExecutionPolicy Bypass -File scripts/windows/start-live-server.ps1",
+    "live:update:bootstrap:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/bootstrap-live-update.ps1",
     "live:update:windows": "powershell -ExecutionPolicy Bypass -File scripts/windows/update-live-from-github.ps1",
     "build": "react-scripts build",
     "sync:uploads": "node server/scripts/sync-uploads-from-origin.js",
