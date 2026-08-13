@@ -10868,12 +10868,59 @@ label.backup-action-btn {
   display: grid;
   gap: 12px;
   margin-bottom: 14px;
-  padding: 18px 20px 20px;
-  border-radius: 28px;
+  padding: 16px 18px 18px;
+  border-radius: 24px;
   border: 1px solid rgba(117, 138, 170, 0.24);
-  background:
-    linear-gradient(135deg, rgba(38, 211, 193, 0.08), rgba(38, 211, 193, 0) 24%),
-    linear-gradient(180deg, rgba(14, 22, 33, 0.96), rgba(17, 26, 37, 0.98));
+  background: linear-gradient(180deg, rgba(14, 22, 33, 0.96), rgba(17, 26, 37, 0.98));
+}
+
+.vault-simple-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(110, 135, 170, 0.16);
+}
+
+.vault-simple-strip-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.vault-simple-strip-copy strong {
+  color: #f4f8ff;
+  font-size: clamp(22px, 2vw, 28px);
+  line-height: 1.05;
+}
+
+.vault-simple-strip-copy .tiny {
+  margin: 0;
+  max-width: 720px;
+}
+
+.vault-simple-strip-stat {
+  min-width: 124px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(132, 175, 244, 0.16);
+  background: rgba(74, 132, 233, 0.08);
+  display: grid;
+  gap: 4px;
+}
+
+.vault-simple-strip-stat span {
+  color: #cde0ff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+} 
+
+.vault-simple-strip-stat strong {
+  color: #f4f8ff;
+  font-size: 30px;
+  line-height: 1;
 }
 
 .vault-main-nav-top {
@@ -11013,6 +11060,96 @@ label.backup-action-btn {
 
 .vault-back-tab:hover {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.vault-stage-head-simple {
+  padding: 12px 14px;
+}
+
+.vault-overview-panel-simple {
+  background: linear-gradient(180deg, rgba(13, 20, 30, 0.94), rgba(18, 28, 40, 0.98)) !important;
+}
+
+.vault-simple-admin-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(108, 131, 166, 0.16);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.vault-simple-admin-bar .tiny {
+  margin: 6px 0 0;
+}
+
+.vault-simple-admin-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.vault-simple-admin-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(132, 175, 244, 0.16);
+  background: rgba(74, 132, 233, 0.08);
+  color: #bcd2f4;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.vault-simple-admin-stats strong {
+  color: #f4f8ff;
+  font-size: 14px;
+}
+
+.vault-simple-directory {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.vault-simple-directory-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(118, 140, 171, 0.2);
+  background: rgba(255, 255, 255, 0.025);
+  color: #e5eefc;
+  text-align: left;
+}
+
+.vault-simple-directory-row:hover {
+  background: rgba(95, 149, 245, 0.08);
+  border-color: rgba(140, 183, 246, 0.34);
+}
+
+.vault-simple-directory-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #f4f8ff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.vault-simple-directory-row strong {
+  color: #f4f8ff;
+  font-size: 20px;
+  line-height: 1;
 }
 
 .vault-main-tabs {
@@ -37524,6 +37661,23 @@ tr.row-maint-maintenance:hover td {
     margin-top: 10px;
   }
 
+  .vault-simple-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .vault-simple-strip-copy strong {
+    max-width: none;
+    font-size: clamp(24px, 7vw, 32px);
+  }
+
+  .vault-simple-strip-stat {
+    min-width: 0;
+    width: 100%;
+  }
+
   .vault-main-nav-search-wrap {
     min-height: 48px;
     padding: 0 12px;
@@ -37583,6 +37737,28 @@ tr.row-maint-maintenance:hover td {
     min-height: 0;
     padding: 12px 14px;
     border-radius: 14px;
+  }
+
+  .vault-simple-admin-bar {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .vault-simple-admin-stats {
+    justify-content: flex-start;
+  }
+
+  .vault-simple-directory-row {
+    padding: 12px 14px;
+  }
+
+  .vault-simple-directory-row span {
+    font-size: 16px;
+  }
+
+  .vault-simple-directory-row strong {
+    font-size: 18px;
   }
 
   .vault-search-card-head p {

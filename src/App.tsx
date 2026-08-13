@@ -13431,7 +13431,11 @@ export default function App() {
   const [vaultCredentialFormPasswordVisible, setVaultCredentialFormPasswordVisible] = useState(false);
   const [vaultAccountFormPasswordVisible, setVaultAccountFormPasswordVisible] = useState(false);
   const [vaultCctvFormPasswordVisible, setVaultCctvFormPasswordVisible] = useState(false);
+  const [vaultAccountPageTab, setVaultAccountPageTab] = useState<"records" | "register">("records");
   const [vaultCredentialPageTab, setVaultCredentialPageTab] = useState<"records" | "register">("records");
+  const [vaultDesignPageTab, setVaultDesignPageTab] = useState<"records" | "register">("records");
+  const [vaultNetworkPageTab, setVaultNetworkPageTab] = useState<"records" | "register">("records");
+  const [vaultCctvPageTab, setVaultCctvPageTab] = useState<"records" | "register">("records");
   const [editingVaultAccountId, setEditingVaultAccountId] = useState<number | null>(null);
   const [editingVaultCredentialId, setEditingVaultCredentialId] = useState<number | null>(null);
   const [editingVaultDesignId, setEditingVaultDesignId] = useState<number | null>(null);
@@ -14666,6 +14670,7 @@ export default function App() {
     });
     setVaultAccountFormPasswordVisible(false);
     setEditingVaultAccountId(null);
+    setVaultAccountPageTab("records");
   }
 
   function resetVaultCredentialForm() {
@@ -14696,6 +14701,7 @@ export default function App() {
       note: "",
     });
     setEditingVaultDesignId(null);
+    setVaultDesignPageTab("records");
   }
 
   function resetVaultNetworkDocForm() {
@@ -14709,6 +14715,7 @@ export default function App() {
       note: "",
     });
     setEditingVaultNetworkId(null);
+    setVaultNetworkPageTab("records");
   }
 
   function resetVaultCctvForm() {
@@ -14737,6 +14744,7 @@ export default function App() {
     });
     setVaultCctvFormPasswordVisible(false);
     setEditingVaultCctvId(null);
+    setVaultCctvPageTab("records");
   }
   function resetCctvCameraForm() {
     setCctvCameraForm({
@@ -27634,6 +27642,7 @@ export default function App() {
 
   function startEditVaultAccount(row: VaultAccount) {
     setEditingVaultAccountId(row.id);
+    setVaultAccountPageTab("register");
     setVaultAccountForm({
       systemName: row.systemName || "",
       model: row.model || "",
@@ -27707,6 +27716,7 @@ export default function App() {
 
   function startEditVaultDesign(row: VaultDesignLink) {
     setEditingVaultDesignId(row.id);
+    setVaultDesignPageTab("register");
     setVaultDesignForm({
       title: row.title || "",
       folderUrl: row.folderUrl || "",
@@ -27718,6 +27728,7 @@ export default function App() {
 
   function startEditVaultNetwork(row: VaultNetworkDoc) {
     setEditingVaultNetworkId(row.id);
+    setVaultNetworkPageTab("register");
     setVaultNetworkDocForm({
       title: row.title || "",
       docType: row.docType || "Network Diagram",
@@ -27731,6 +27742,7 @@ export default function App() {
 
   function startEditVaultCctv(row: VaultCctvRecord) {
     setEditingVaultCctvId(row.id);
+    setVaultCctvPageTab("register");
     setVaultCctvFormPasswordVisible(false);
     setVaultCctvForm({
       site: row.site || "",
@@ -30771,6 +30783,17 @@ export default function App() {
     setError("");
   }
 
+  function focusInventoryTxnInHistory(tx: InventoryTxn) {
+    setInventoryStockFilterDateFrom(String(tx.date || ""));
+    setInventoryStockFilterDateTo(String(tx.date || ""));
+    setInventoryStockFilterCampus(String(tx.campus || "").trim() || "ALL");
+    setInventoryStockFilterType(String(tx.type || "").trim() || "ALL");
+    setInventoryStockFilterItemId(String(tx.itemId || ""));
+    setInventoryStockFilterQuery("");
+    setInventoryStockSort({ key: "date", direction: "desc" });
+    setInventoryView("stock");
+  }
+
   async function saveInventoryTxnEntry(values: {
     itemId: string;
     date: string;
@@ -30788,7 +30811,7 @@ export default function App() {
     receivedBy?: string;
     transferToItemId?: string;
     transferToCampus?: string;
-  }): Promise<{ ok: boolean; pendingApproval?: boolean; duplicateSuppressed?: boolean }> {
+  }): Promise<{ ok: boolean; pendingApproval?: boolean; duplicateSuppressed?: boolean; savedTxn?: InventoryTxn }> {
     const itemId = Number(values.itemId);
     const rawQty = Number(values.qty || 0);
     const qty = Math.max(0, Math.round(rawQty));
@@ -30989,7 +31012,12 @@ export default function App() {
             appendUiAudit("CREATE", "inventory_txn", `${savedTxn.itemCode}-${savedTxn.id}`, `${savedTxn.type} ${savedTxn.qty} ${item.unit}`);
           }
         }
-        return { ok: true, pendingApproval: needsManagerApproval, duplicateSuppressed: Boolean(res.duplicateSuppressed) };
+        return {
+          ok: true,
+          pendingApproval: needsManagerApproval,
+          duplicateSuppressed: Boolean(res.duplicateSuppressed),
+          savedTxn: savedTxns[0],
+        };
       } catch (err) {
         if (!isMissingRouteError(err)) throw err;
         if (isCampusTransfer) {
@@ -31000,7 +31028,7 @@ export default function App() {
         void persistInventorySettings(inventoryItems, nextTxns);
         setError("");
         appendUiAudit("CREATE", "inventory_txn", `${item.itemCode}-${tx.id}`, `${tx.type} ${tx.qty} ${item.unit}`);
-        return { ok: true, pendingApproval: needsManagerApproval };
+        return { ok: true, pendingApproval: needsManagerApproval, savedTxn: tx };
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save inventory transaction");
@@ -31029,6 +31057,7 @@ export default function App() {
       receivedBy: inventoryTxnForm.receivedBy,
     });
     if (!saved.ok) return;
+    if (saved.savedTxn) focusInventoryTxnInHistory(saved.savedTxn);
     setInventoryTxnForm({
       itemId: "",
       date: toYmd(new Date()),
@@ -31055,6 +31084,7 @@ export default function App() {
       note: inventoryDailyForm.note,
     });
     if (!saved.ok) return;
+    if (saved.savedTxn) focusInventoryTxnInHistory(saved.savedTxn);
     if (saved.pendingApproval) {
       setError(lang === "km" ? "បានផ្ញើសំណើរចេញស្តុក ទៅអ្នកគ្រប់គ្រងសម្រាប់អនុម័ត។" : "Stock-out request sent to manager for approval.");
     }
@@ -31859,7 +31889,21 @@ export default function App() {
     }
     closeInventoryQuickOut();
     if (saved.pendingApproval) {
-      setError(lang === "km" ? "បានផ្ញើសំណើរចេញស្តុក ទៅអ្នកគ្រប់គ្រងសម្រាប់អនុម័ត។" : "Stock-out request sent to manager for approval.");
+      const title = lang === "km" ? "សំណើបានផ្ញើរួចរាល់" : "Request sent";
+      const message =
+        lang === "km"
+          ? "ប្រតិបត្តិការចេញស្តុកត្រូវបានផ្ញើទៅអ្នកគ្រប់គ្រងសម្រាប់អនុម័តរួចរាល់។"
+          : "This stock-out transaction was sent to the manager for approval.";
+      setSuccessToast({ id: Date.now(), title, message });
+      setSetupMessage(message);
+    } else {
+      const title = lang === "km" ? "ចេញស្តុកបានជោគជ័យ" : "Stock-out saved";
+      const message =
+        lang === "km"
+          ? "ប្រតិបត្តិការចេញស្តុកបានរក្សាទុករួចរាល់។"
+          : "The stock-out transaction was completed successfully.";
+      setSuccessToast({ id: Date.now(), title, message });
+      setSetupMessage(message);
     }
   }
   async function setInventoryTxnApproval(tx: InventoryTxn, decision: "APPROVED" | "REJECTED") {
@@ -49414,9 +49458,18 @@ export default function App() {
       }
 
       try {
+        const previewBody = previewDoc.body;
+        const isCalendarStyleExport =
+          previewBody.classList.contains("schedule-pest-print") ||
+          Boolean(previewDoc.querySelector(".schedule-calendar-grid-wrap"));
+        const targetScale = Math.min(
+          isCalendarStyleExport ? 4 : 3,
+          Math.max(2, Math.ceil((previewWindow.devicePixelRatio || window.devicePixelRatio || 1) * 2))
+        );
+
         const canvas = await html2canvas(previewShell, {
           backgroundColor: "#ffffff",
-          scale: 2,
+          scale: targetScale,
           useCORS: true,
           allowTaint: true,
           logging: false,
@@ -49426,19 +49479,31 @@ export default function App() {
           scrollY: 0,
         });
 
-        const orientation = canvas.width > canvas.height ? "landscape" : "portrait";
+        const orientation = isCalendarStyleExport ? "landscape" : canvas.width > canvas.height ? "landscape" : "portrait";
         const pdf = new jsPDF({
           orientation,
           unit: "pt",
           format: "a4",
-          compress: true,
+          compress: !isCalendarStyleExport,
         });
         const pageWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
-        const margin = 18;
+        const margin = isCalendarStyleExport ? 10 : 18;
         const usableWidth = pageWidth - margin * 2;
         const usableHeight = pageHeight - margin * 2;
         const sliceHeightPx = Math.max(1, Math.floor((usableHeight * canvas.width) / usableWidth));
+
+        if (isCalendarStyleExport) {
+          const pageImage = canvas.toDataURL("image/png");
+          const ratio = Math.min(usableWidth / canvas.width, usableHeight / canvas.height);
+          const renderedWidth = canvas.width * ratio;
+          const renderedHeight = canvas.height * ratio;
+          const offsetX = margin + (usableWidth - renderedWidth) / 2;
+          const offsetY = margin + (usableHeight - renderedHeight) / 2;
+          pdf.addImage(pageImage, "PNG", offsetX, offsetY, renderedWidth, renderedHeight, undefined, "MEDIUM");
+          pdf.save(`${sanitizePdfFileName(printWindowTitle || title)}.pdf`);
+          return;
+        }
 
         let offsetY = 0;
         let pageIndex = 0;
@@ -49466,7 +49531,7 @@ export default function App() {
           const pageImage = pageCanvas.toDataURL("image/png");
           const renderedHeight = (currentSliceHeight * usableWidth) / canvas.width;
           if (pageIndex > 0) pdf.addPage("a4", orientation);
-          pdf.addImage(pageImage, "PNG", margin, margin, usableWidth, renderedHeight, undefined, "FAST");
+          pdf.addImage(pageImage, "PNG", margin, margin, usableWidth, renderedHeight, undefined, "MEDIUM");
           offsetY += currentSliceHeight;
           pageIndex += 1;
         }
@@ -49502,6 +49567,17 @@ export default function App() {
             --preview-empty-label-size: 11px;
           }
           body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f5f1e7; }
+          body,
+          body *,
+          .report-document-shell,
+          .schedule-calendar-grid-wrap,
+          .schedule-calendar-day,
+          .schedule-calendar-entry,
+          .schedule-calendar-legend-swatch {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
           .preview-toolbar {
             position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 16px;
             padding: 14px 18px; background: rgba(250,247,240,0.96); border-bottom: 1px solid #d9c39f; backdrop-filter: blur(10px);
@@ -50490,6 +50566,17 @@ export default function App() {
               box-shadow: none;
               padding: 0;
               background: #fff;
+            }
+            body,
+            body *,
+            .report-document-shell,
+            .schedule-calendar-grid-wrap,
+            .schedule-calendar-day,
+            .schedule-calendar-entry,
+            .schedule-calendar-legend-swatch {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
             }
             .report-two-column-summary { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); }
           }
@@ -80603,24 +80690,23 @@ function formatTicketRequestSource(value?: string) {
           {tab === "vault" && canAccessMenu("vault.dashboard", "vault") && (
           <section className="panel vault-shell">
             <div className="vault-main-nav">
-              {!isPhoneView ? (
-              <div className="vault-main-nav-top">
-                <div className="vault-main-nav-meta">
-                  <span>Workspace Map</span>
-                  <strong>Choose the correct lane before saving a record.</strong>
-                  <p className="tiny">Infrastructure access belongs in system sections, online accounts stay in web services, and reference materials stay in document-based workspaces.</p>
+              <div className="vault-simple-strip">
+                <div className="vault-simple-strip-copy">
+                  <strong>{lang === "km" ? "IT Vault" : "IT Vault"}</strong>
+                  <p className="tiny">
+                    {lang === "km"
+                      ? "ជ្រើសផ្នែកត្រឹមត្រូវ ស្វែងរកឆាប់ ហើយមើលកំណត់ត្រាបានច្បាស់ទាំងលើទូរស័ព្ទ និងកុំព្យូទ័រ។"
+                      : "Choose the correct section, search fast, and review records clearly on both phone and computer."}
+                  </p>
                 </div>
-                <div className="vault-main-nav-action">
-                  <div className="vault-main-nav-pulse">
-                    <span>All Records</span>
-                    <strong>{vaultTotalRecordCount}</strong>
-                  </div>
+                <div className="vault-simple-strip-stat">
+                  <span>{lang === "km" ? "កំណត់ត្រាសរុប" : "Total Records"}</span>
+                  <strong>{vaultTotalRecordCount}</strong>
                 </div>
               </div>
-              ) : null}
               <div className="vault-main-nav-tools">
                 <label className="field vault-main-nav-search">
-                  <span>{lang === "km" ? "ស្វែងរកលឿន" : "Quick Search Shortcut"}</span>
+                  <span>{lang === "km" ? "ស្វែងរកលឿន" : "Quick Search"}</span>
                   <div className="vault-main-nav-search-wrap">
                     <Search size={18} />
                     <input
@@ -80641,7 +80727,6 @@ function formatTicketRequestSource(value?: string) {
                       }}
                       placeholder={lang === "km" ? "ស្វែងរក system, username, IP, URL, owner..." : "Search system, username, IP, URL, owner..."}
                     />
-                    <span className="vault-shortcut-badge">Ctrl/Cmd + K</span>
                   </div>
                 </label>
                 <div className="vault-main-nav-search-actions">
@@ -80714,227 +80799,75 @@ function formatTicketRequestSource(value?: string) {
               )}
             </div>
             <div className="vault-stage">
-            <div className="vault-stage-head vault-stage-head-reimagined">
+            <div className="vault-stage-head vault-stage-head-reimagined vault-stage-head-simple">
               <div className="vault-stage-head-copy">
-                <span>{isPhoneView ? "Workspace" : "Active Workspace"}</span>
+                <span>{isPhoneView ? (lang === "km" ? "កំពុងបើក" : "Now Open") : (lang === "km" ? "កំពុងបើក" : "Now Open")}</span>
                 <h3>{vaultActiveSectionMeta.title}</h3>
-                <p>{vaultActiveSectionMeta.description}</p>
+                <p>{lang === "km" ? "បើកផ្នែកខាងក្រោម ដើម្បីមើល ឬកែប្រែកំណត់ត្រាបានលឿន។" : "Open a section below to view or update records quickly."}</p>
               </div>
-              {!isPhoneView ? (
-              <div className="vault-stage-head-side">
-                <div className="vault-stage-head-stat">
-                  <strong>{vaultActiveSectionMeta.metricValue}</strong>
-                  <small>{vaultActiveSectionMeta.metricLabel}</small>
-                </div>
-                <div className="vault-stage-head-note">
-                  <span>Control Rule</span>
-                  <strong>One record. One owner. One correct section.</strong>
-                </div>
-              </div>
-              ) : (
               <div className="vault-stage-head-side vault-stage-head-side-phone">
                 <div className="vault-stage-head-stat">
                   <strong>{vaultActiveSectionMeta.metricValue}</strong>
                   <small>{vaultActiveSectionMeta.metricLabel}</small>
                 </div>
               </div>
-              )}
             </div>
             {vaultTab === "dashboard" && canAccessMenu("vault.dashboard", "vault") && (
-              <div className="panel vault-overview-panel vault-overview-panel-reimagined" style={{ padding: 12, marginBottom: 12 }}>
-                <div className="vault-overview-intro vault-overview-intro-reimagined">
-                  <div className="vault-overview-story">
-                    <span className="vault-overview-kicker">Routing Guide</span>
-                    <h3 className="section-title" style={{ marginTop: 0 }}>Choose the right workspace before storing access.</h3>
-                    <p className="tiny" style={{ marginBottom: 0 }}>
-                      Use this page as your filing guide: controller access goes to <strong>Access Systems</strong>, SaaS and online services go to <strong>Web Services</strong>, infrastructure reference goes to <strong>Network & WiFi Docs</strong>, and recorder or site mapping goes to <strong>CCTV Systems</strong>.
+              <div className="panel vault-overview-panel vault-overview-panel-simple" style={{ padding: 14, marginBottom: 12 }}>
+                <div className="vault-simple-admin-bar">
+                  <div>
+                    <h3 className="section-title" style={{ margin: 0 }}>{lang === "km" ? "កត់ត្រា មើល និងរាយការណ៍" : "Record, View, and Report"}</h3>
+                    <p className="tiny">
+                      {lang === "km"
+                        ? "ជ្រើសផ្នែកមួយខាងក្រោម ដើម្បីបន្ថែម មើល ឬកែប្រែកំណត់ត្រាបានឆាប់។"
+                        : "Choose one section below to add, view, or update records quickly."}
                     </p>
                   </div>
-                  <div className="vault-overview-aside">
-                    <span>Filing Rule</span>
-                    <strong>Each entry should live in one clear workspace only.</strong>
-                    <p>That keeps reporting faster, avoids duplicate passwords, and reduces confusion during urgent requests.</p>
+                  <div className="vault-simple-admin-stats">
+                    <span>{lang === "km" ? "សរុប" : "Total"}: <strong>{vaultTotalRecordCount}</strong></span>
+                    <span>{lang === "km" ? "ត្រូវពិនិត្យ" : "Review"}: <strong>{vaultNeedsReviewItems.length}</strong></span>
                   </div>
                 </div>
-                <div className="vault-guide-grid vault-guide-grid-simple vault-guide-grid-reimagined" style={{ marginBottom: 12 }}>
-                  <button className="vault-guide-card" onClick={() => setVaultTab("accounts")}>
-                    <div className="vault-guide-card-top">
-                      <span className="vault-guide-icon"><Shield size={18} /></span>
-                      <em className="vault-guide-count">{vaultAccounts.length}</em>
-                    </div>
-                    <small>System Lane</small>
-                    <strong>Access Systems</strong>
-                    <span>Printers, routers, WiFi, admin systems</span>
+                <div className="vault-simple-directory">
+                  <button className="vault-simple-directory-row" onClick={() => setVaultTab("accounts")}>
+                    <span><Shield size={16} /> Access Systems</span>
+                    <strong>{vaultAccounts.length}</strong>
                   </button>
-                  <button className="vault-guide-card" onClick={() => setVaultTab("credentials")}>
-                    <div className="vault-guide-card-top">
-                      <span className="vault-guide-icon"><Monitor size={18} /></span>
-                      <em className="vault-guide-count">{vaultCredentials.length}</em>
-                    </div>
-                    <small>Service Lane</small>
-                    <strong>Web Services</strong>
-                    <span>Email, SaaS, websites, Telegram</span>
+                  <button className="vault-simple-directory-row" onClick={() => setVaultTab("credentials")}>
+                    <span><Monitor size={16} /> Web Services</span>
+                    <strong>{vaultCredentials.length}</strong>
                   </button>
-                  <button className="vault-guide-card" onClick={() => setVaultTab("network")}>
-                    <div className="vault-guide-card-top">
-                      <span className="vault-guide-icon"><Wifi size={18} /></span>
-                      <em className="vault-guide-count">{vaultNetworkDocs.length}</em>
-                    </div>
-                    <small>Reference Lane</small>
-                    <strong>Network & WiFi Docs</strong>
-                    <span>Topology, ISP, WiFi and config docs</span>
+                  <button className="vault-simple-directory-row" onClick={() => setVaultTab("network")}>
+                    <span><Wifi size={16} /> Network & WiFi Docs</span>
+                    <strong>{vaultNetworkDocs.length}</strong>
                   </button>
-                  <button className="vault-guide-card" onClick={() => setVaultTab("cctv")}>
-                    <div className="vault-guide-card-top">
-                      <span className="vault-guide-icon"><Camera size={18} /></span>
-                      <em className="vault-guide-count">{vaultCctvRecords.length}</em>
-                    </div>
-                    <small>Security Lane</small>
-                    <strong>CCTV Systems</strong>
-                    <span>Recorder access, review, retention</span>
+                  <button className="vault-simple-directory-row" onClick={() => setVaultTab("cctv")}>
+                    <span><Camera size={16} /> CCTV Systems</span>
+                    <strong>{vaultCctvRecords.length}</strong>
                   </button>
-                  <button className="vault-guide-card" onClick={() => setVaultTab("design")}>
-                    <div className="vault-guide-card-top">
-                      <span className="vault-guide-icon"><FileText size={18} /></span>
-                      <em className="vault-guide-count">{vaultDesignLinks.length}</em>
-                    </div>
-                    <small>Share Lane</small>
-                    <strong>Design Folders</strong>
-                    <span>Drive folders and shared references</span>
+                  <button className="vault-simple-directory-row" onClick={() => setVaultTab("design")}>
+                    <span><FileText size={16} /> Design Folders</span>
+                    <strong>{vaultDesignLinks.length}</strong>
                   </button>
-                </div>
-                <div className="vault-dashboard-grid vault-dashboard-grid-reimagined">
-                  <div className="vault-dashboard-primary">
-                    <div className="vault-control-summary-grid">
-                      <article className="vault-control-summary-card">
-                        <span>Needs Review</span>
-                        <strong>{vaultNeedsReviewItems.length}</strong>
-                        <p>Past-due review dates and old password records.</p>
-                      </article>
-                      <article className="vault-control-summary-card">
-                        <span>Missing Info</span>
-                        <strong>{vaultMissingInfoItems.length}</strong>
-                        <p>Records missing owner, password, recovery, or review detail.</p>
-                      </article>
-                      <article className="vault-control-summary-card">
-                        <span>Recent Changes</span>
-                        <strong>{vaultRecentChangeItems.length}</strong>
-                        <p>Latest password updates and review activity across the vault.</p>
-                      </article>
-                      <article className="vault-control-summary-card">
-                        <span>Telegram Records</span>
-                        <strong>{vaultTelegramRecordCount}</strong>
-                        <p>Communication accounts currently stored inside Web Services.</p>
-                      </article>
-                    </div>
-                    <div className="vault-control-board">
-                      <section className="vault-control-card">
-                        <div className="vault-control-card-head">
-                          <div>
-                            <h4>Needs Review</h4>
-                            <p>Focus on overdue records first.</p>
-                          </div>
-                          <span>{vaultNeedsReviewItems.length}</span>
-                        </div>
-                        <div className="vault-control-list">
-                          {vaultNeedsReviewItems.length ? vaultNeedsReviewItems.slice(0, 5).map((item) => (
-                            <article className="vault-control-list-item" key={item.id}>
-                              <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
-                                <strong>{item.title}</strong>
-                                <span>{item.section}</span>
-                              </button>
-                              <p>{item.summary}</p>
-                              {item.detail ? <small>{item.detail}</small> : null}
-                            </article>
-                          )) : (
-                            <div className="vault-mobile-empty">No overdue review items right now.</div>
-                          )}
-                        </div>
-                      </section>
-                      <section className="vault-control-card">
-                        <div className="vault-control-card-head">
-                          <div>
-                            <h4>Missing Info</h4>
-                            <p>These records should be completed for reporting.</p>
-                          </div>
-                          <span>{vaultMissingInfoItems.length}</span>
-                        </div>
-                        <div className="vault-control-list">
-                          {vaultMissingInfoItems.length ? vaultMissingInfoItems.slice(0, 5).map((item) => (
-                            <article className="vault-control-list-item" key={item.id}>
-                              <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
-                                <strong>{item.title}</strong>
-                                <span>{item.section}</span>
-                              </button>
-                              <p>{item.summary}</p>
-                              {item.detail ? <small>{item.detail}</small> : null}
-                            </article>
-                          )) : (
-                            <div className="vault-mobile-empty">All records have the core fields filled in.</div>
-                          )}
-                        </div>
-                      </section>
-                      <section className="vault-control-card">
-                        <div className="vault-control-card-head">
-                          <div>
-                            <h4>Recent Changes</h4>
-                            <p>Use this to see what changed most recently.</p>
-                          </div>
-                          <span>{vaultRecentChangeItems.length}</span>
-                        </div>
-                        <div className="vault-control-list">
-                          {vaultRecentChangeItems.length ? vaultRecentChangeItems.slice(0, 5).map((item) => (
-                            <article className="vault-control-list-item" key={item.id}>
-                              <button type="button" className="vault-control-link" onClick={() => setVaultTab(item.tab)}>
-                                <strong>{item.title}</strong>
-                                <span>{item.section}</span>
-                              </button>
-                              <p>{item.summary}</p>
-                              {item.detail ? <small>{item.detail}</small> : null}
-                            </article>
-                          )) : (
-                            <div className="vault-mobile-empty">No recent change records available yet.</div>
-                          )}
-                        </div>
-                      </section>
-                    </div>
-                  </div>
-                  <aside className="vault-dashboard-sidebar">
-                    <article className="vault-side-card vault-side-card-accent">
-                      <span>Command Note</span>
-                      <strong>Keep urgent reporting simple.</strong>
-                      <p>When ED asks for a fast summary, use the report copy tools first, then move into the section that owns the record.</p>
-                    </article>
-                    <article className="vault-side-card">
-                      <span>Quick Protocol</span>
-                      <strong>Store account access only once.</strong>
-                      <p>If the same login appears in multiple sections, reporting becomes unreliable and password ownership becomes unclear.</p>
-                    </article>
-                    <article className="vault-side-card">
-                      <span>Search Scope</span>
-                      <strong>{vaultSearchResults.length} visible dashboard records</strong>
-                      <p>The search board below scans every vault section together so you can cross-check before adding new records.</p>
-                    </article>
-                  </aside>
                 </div>
                 <div className="vault-search-shell">
-                  <div className="vault-section-head" style={{ marginTop: 16 }}>
+                  <div className="vault-section-head" style={{ marginTop: 8 }}>
                     <div>
-                      <h3 className="section-title" style={{ margin: 0 }}>Search All IT Vault Data</h3>
-                      <p className="tiny">Everything from Access Systems, Web Services, Design Folders, Network & WiFi Docs, and CCTV Systems is listed here.</p>
+                      <h3 className="section-title" style={{ margin: 0 }}>{lang === "km" ? "ស្វែងរកកំណត់ត្រាទាំងអស់" : "Search All Records"}</h3>
+                      <p className="tiny">{lang === "km" ? "ស្វែងរកមុនពេលបង្កើតកំណត់ត្រាថ្មី ដើម្បីជៀសវាងទិន្នន័យស្ទួន។" : "Search first before creating a new record to avoid duplicates."}</p>
                     </div>
                     <span className="vault-section-count">{vaultSearchResults.length} records</span>
                   </div>
                   <div className="vault-search-toolbar">
                     <label className="field vault-search-field">
-                      <span>Search All Records</span>
+                      <span>{lang === "km" ? "ស្វែងរក" : "Search"}</span>
                       <div className="vault-search-input-wrap">
                         <Search size={18} />
                         <input
                           className="input"
                           value={vaultSearchQuery}
                           onChange={(e) => setVaultSearchQuery(e.target.value)}
-                          placeholder="Search by system, username, IP, URL, owner, note, site..."
+                          placeholder={lang === "km" ? "ស្វែងរកតាម system, username, IP, URL, owner..." : "Search by system, username, IP, URL, owner..."}
                         />
                       </div>
                     </label>
@@ -80991,7 +80924,24 @@ function formatTicketRequestSource(value?: string) {
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>System Accounts</strong> for admin/control credentials such as CCTV admin, Printer admin, MikroTik admin, UniFi Controller admin, WiFi portal admin, and device service accounts.
                 </div>
-                {isPhoneView ? (
+                <div className="vault-subtabs vault-credential-subtabs">
+                  <button
+                    type="button"
+                    className={`tab ${vaultAccountPageTab === "records" ? "tab-active" : ""}`}
+                    onClick={() => setVaultAccountPageTab("records")}
+                  >
+                    View Records
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab ${vaultAccountPageTab === "register" ? "tab-active" : ""}`}
+                    onClick={() => setVaultAccountPageTab("register")}
+                  >
+                    {editingVaultAccountId ? "Edit Record" : "Register New"}
+                  </button>
+                </div>
+                {vaultAccountPageTab === "records" ? (
+                isPhoneView ? (
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
                     {vaultAccounts.length ? vaultAccounts.map((row) => (
                       <article className="vault-mobile-card" key={`vault-account-mobile-${row.id}`}>
@@ -81021,33 +80971,43 @@ function formatTicketRequestSource(value?: string) {
                     )) : <div className="vault-mobile-empty">No system account records yet.</div>}
                   </div>
                 ) : (
-                  <div className="table-wrap" style={{ marginTop: 12 }}>
-                    <table>
-                      <thead><tr><th>System</th><th>Model</th><th>IP / Host</th><th>Login URL</th><th>Account</th><th>Username</th><th>Password</th><th>Owner</th><th>Role</th><th>Status</th><th>Updated</th><th>Review</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                      <tbody>
-                        {vaultAccounts.length ? vaultAccounts.map((row) => (
-                          <tr key={`vault-account-${row.id}`}>
-                            <td>{row.systemName || "-"}</td>
-                            <td>{row.model || "-"}</td>
-                            <td>{row.host || "-"}</td>
-                            <td>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td>
-                            <td><strong>{row.accountName || "-"}</strong></td>
-                            <td>{row.username || "-"}</td>
-                            <td>{vaultVisibleAccountPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")} {row.password ? <button className="tab btn-small" onClick={() => setVaultVisibleAccountPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleAccountPasswordId === row.id ? "Hide" : "View"}</button> : null}</td>
-                            <td>{row.owner || "-"}</td>
-                            <td>{row.role || "-"}</td>
-                            <td>{row.status || "-"}</td>
-                            <td>{formatDate(row.lastUpdated || "-")}</td>
-                            <td>{formatDate(row.reviewDate || "-")}</td>
-                            <td>{row.note || "-"}</td>
-                            <td><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultAccount(row)}>{t.edit}</button></td>
-                            <td><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("accounts", row.id)}>X</button></td>
-                          </tr>
-                        )) : <tr><td colSpan={15}>No system account records yet.</td></tr>}
-                      </tbody>
-                    </table>
+                  <div className="vault-record-grid" style={{ marginTop: 12 }}>
+                    {vaultAccounts.length ? vaultAccounts.map((row) => (
+                      <article className="vault-record-card" key={`vault-account-desktop-${row.id}`}>
+                        <div className="vault-record-card-head">
+                          <div>
+                            <strong>{row.accountName || row.systemName || "-"}</strong>
+                            <p>{row.systemName || "-"}</p>
+                          </div>
+                          <span>{row.status || "-"}</span>
+                        </div>
+                        <div className="vault-record-fields">
+                          <div className="vault-record-field"><span>Model</span><strong>{row.model || "-"}</strong></div>
+                          <div className="vault-record-field"><span>IP / Host</span><strong>{row.host || "-"}</strong></div>
+                          <div className="vault-record-field"><span>Login URL</span><strong>{row.loginUrl ? <a href={row.loginUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
+                          <div className="vault-record-field"><span>Username</span><strong>{row.username || "-"}</strong></div>
+                          <div className="vault-record-field"><span>Password</span><strong>{vaultVisibleAccountPasswordId === row.id ? (row.password || "-") : (row.password ? "••••••••" : "-")}</strong></div>
+                          <div className="vault-record-field"><span>Owner</span><strong>{row.owner || "-"}</strong></div>
+                          <div className="vault-record-field"><span>Role</span><strong>{row.role || "-"}</strong></div>
+                          <div className="vault-record-field"><span>Updated</span><strong>{formatDate(row.lastUpdated || "-")}</strong></div>
+                          <div className="vault-record-field"><span>Review</span><strong>{formatDate(row.reviewDate || "-")}</strong></div>
+                          <div className="vault-record-field vault-record-field-wide"><span>Note</span><strong>{row.note || "-"}</strong></div>
+                        </div>
+                        <div className="vault-record-actions">
+                          {row.password ? <button className="tab" onClick={() => setVaultVisibleAccountPasswordId((prev) => (prev === row.id ? null : row.id))}>{vaultVisibleAccountPasswordId === row.id ? "Hide Password" : "View Password"}</button> : <span />}
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultAccount(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("accounts", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No system account records yet.</div>}
                   </div>
-                )}
+                )
+                ) : (
+                <>
+                <div className="vault-register-head">
+                  <h4>{editingVaultAccountId ? "Edit Access System" : "Register Access System"}</h4>
+                  <p>{editingVaultAccountId ? "Update the selected access record, then save it back to the list." : "Add a new system or controller access record here."}</p>
+                </div>
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>System / Platform</span><input className="input" value={vaultAccountForm.systemName} onChange={(e) => setVaultAccountForm((f) => ({ ...f, systemName: e.target.value }))} placeholder="Printer Control / MikroTik / UniFi Controller / CCTV System" /></label>
                   <label className="field"><span>Model</span><input className="input" value={vaultAccountForm.model} onChange={(e) => setVaultAccountForm((f) => ({ ...f, model: e.target.value }))} placeholder="Canon C5550 / RB4011 / UDM Pro" /></label>
@@ -81087,6 +81047,8 @@ function formatTicketRequestSource(value?: string) {
                   <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultAccount}>{editingVaultAccountId ? "Update System Account" : "Add System Account"}</button>
                   {editingVaultAccountId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultAccountForm}>Cancel Edit</button> : null}
                 </div>
+                </>
+                )}
               </>
             )}
 
@@ -81142,7 +81104,7 @@ function formatTicketRequestSource(value?: string) {
                     </div>
                   </label>
                 </div>
-                isPhoneView ? (
+                {isPhoneView ? (
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
                     {filteredVaultCredentials.length ? filteredVaultCredentials.map((row) => (
                       <article className="vault-mobile-card" key={`vault-credential-mobile-${row.id}`}>
@@ -81354,6 +81316,7 @@ function formatTicketRequestSource(value?: string) {
                       </article>
                     )) : <div className="vault-mobile-empty">{lang === "km" ? "មិនមាន Web Services ត្រូវតម្រងនេះទេ។" : "No Web Services records match this search."}</div>}
                   </div>
+                )}
                 </>
                 ) : (
                 <>
@@ -81499,7 +81462,24 @@ function formatTicketRequestSource(value?: string) {
                   </div>
                   <span className="vault-section-count">{vaultDesignLinks.length} records</span>
                 </div>
-                {isPhoneView ? (
+                <div className="vault-subtabs vault-credential-subtabs">
+                  <button
+                    type="button"
+                    className={`tab ${vaultDesignPageTab === "records" ? "tab-active" : ""}`}
+                    onClick={() => setVaultDesignPageTab("records")}
+                  >
+                    View Records
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab ${vaultDesignPageTab === "register" ? "tab-active" : ""}`}
+                    onClick={() => setVaultDesignPageTab("register")}
+                  >
+                    {editingVaultDesignId ? "Edit Record" : "Register New"}
+                  </button>
+                </div>
+                {vaultDesignPageTab === "records" ? (
+                isPhoneView ? (
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
                     {vaultDesignLinks.length ? vaultDesignLinks.map((row) => (
                       <article className="vault-mobile-card" key={`vault-design-mobile-${row.id}`}>
@@ -81521,25 +81501,37 @@ function formatTicketRequestSource(value?: string) {
                     )) : <div className="vault-mobile-empty">No design folder links yet.</div>}
                   </div>
                 ) : (
-                  <div className="table-wrap" style={{ marginTop: 12 }}>
-                    <table className="vault-responsive-table">
-                      <thead><tr><th>Design</th><th>Folder</th><th>Owner</th><th>Review</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                      <tbody>
-                        {vaultDesignLinks.length ? vaultDesignLinks.map((row) => (
-                          <tr key={`vault-design-${row.id}`}>
-                            <td data-label="Design"><strong>{row.title || "-"}</strong></td>
-                            <td data-label="Folder">{row.folderUrl ? <a href={row.folderUrl} target="_blank" rel="noreferrer">Open Folder</a> : "-"}</td>
-                            <td data-label="Owner">{row.owner || "-"}</td>
-                            <td data-label="Review">{formatDate(row.lastReview || "-")}</td>
-                            <td data-label="Note">{row.note || "-"}</td>
-                            <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultDesign(row)}>{t.edit}</button></td>
-                            <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("design", row.id)}>X</button></td>
-                          </tr>
-                        )) : <tr className="vault-table-empty-row"><td colSpan={7}>No design folder links yet.</td></tr>}
-                      </tbody>
-                    </table>
+                  <div className="vault-record-grid" style={{ marginTop: 12 }}>
+                    {vaultDesignLinks.length ? vaultDesignLinks.map((row) => (
+                      <article className="vault-record-card" key={`vault-design-desktop-${row.id}`}>
+                        <div className="vault-record-card-head">
+                          <div>
+                            <strong>{row.title || "-"}</strong>
+                            <p>{row.folderUrl ? <a href={row.folderUrl} target="_blank" rel="noreferrer">Open Folder</a> : "No folder link"}</p>
+                          </div>
+                          <span>{formatDate(row.lastReview || "-")}</span>
+                        </div>
+                        <div className="vault-record-fields">
+                          <div className="vault-record-field"><span>Owner</span><strong>{row.owner || "-"}</strong></div>
+                          <div className="vault-record-field"><span>Review</span><strong>{formatDate(row.lastReview || "-")}</strong></div>
+                          <div className="vault-record-field"><span>Folder</span><strong>{row.folderUrl ? <a href={row.folderUrl} target="_blank" rel="noreferrer">Open Folder</a> : "-"}</strong></div>
+                          <div className="vault-record-field vault-record-field-wide"><span>Note</span><strong>{row.note || "-"}</strong></div>
+                        </div>
+                        <div className="vault-record-actions">
+                          <span />
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultDesign(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("design", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No design folder links yet.</div>}
                   </div>
-                )}
+                )
+                ) : (
+                <>
+                <div className="vault-register-head">
+                  <h4>{editingVaultDesignId ? "Edit Design Folder" : "Register Design Folder"}</h4>
+                  <p>{editingVaultDesignId ? "Update the selected design folder record, then save it back to the list." : "Add a shared design folder or reference link here."}</p>
+                </div>
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>Design Name</span><input className="input" value={vaultDesignForm.title} onChange={(e) => setVaultDesignForm((f) => ({ ...f, title: e.target.value }))} /></label>
                   <label className="field"><span>Design Folder Link (Google Drive)</span><input className="input" value={vaultDesignForm.folderUrl} onChange={(e) => setVaultDesignForm((f) => ({ ...f, folderUrl: e.target.value }))} placeholder="https://drive.google.com/..." /></label>
@@ -81551,6 +81543,8 @@ function formatTicketRequestSource(value?: string) {
                   <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultDesignLink}>{editingVaultDesignId ? "Update Design Folder" : "Add Design Folder"}</button>
                   {editingVaultDesignId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultDesignForm}>Cancel Edit</button> : null}
                 </div>
+                </>
+                )}
               </>
             )}
 
@@ -81566,7 +81560,24 @@ function formatTicketRequestSource(value?: string) {
                 <div className="tiny" style={{ marginBottom: 10 }}>
                   Use <strong>Network & WiFi Docs</strong> for topology maps, ISP details, VLAN plans, switch port maps, AP placement, UniFi site notes, MikroTik config exports, and WiFi setup documents.
                 </div>
-                {isPhoneView ? (
+                <div className="vault-subtabs vault-credential-subtabs">
+                  <button
+                    type="button"
+                    className={`tab ${vaultNetworkPageTab === "records" ? "tab-active" : ""}`}
+                    onClick={() => setVaultNetworkPageTab("records")}
+                  >
+                    View Records
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab ${vaultNetworkPageTab === "register" ? "tab-active" : ""}`}
+                    onClick={() => setVaultNetworkPageTab("register")}
+                  >
+                    {editingVaultNetworkId ? "Edit Record" : "Register New"}
+                  </button>
+                </div>
+                {vaultNetworkPageTab === "records" ? (
+                isPhoneView ? (
                   <div className="vault-mobile-list" style={{ marginTop: 12 }}>
                     {vaultNetworkDocs.length ? vaultNetworkDocs.map((row) => (
                       <article className="vault-mobile-card" key={`vault-network-mobile-${row.id}`}>
@@ -81589,21 +81600,39 @@ function formatTicketRequestSource(value?: string) {
                     )) : <div className="vault-mobile-empty">No network or WiFi documents yet.</div>}
                   </div>
                 ) : (
-                  <div className="table-wrap" style={{ marginTop: 12 }}>
-                    <table className="vault-responsive-table">
-                      <thead><tr><th>Title</th><th>Type</th><th>File/Link</th><th>Version</th><th>Review</th><th>Owner</th><th>Note</th><th>{t.edit}</th><th>{t.delete}</th></tr></thead>
-                      <tbody>
-                        {vaultNetworkDocs.length ? vaultNetworkDocs.map((row) => (
-                          <tr key={`vault-network-${row.id}`}>
-                            <td data-label="Title"><strong>{row.title || "-"}</strong></td><td data-label="Type">{row.docType || "-"}</td><td data-label="File / Link">{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</td><td data-label="Version">{row.version || "-"}</td><td data-label="Review">{formatDate(row.lastReview || "-")}</td><td data-label="Owner">{row.owner || "-"}</td><td data-label="Note">{row.note || "-"}</td>
-                            <td data-label={t.edit} className="vault-table-action-cell"><button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultNetwork(row)}>{t.edit}</button></td>
-                            <td data-label={t.delete} className="vault-table-action-cell"><button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("network", row.id)}>X</button></td>
-                          </tr>
-                        )) : <tr className="vault-table-empty-row"><td colSpan={9}>No network or WiFi documents yet.</td></tr>}
-                      </tbody>
-                    </table>
+                  <div className="vault-record-grid" style={{ marginTop: 12 }}>
+                    {vaultNetworkDocs.length ? vaultNetworkDocs.map((row) => (
+                      <article className="vault-record-card" key={`vault-network-desktop-${row.id}`}>
+                        <div className="vault-record-card-head">
+                          <div>
+                            <strong>{row.title || "-"}</strong>
+                            <p>{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "No file link"}</p>
+                          </div>
+                          <span>{row.docType || "-"}</span>
+                        </div>
+                        <div className="vault-record-fields">
+                          <div className="vault-record-field"><span>Version</span><strong>{row.version || "-"}</strong></div>
+                          <div className="vault-record-field"><span>Review</span><strong>{formatDate(row.lastReview || "-")}</strong></div>
+                          <div className="vault-record-field"><span>Owner</span><strong>{row.owner || "-"}</strong></div>
+                          <div className="vault-record-field"><span>Type</span><strong>{row.docType || "-"}</strong></div>
+                          <div className="vault-record-field"><span>File / Link</span><strong>{row.fileUrl ? <a href={row.fileUrl} target="_blank" rel="noreferrer">Open Link</a> : "-"}</strong></div>
+                          <div className="vault-record-field vault-record-field-wide"><span>Note</span><strong>{row.note || "-"}</strong></div>
+                        </div>
+                        <div className="vault-record-actions">
+                          <span />
+                          <button className="tab" disabled={!isAdmin || busy} onClick={() => startEditVaultNetwork(row)}>{t.edit}</button>
+                          <button className="btn-danger" disabled={!isAdmin || busy} onClick={() => void removeVaultRow("network", row.id)}>{t.delete}</button>
+                        </div>
+                      </article>
+                    )) : <div className="vault-mobile-empty">No network or WiFi documents yet.</div>}
                   </div>
-                )}
+                )
+                ) : (
+                <>
+                <div className="vault-register-head">
+                  <h4>{editingVaultNetworkId ? "Edit Network / WiFi Doc" : "Register Network / WiFi Doc"}</h4>
+                  <p>{editingVaultNetworkId ? "Update the selected document record, then save it back to the list." : "Add a topology, WiFi, backup, or network reference document here."}</p>
+                </div>
                 <div className="form-grid" style={{ marginTop: 12 }}>
                   <label className="field"><span>Title</span><input className="input" value={vaultNetworkDocForm.title} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, title: e.target.value }))} placeholder="Main Campus WiFi Map / MikroTik Backup / UniFi AP Layout" /></label>
                   <label className="field"><span>Type</span><input className="input" value={vaultNetworkDocForm.docType} onChange={(e) => setVaultNetworkDocForm((f) => ({ ...f, docType: e.target.value }))} placeholder="Topology / VLAN / WiFi / Backup / ISP" /></label>
@@ -81617,6 +81646,8 @@ function formatTicketRequestSource(value?: string) {
                   <button className="btn-primary" disabled={!isAdmin || busy} onClick={addVaultNetworkDoc}>{editingVaultNetworkId ? "Update Network / WiFi Doc" : "Add Network / WiFi Doc"}</button>
                   {editingVaultNetworkId ? <button className="tab" disabled={!isAdmin || busy} onClick={resetVaultNetworkDocForm}>Cancel Edit</button> : null}
                 </div>
+                </>
+                )}
               </>
             )}
 
