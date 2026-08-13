@@ -151,6 +151,26 @@ every 5 minutes.
 
 This gives you near-automatic deployment from GitHub to your Windows live server.
 
+### Safer one-click Windows updater
+
+If the normal updater ever breaks on the Windows server, use the bootstrap path instead:
+
+```bash
+npm run live:update:bootstrap:windows
+```
+
+Or double-click:
+
+```text
+scripts\windows\live-update.cmd
+```
+
+What it does:
+
+- rewrites `scripts/windows/update-live-from-github.ps1` to the latest safe version
+- runs the normal live update flow
+- avoids the PowerShell `param(...)` startup issue seen on some Windows setups
+
 ### How to prepare it
 
 1. Copy [.env.local-server.example](.env.local-server.example) to `.env`.
