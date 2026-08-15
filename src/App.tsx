@@ -42571,11 +42571,20 @@ export default function App() {
   const upcomingScheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     const in7 = toYmd(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-    return visibleScheduleAssets.filter((a) => (a.nextMaintenanceDate || "") >= today && (a.nextMaintenanceDate || "") <= in7);
+    return visibleScheduleAssets.filter((asset) => {
+      const dueDate = String(asset.nextMaintenanceDate || "").trim();
+      if (!dueDate) return false;
+      if (dueDate < today || dueDate > in7) return false;
+      return !hasCompletedMaintenanceOnDate(asset, dueDate);
+    });
   }, [visibleScheduleAssets]);
   const overdueScheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
-    return visibleScheduleAssets.filter((a) => (a.nextMaintenanceDate || "") < today);
+    return visibleScheduleAssets.filter((asset) => {
+      const dueDate = String(asset.nextMaintenanceDate || "").trim();
+      if (!dueDate || dueDate >= today) return false;
+      return !hasCompletedMaintenanceOnDate(asset, dueDate);
+    });
   }, [visibleScheduleAssets]);
   const overdueMonthOptions = useMemo(() => {
     return Array.from(
