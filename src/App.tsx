@@ -6136,6 +6136,16 @@ function formatMonthYear(value: string) {
   return `${month}-${year}`;
 }
 
+function formatLongMonthYear(value: string) {
+  if (!value || value === "-") return "-";
+  const normalized = /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : value;
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value;
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  const year = date.getFullYear();
+  return `${month} ${year}`;
+}
+
 function formatReportSlashLongDate(value: string | Date) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return typeof value === "string" ? value : "-";
@@ -41811,42 +41821,19 @@ export default function App() {
     });
     return doneKeys;
   }, [resolvedAssets]);
-  const completedScheduleServiceStaffMap = useMemo(() => {
-    const map = new Map<string, Set<string>>();
+  const completedScheduleServiceKeys = useMemo(() => {
+    const doneKeys = new Set<string>();
     resolvedAssets.forEach((asset) => {
       (asset.maintenanceHistory || []).forEach((entry) => {
         if (String(entry.completion || "") !== "Done") return;
         const sourceDate = String(entry.scheduleSourceDate || entry.date || "").trim();
         const taskId = String(entry.scheduleTaskId || "").trim();
         if (!sourceDate || !taskId || String(entry.scheduleTaskKind || "").trim() !== "service") return;
-        const key = `${asset.campus}||${sourceDate}||${taskId}`;
-        const current = map.get(key) || new Set<string>();
-        splitServiceTaskStaffNames(entry.by).forEach((name) => current.add(name.toLowerCase()));
-        if (String(entry.by || "").trim()) {
-          current.add(String(entry.by || "").trim().toLowerCase());
-        }
-        map.set(key, current);
+        doneKeys.add(`${asset.campus}||${sourceDate}||${taskId}`);
       });
     });
-    return map;
-  }, [resolvedAssets]);
-  const completedScheduleServiceKeys = useMemo(() => {
-    const doneKeys = new Set<string>();
-    calendarEvents.forEach((row) => {
-      if (!isServiceTaskCalendarType(normalizeCalendarEventType(row.type))) return;
-      const parsed = parseServiceScheduleEvent(row);
-      const key = `${parsed.campus}||${String(row.date || "").trim()}||${String(row.id || "").trim()}`;
-      const completedStaff = completedScheduleServiceStaffMap.get(key) || new Set<string>();
-      const assignedStaff = Array.from(
-        new Set((parsed.assignedStaff || []).map((name) => String(name || "").trim().toLowerCase()).filter(Boolean))
-      );
-      const isCompleted = assignedStaff.length
-        ? assignedStaff.every((name) => completedStaff.has(name))
-        : completedStaff.size > 0;
-      if (isCompleted) doneKeys.add(key);
-    });
     return doneKeys;
-  }, [calendarEvents, completedScheduleServiceStaffMap, isServiceTaskCalendarType, parseServiceScheduleEvent]);
+  }, [resolvedAssets]);
   const latestCompletedAssetMap = useMemo(() => {
     const map = new Map<string, string>();
     resolvedAssets.forEach((asset) => {
@@ -41883,6 +41870,22 @@ export default function App() {
     });
     return map;
   }, [resolvedAssets]);
+  const isServiceScheduleCompleted = useCallback(
+    (campus: string, date: string, taskId: string) => {
+      const normalizedCampus = String(campus || "").trim();
+      const normalizedDate = normalizeLooseDateToYmd(String(date || "").trim());
+      const normalizedTaskId = String(taskId || "").trim();
+      if (!normalizedCampus || !normalizedDate || !normalizedTaskId) return false;
+      if (completedScheduleServiceKeys.has(`${normalizedCampus}||${normalizedDate}||${normalizedTaskId}`)) {
+        return true;
+      }
+      const latestDone = normalizeLooseDateToYmd(
+        latestCompletedServiceMap.get(`${normalizedCampus}||${normalizedTaskId}`) || ""
+      );
+      return Boolean(latestDone && latestDone === normalizedDate);
+    },
+    [completedScheduleServiceKeys, latestCompletedServiceMap]
+  );
   const reportScheduleCalendarRows = useMemo(() => {
     const [yearText, monthText] = reportScheduleMonth.split("-");
     const year = Number(yearText);
@@ -41991,7 +41994,7 @@ export default function App() {
       if (reportScheduleCampusFilter !== "ALL" && row.campus === "ALL") return;
       if (reportScheduleGroupFilter !== "ALL" && row.scheduleGroup !== reportScheduleGroupFilter) return;
       if (!row.date || row.date < startYmd || row.date > endYmd) return;
-      const isCompleted = completedScheduleServiceKeys.has(`${row.campus}||${row.date}||${row.id.replace(/^service-/, "")}`);
+      const isCompleted = isServiceScheduleCompleted(row.campus, row.date, row.id.replace(/^service-/, ""));
       const key = [row.date, row.campus, row.scheduleGroup, row.scheduleNote, row.entryLabel, isCompleted ? "done" : "pending"].join("||");
       grouped.set(key, {
         key,
@@ -42039,6 +42042,7 @@ export default function App() {
   }, [
     completedScheduleAssetKeys,
     completedScheduleServiceKeys,
+    isServiceScheduleCompleted,
     reportScheduleAssets,
     reportScheduleServiceRows,
     reportScheduleMonth,
@@ -42139,7 +42143,7 @@ export default function App() {
       if (reportScheduleCampusFilter !== "ALL" && row.campus === "ALL") return;
       if (reportScheduleGroupFilter !== "ALL" && row.scheduleGroup !== reportScheduleGroupFilter) return;
       if (!row.date || row.date < startYmd || row.date > endYmd) return;
-      const isCompleted = completedScheduleServiceKeys.has(`${row.campus}||${row.date}||${row.id.replace(/^service-/, "")}`);
+      const isCompleted = isServiceScheduleCompleted(row.campus, row.date, row.id.replace(/^service-/, ""));
       rows.push({
         key: `${row.id}||${isCompleted ? "done" : "pending"}`,
         date: row.date,
@@ -42171,6 +42175,7 @@ export default function App() {
     assetItemName,
     completedScheduleAssetKeys,
     completedScheduleServiceKeys,
+    isServiceScheduleCompleted,
     inferScheduleGroupValue,
     lang,
     reportScheduleAssets,
@@ -42429,7 +42434,7 @@ export default function App() {
       .filter((row) => isServiceTaskCalendarType(normalizeCalendarEventType(row.type)))
       .map((row) => {
         const parsed = parseServiceScheduleEvent(row);
-        const completed = completedScheduleServiceKeys.has(`${parsed.campus}||${String(row.date || "")}||${String(row.id || "")}`);
+        const completed = isServiceScheduleCompleted(parsed.campus, String(row.date || ""), String(row.id || ""));
         const displayTime = serviceScheduleDisplayTime(row, parsed.note, lang);
         const displayNote = serviceScheduleDisplayNote(parsed.note);
         return {
@@ -42483,6 +42488,7 @@ export default function App() {
     parseServiceScheduleEvent,
     completedScheduleAssetKeys,
     completedScheduleServiceKeys,
+    isServiceScheduleCompleted,
     scheduleGroupFilter,
     scheduleListStatusFilter,
     scheduleListRows,
@@ -43602,6 +43608,30 @@ export default function App() {
     maintenanceCompletionLatestRowByAssetId,
     maintenanceCompletionTargetAssets,
   ]);
+  const reportMaintenanceMonthValue = reportDateFrom.slice(0, 7);
+  const reportMaintenanceMonthOptions = useMemo(() => {
+    const anchorMonth = /^\d{4}-\d{2}$/.test(reportMaintenanceMonthValue)
+      ? `${reportMaintenanceMonthValue}-01`
+      : `${toYmd(new Date()).slice(0, 7)}-01`;
+    const anchorDate = new Date(anchorMonth);
+    const safeAnchor = Number.isNaN(anchorDate.getTime()) ? new Date() : anchorDate;
+    const values = new Set<string>();
+    for (let offset = -24; offset <= 12; offset += 1) {
+      const value = toYmd(new Date(safeAnchor.getFullYear(), safeAnchor.getMonth() + offset, 1)).slice(0, 7);
+      values.add(value);
+    }
+    values.add(toYmd(new Date()).slice(0, 7));
+    if (/^\d{4}-\d{2}$/.test(reportMaintenanceMonthValue)) {
+      values.add(reportMaintenanceMonthValue);
+    }
+    return Array.from(values)
+      .sort((a, b) => b.localeCompare(a))
+      .map((value) => ({
+        value,
+        label: formatLongMonthYear(value),
+        searchText: `${value} ${formatMonthYear(value)} ${formatLongMonthYear(value)}`,
+      }));
+  }, [reportMaintenanceMonthValue]);
   const reportMaintenanceItemOptions = useMemo(() => {
     return Array.from(
       new Set(
@@ -74009,12 +74039,9 @@ function formatTicketRequestSource(value?: string) {
                         ? "Template រហ័សនេះជួយជ្រើសមុខទំនិញសំខាន់ៗជាមុន។ ប្រសិនបើចង់កែដោយដៃ សូមប្តូរទៅ Custom / Manual។"
                         : "This quick template preselects the main items for you. Use Custom / Manual if you want to choose everything yourself.")}
                   </div>
-                  <input
-                    className="input"
-                    type="month"
-                    value={reportDateFrom.slice(0, 7)}
-                    onChange={(e) => {
-                      const month = e.target.value;
+                  <LocationPicker
+                    value={reportMaintenanceMonthValue}
+                    onChange={(month) => {
                       if (!month) return;
                       const [yearText, monthText] = month.split("-");
                       const year = Number(yearText);
@@ -74025,6 +74052,11 @@ function formatTicketRequestSource(value?: string) {
                       setReportDateFrom(start);
                       setReportDateTo(end);
                     }}
+                    className="report-campus-picker"
+                    options={reportMaintenanceMonthOptions}
+                    placeholder={lang === "km" ? "ជ្រើសខែ" : "Select month"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកខែ..." : "Search month..."}
+                    emptyText={lang === "km" ? "មិនមានខែ" : "No month found."}
                   />
                   <input
                     className="input"
