@@ -41860,11 +41860,10 @@ export default function App() {
         if (!taskId || String(entry.scheduleTaskKind || "").trim() !== "service") return;
         const compareDate = String(entry.scheduleSourceDate || entry.date || "").trim();
         if (!compareDate) return;
-        const displayDate = String(entry.date || compareDate).trim();
         const key = `${asset.campus}||${taskId}`;
         const current = map.get(key) || "";
         if (!current || compareDate > current) {
-          map.set(key, displayDate);
+          map.set(key, compareDate);
         }
       });
     });
