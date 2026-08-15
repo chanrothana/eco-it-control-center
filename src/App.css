@@ -29242,13 +29242,24 @@ tr.row-maint-maintenance:hover td {
   font-size: 12px;
   letter-spacing: 0.04em;
   font-weight: 700;
-  padding: 6px 12px;
+  padding: 7px 12px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 8px 20px rgba(27, 59, 110, 0.12);
 }
 
 .version-badge-btn:hover {
   border-color: #89a8d9;
   color: #20437a;
+}
+
+.version-badge-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.72;
 }
 
 .footnote-error {

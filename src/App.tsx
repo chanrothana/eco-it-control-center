@@ -15248,6 +15248,23 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+  const appVersionBadgeLabel = useMemo(() => {
+    const version = String(appVersionBadge || "").trim() || APP_VERSION;
+    if (/^v?\d+\.\d+\.\d+-[a-f0-9]{7,}$/i.test(version)) {
+      return `Live Build ${version}`;
+    }
+    return `Build ${version}`;
+  }, [appVersionBadge]);
+  const appVersionBadgeTitle = useMemo(() => {
+    if (appVersionBadgeLabel.startsWith("Live Build ")) {
+      return lang === "km"
+        ? `កំពុងដំណើរការ ${appVersionBadgeLabel}. ចុចដើម្បីមើលកំណត់ត្រាកំណែ។`
+        : `Running ${appVersionBadgeLabel}. Click to view update notes.`;
+    }
+    return lang === "km"
+      ? `កំពុងដំណើរការ ${appVersionBadgeLabel}. ប្រសិនបើមិនឃើញ commit សូមពិនិត្យ /api/health។`
+      : `Running ${appVersionBadgeLabel}. If no commit is shown, verify /api/health.`;
+  }, [appVersionBadgeLabel, lang]);
 
   useEffect(() => {
     if (rememberLogin) {
@@ -85169,9 +85186,10 @@ function formatTicketRequestSource(value?: string) {
             type="button"
             className="version-badge-btn"
             onClick={() => setUpdateNotesOpen(true)}
-            title={lang === "km" ? "មើលកំណត់ត្រាកំណែ" : "View update notes"}
+            title={appVersionBadgeTitle}
           >
-            {appVersionBadge}
+            <span className="version-badge-label">{lang === "km" ? "កំណែ" : "Version"}</span>
+            <strong>{appVersionBadgeLabel}</strong>
           </button>
         </div>
       </section>
