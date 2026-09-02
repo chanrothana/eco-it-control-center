@@ -31,7 +31,7 @@
     "start:safe": "node scripts/start-safe.js",
     "start:phone": "node scripts/start-safe.js --phone",
     "api": "node server/server.js",
-    "start:prod": "node server/server.js",
+    "start:prod": "node scripts/start-prod-safe.js",
     "start:all": "npm run start",
     "live:start:windows": "powershell -ExecutionPolicy Bypass -File scripts/windows/start-live-server.ps1",
     "live:update:bootstrap:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/bootstrap-live-update.ps1",

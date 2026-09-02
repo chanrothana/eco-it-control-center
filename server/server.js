@@ -2087,6 +2087,35 @@ function parseGeneratorSpecs(specsRaw) {
   };
 }
 
+function parseHourMeterReading(value) {
+  const text = toText(value).trim();
+  if (!text) return null;
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatHourMeterReading(value, sourceText = "") {
+  if (!Number.isFinite(value)) return "";
+  const rounded = Math.round(value * 100) / 100;
+  const whole = Math.abs(rounded - Math.round(rounded)) < 0.001;
+  const display = whole ? String(Math.round(rounded)) : String(rounded.toFixed(2)).replace(/\.?0+$/, "");
+  return /(^|\s)h\b/i.test(toText(sourceText).trim()) ? `${display} h` : display;
+}
+
+function calculateGeneratorHourMeterStop(startAt, stopAt, startReadingText) {
+  const startReading = parseHourMeterReading(startReadingText);
+  if (startReading == null) return "";
+  const startDate = new Date(toText(startAt).trim());
+  const stopDate = new Date(toText(stopAt).trim());
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(stopDate.getTime())) return "";
+  const diffMs = stopDate.getTime() - startDate.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return "";
+  const diffHours = diffMs / (1000 * 60 * 60);
+  return formatHourMeterReading(startReading + diffHours, startReadingText);
+}
+
 function buildGeneratorSpecs(baseSpecs, power, frequency, options = {}) {
   const normalized = parseGeneratorSpecs(baseSpecs);
   const out = [];
@@ -2314,12 +2343,13 @@ function calcInventoryCurrentStock(item, txns, excludeTxnId = 0) {
   return stock;
 }
 
-const INVENTORY_OUT_DUPLICATE_WINDOW_MS = 15 * 1000;
+const INVENTORY_DUPLICATE_WINDOW_MS = 15 * 1000;
+const INVENTORY_TELEGRAM_DEDUPE_WINDOW_MS = 10 * 60 * 1000;
 
-function isDuplicateInventoryOutTxn(existingRow, incomingRow, nowMs = Date.now()) {
+function isDuplicateInventoryTxn(existingRow, incomingRow, nowMs = Date.now()) {
   const existingId = Number(existingRow && existingRow.id) || 0;
   if (!existingId) return false;
-  if (Math.abs(nowMs - existingId) > INVENTORY_OUT_DUPLICATE_WINDOW_MS) return false;
+  if (Math.abs(nowMs - existingId) > INVENTORY_DUPLICATE_WINDOW_MS) return false;
   return (
     Number(existingRow && existingRow.itemId) === Number(incomingRow && incomingRow.itemId) &&
     toText(existingRow && existingRow.date) === toText(incomingRow && incomingRow.date) &&
@@ -2329,6 +2359,38 @@ function isDuplicateInventoryOutTxn(existingRow, incomingRow, nowMs = Date.now()
     toText(existingRow && existingRow.note).trim() === toText(incomingRow && incomingRow.note).trim() &&
     toText(existingRow && existingRow.photo).trim() === toText(incomingRow && incomingRow.photo).trim()
   );
+}
+
+function getInventoryTxnTimestampMs(row) {
+  const createdAt = Date.parse(toText(row && row.created));
+  if (Number.isFinite(createdAt) && createdAt > 0) return createdAt;
+  const idMs = Number(row && row.id) || 0;
+  return idMs > 0 ? idMs : 0;
+}
+
+function isSameInventoryTelegramTxn(existingRow, incomingRow) {
+  return (
+    Number(existingRow && existingRow.itemId) === Number(incomingRow && incomingRow.itemId) &&
+    toText(existingRow && existingRow.date) === toText(incomingRow && incomingRow.date) &&
+    normalizeInventoryTxnType(existingRow && existingRow.type) === normalizeInventoryTxnType(incomingRow && incomingRow.type) &&
+    Math.max(0, Number(existingRow && existingRow.qty) || 0) === Math.max(0, Number(incomingRow && incomingRow.qty) || 0) &&
+    toText(existingRow && existingRow.by).trim().toLowerCase() === toText(incomingRow && incomingRow.by).trim().toLowerCase() &&
+    toText(existingRow && existingRow.note).trim() === toText(incomingRow && incomingRow.note).trim() &&
+    toText(existingRow && existingRow.photo).trim() === toText(incomingRow && incomingRow.photo).trim()
+  );
+}
+
+function hasRecentTelegramAlertForInventoryTxn(txns, incomingRow) {
+  const incomingTs = getInventoryTxnTimestampMs(incomingRow);
+  if (!incomingTs) return false;
+  return normalizeInventoryTxns(txns).some((row) => {
+    if (Number(row && row.id) === Number(incomingRow && incomingRow.id)) return false;
+    if (!Array.isArray(row && row.telegramMessageRefs) || !row.telegramMessageRefs.length) return false;
+    if (!isSameInventoryTelegramTxn(row, incomingRow)) return false;
+    const rowTs = getInventoryTxnTimestampMs(row);
+    if (!rowTs) return false;
+    return Math.abs(incomingTs - rowTs) <= INVENTORY_TELEGRAM_DEDUPE_WINDOW_MS;
+  });
 }
 
 function normalizeVaultAccounts(input) {
@@ -11214,11 +11276,27 @@ const server = http.createServer(async (req, res) => {
           ? db.settings
           : { campusNames: {}, staffUsers: [], calendarEvents: [], inventoryItems: [], inventoryTxns: [] };
       const normalizedSettings = normalizeImportedDb({ settings }).settings;
+      const includeParam = toText(url.searchParams.get("include")).trim().toLowerCase();
+      const includeSet = new Set(
+        includeParam
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+      );
+      const requestedSettings =
+        includeSet.size > 0 && !includeSet.has("full")
+          ? Object.fromEntries(
+              Object.entries({
+                ...settings,
+                ...normalizedSettings,
+              }).filter(([key]) => includeSet.has(String(key || "").trim().toLowerCase()))
+            )
+          : {
+              ...settings,
+              ...normalizedSettings,
+            };
       sendJson(res, 200, {
-        settings: {
-          ...settings,
-          ...normalizedSettings,
-        },
+        settings: requestedSettings,
       });
       return;
     }
@@ -12594,8 +12672,8 @@ const server = http.createServer(async (req, res) => {
         note: toText(body.note),
         photo,
       };
-      if (type === "OUT" && !isCampusTransfer && !forceAlert) {
-        const duplicateTxn = txns.find((row) => isDuplicateInventoryOutTxn(row, duplicateTxnPayload));
+      if ((type === "OUT" || type === "IN") && !isCampusTransfer && !forceAlert) {
+        const duplicateTxn = txns.find((row) => isDuplicateInventoryTxn(row, duplicateTxnPayload));
         if (duplicateTxn) {
           sendJson(res, 200, {
             txn: duplicateTxn,
@@ -12741,18 +12819,23 @@ const server = http.createServer(async (req, res) => {
       await writeDb(db);
       let telegramAlertSent = false;
       if (normalizeInventoryTxnType(txn.type) === "OUT" || normalizeInventoryTxnType(txn.type) === "IN") {
-        let telegramReport = null;
-        if (normalizeInventoryTxnType(txn.type) === "OUT" && approvalStatus === "PENDING") {
-          telegramReport = await sendTelegramInventoryOutApprovalAlert(txn, approverTargets, db);
-        } else {
-          telegramReport = await sendTelegramInventoryTxnRecordedAlert(txn, db);
-        }
-        telegramAlertSent = Boolean(telegramReport && telegramReport.ok);
-        if (telegramAlertSent) {
-          txn.telegramMessageRefs = normalizeTelegramMessageRefs(telegramReport && telegramReport.messageRefs);
-          nextTxns[0] = txn;
-          setInventoryState(db, settings, items, nextTxns);
-          await writeDb(db);
+        const skipDuplicateTelegramAlert =
+          (normalizeInventoryTxnType(txn.type) === "OUT" || normalizeInventoryTxnType(txn.type) === "IN") &&
+          hasRecentTelegramAlertForInventoryTxn(txns, txn);
+        if (!skipDuplicateTelegramAlert) {
+          let telegramReport = null;
+          if (normalizeInventoryTxnType(txn.type) === "OUT" && approvalStatus === "PENDING") {
+            telegramReport = await sendTelegramInventoryOutApprovalAlert(txn, approverTargets, db);
+          } else {
+            telegramReport = await sendTelegramInventoryTxnRecordedAlert(txn, db);
+          }
+          telegramAlertSent = Boolean(telegramReport && telegramReport.ok);
+          if (telegramAlertSent) {
+            txn.telegramMessageRefs = normalizeTelegramMessageRefs(telegramReport && telegramReport.messageRefs);
+            nextTxns[0] = txn;
+            setInventoryState(db, settings, items, nextTxns);
+            await writeDb(db);
+          }
         }
       }
       sendJson(res, 201, { txn, txns: nextTxnsToCreate, telegramAlertSent, duplicateSuppressed: false });
@@ -13073,8 +13156,9 @@ const server = http.createServer(async (req, res) => {
       } else {
         const startAt = toText(body.startAt).trim();
         const stopAt = toText(body.stopAt).trim();
-        const hourMeterStart = toText(body.hourMeterStart).trim();
-        const hourMeterStop = toText(body.hourMeterStop).trim();
+        const hourMeterStart = toText(body.hourMeterStart).trim() || generator.hourMeter;
+        const hourMeterStop =
+          toText(body.hourMeterStop).trim() || calculateGeneratorHourMeterStop(startAt, stopAt, hourMeterStart);
         const extraNote = toText(body.note).trim();
         const date = normalizeLooseDateToYmd(startAt.slice(0, 10)) || normalizeLooseDateToYmd(startAt);
         if (!startAt || !stopAt || !date) {

@@ -5669,7 +5669,7 @@ h2 {
 }
 
 .report-filter-row-inventory {
-  grid-template-columns: repeat(5, minmax(0, 1fr)) 54px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   justify-content: start;
   align-items: end;
 }
@@ -5677,7 +5677,7 @@ h2 {
 .report-filter-row-inventory .report-filter-reset-btn-icon-only {
   width: 54px;
   min-width: 54px;
-  justify-self: stretch;
+  justify-self: end;
 }
 
 .report-filters {
@@ -5742,7 +5742,7 @@ h2 {
   }
 
   .report-filter-row-inventory {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -6056,6 +6056,12 @@ h2 {
   justify-content: flex-start;
   padding: 0 14px;
   font-size: 14px;
+}
+
+.report-inline-field-check-compact .report-checkbox {
+  min-height: 52px;
+  padding: 0 14px;
+  white-space: nowrap;
 }
 
 .report-builder-it-vault .input,
@@ -16975,6 +16981,34 @@ label.backup-action-btn {
   color: #00353a;
 }
 
+.quickout-eco-grid .calendar-day.calendar-holiday-pest_service {
+  background: linear-gradient(180deg, #b985f3, #8a5ae0);
+  border-color: #6b3fc0;
+  color: #ffffff;
+  box-shadow: 0 12px 22px rgba(75, 31, 125, 0.24);
+}
+
+.quickout-eco-grid .calendar-day.calendar-holiday-pool_clean {
+  background: linear-gradient(180deg, #43c7a5, #23987b);
+  border-color: #19745d;
+  color: #ffffff;
+  box-shadow: 0 12px 22px rgba(24, 94, 73, 0.22);
+}
+
+.quickout-eco-grid .calendar-day.calendar-holiday-submit_report {
+  background: linear-gradient(180deg, #f4c66a, #dd9f2d);
+  border-color: #b97d12;
+  color: #4a3200;
+  box-shadow: 0 12px 22px rgba(139, 92, 16, 0.2);
+}
+
+.quickout-eco-grid .calendar-day.calendar-holiday-monthly_submit_request {
+  background: linear-gradient(180deg, #7bb4ff, #4e86dd);
+  border-color: #3265b8;
+  color: #ffffff;
+  box-shadow: 0 12px 22px rgba(38, 80, 153, 0.22);
+}
+
 .quickout-eco-grid .calendar-day.calendar-holiday span,
 .quickout-eco-grid .calendar-day[class*="calendar-holiday-"] span {
   color: inherit !important;
@@ -17131,6 +17165,34 @@ label.backup-action-btn {
   background: linear-gradient(180deg, #19d7e2, #11aeb8);
   border-color: #0d8992;
   color: #00353a;
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-pest_service {
+  background: linear-gradient(180deg, #b985f3, #8a5ae0);
+  border-color: #6b3fc0;
+  color: #ffffff;
+  box-shadow: 0 12px 22px rgba(75, 31, 125, 0.24);
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-pool_clean {
+  background: linear-gradient(180deg, #43c7a5, #23987b);
+  border-color: #19745d;
+  color: #ffffff;
+  box-shadow: 0 12px 22px rgba(24, 94, 73, 0.22);
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-submit_report {
+  background: linear-gradient(180deg, #f4c66a, #dd9f2d);
+  border-color: #b97d12;
+  color: #4a3200;
+  box-shadow: 0 12px 22px rgba(139, 92, 16, 0.2);
+}
+
+.maintenance-datetime-eco-grid .calendar-day.calendar-holiday-monthly_submit_request {
+  background: linear-gradient(180deg, #7bb4ff, #4e86dd);
+  border-color: #3265b8;
+  color: #ffffff;
+  box-shadow: 0 12px 22px rgba(38, 80, 153, 0.22);
 }
 
 .maintenance-datetime-eco-grid .calendar-day.calendar-holiday span,
@@ -28778,6 +28840,30 @@ tr.row-maint-maintenance:hover td {
   color: #00353a;
 }
 
+.calendar-type-pest_service {
+  background: #9a68eb;
+  border-color: #7345c7;
+  color: #fff;
+}
+
+.calendar-type-pool_clean {
+  background: #2eae8e;
+  border-color: #1f846a;
+  color: #fff;
+}
+
+.calendar-type-submit_report {
+  background: #e6ae3c;
+  border-color: #ba8418;
+  color: #4a3200;
+}
+
+.calendar-type-monthly_submit_request {
+  background: #5f97ea;
+  border-color: #3d6fbe;
+  color: #fff;
+}
+
 /* In day cells, show event label as plain text (no rounded badge box). */
 .calendar-day .calendar-event-tag {
   display: none !important;
@@ -29242,13 +29328,24 @@ tr.row-maint-maintenance:hover td {
   font-size: 12px;
   letter-spacing: 0.04em;
   font-weight: 700;
-  padding: 6px 12px;
+  padding: 7px 12px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 8px 20px rgba(27, 59, 110, 0.12);
 }
 
 .version-badge-btn:hover {
   border-color: #89a8d9;
   color: #20437a;
+}
+
+.version-badge-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.72;
 }
 
 .footnote-error {
@@ -29803,6 +29900,39 @@ tr.row-maint-maintenance:hover td {
   justify-content: center;
   min-height: 46px;
   font-weight: 700;
+}
+
+.generator-record-toggle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.generator-record-toggle-btn {
+  margin: 0;
+}
+
+.generator-fuel-record-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.generator-eco-date-field {
+  min-width: 0;
+}
+
+.generator-eco-date-field .quickout-date-field {
+  min-width: 0;
+}
+
+.generator-usage-datetime-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  gap: 10px;
+  align-items: center;
+}
+
+.generator-usage-time-input {
+  min-width: 0;
 }
 
 .asset-detail-rich-value {
@@ -37189,6 +37319,18 @@ tr.row-maint-maintenance:hover td {
     min-height: 48px;
     border-radius: 14px;
     font-size: 14px;
+  }
+
+  .generator-record-toggle-row {
+    grid-template-columns: 1fr;
+  }
+
+  .generator-fuel-record-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .generator-usage-datetime-row {
+    grid-template-columns: 1fr;
   }
 
   .asset-detail-rich-value {

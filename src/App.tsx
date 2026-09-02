@@ -2638,7 +2638,15 @@ function getStoredApiBaseOverride() {
   try {
     const stored = String(localStorage.getItem(API_BASE_OVERRIDE_KEY) || "").trim().replace(/\/+$/, "");
     if (!stored) return "";
-    if (!isLocalDevHost(window.location.hostname)) return stored;
+    if (!isLocalDevHost(window.location.hostname)) {
+      try {
+        const parsed = new URL(stored);
+        if (isLocalDevHost(parsed.hostname)) return "";
+        return stored;
+      } catch {
+        return stored.startsWith("/") ? stored : "";
+      }
+    }
     try {
       const parsed = new URL(stored);
       if (isLocalDevHost(parsed.hostname)) return stored;
@@ -4268,9 +4276,9 @@ async function requestJson<T>(url: string, init?: ApiRequestInit): Promise<T> {
   if (url.startsWith("/api/")) {
     if (effectiveApiBaseOverride) candidates.push(`${effectiveApiBaseOverride}${url}`);
     if (ENV_API_BASE_URL) candidates.push(`${ENV_API_BASE_URL}${url}`);
-    if (!effectiveApiBaseOverride && !ENV_API_BASE_URL) {
-      candidates.push(url);
-      if (autoApiBase) candidates.push(`${autoApiBase}${url}`);
+    candidates.push(url);
+    if (!effectiveApiBaseOverride && !ENV_API_BASE_URL && autoApiBase) {
+      candidates.push(`${autoApiBase}${url}`);
     }
   }
 
@@ -9425,6 +9433,69 @@ function toDateTimeLocalValue(date = new Date()) {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
+function extractDateFromDateTimeLocalValue(value: string) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}$/);
+  if (match) return match[1];
+  return normalizeLooseDateToYmd(text);
+}
+
+function extractTimeFromDateTimeLocalValue(value: string) {
+  const text = String(value || "").trim();
+  const match = text.match(/T(\d{2}:\d{2})$/);
+  if (match) return match[1];
+  const parsed = new Date(text.replace(/\s+/, "T"));
+  if (Number.isNaN(parsed.getTime())) return "";
+  return toHm(parsed);
+}
+
+function mergeDateAndTimeParts(dateValue: string, timeValue: string) {
+  const date = normalizeYmdInput(dateValue) || toYmd(new Date());
+  const time = /^\d{2}:\d{2}$/.test(String(timeValue || "").trim()) ? String(timeValue || "").trim() : "00:00";
+  return `${date}T${time}`;
+}
+
+function parseHourMeterReading(value: string) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatHourMeterReading(value: number, sourceText = "") {
+  if (!Number.isFinite(value)) return "";
+  const rounded = Math.round(value * 100) / 100;
+  const whole = Math.abs(rounded - Math.round(rounded)) < 0.001;
+  const display = whole ? String(Math.round(rounded)) : rounded.toFixed(2).replace(/\.?0+$/, "");
+  return /(^|\s)h\b/i.test(String(sourceText || "").trim()) ? `${display} h` : display;
+}
+
+function calculateGeneratorHourMeterStop(startAt: string, stopAt: string, startReadingText: string) {
+  const startReading = parseHourMeterReading(startReadingText);
+  if (startReading == null) return "";
+  const startDate = new Date(String(startAt || "").trim());
+  const stopDate = new Date(String(stopAt || "").trim());
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(stopDate.getTime())) return "";
+  const diffMs = stopDate.getTime() - startDate.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return "";
+  const diffHours = diffMs / (1000 * 60 * 60);
+  return formatHourMeterReading(startReading + diffHours, startReadingText);
+}
+
+function formatGeneratorRunDuration(startAt: string, stopAt: string) {
+  const startDate = new Date(String(startAt || "").trim());
+  const stopDate = new Date(String(stopAt || "").trim());
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(stopDate.getTime())) return "";
+  const diffMs = stopDate.getTime() - startDate.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return "";
+  const totalMinutes = Math.round(diffMs / (1000 * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
 function normalizeAssetForUi(asset: Asset): Asset {
   const photos = normalizeAssetPhotos(asset);
   const normalizeUrl = (raw: string) => {
@@ -9670,6 +9741,8 @@ type InventoryItemPickerProps = {
   disabled?: boolean;
   getLabel: (item: InventoryItem) => string;
 };
+
+const INVENTORY_PICKER_MAX_RESULTS = 200;
 
 type ParentAssetPickerProps = {
   value: string;
@@ -10580,13 +10653,13 @@ function InventoryItemPicker({
 
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) => {
+    const nextItems = !q ? items : items.filter((item) => {
       const label = getLabel(item);
       return `${item.itemCode} ${item.itemName} ${item.campus} ${item.category} ${label}`
         .toLowerCase()
         .includes(q);
     });
+    return nextItems.slice(0, INVENTORY_PICKER_MAX_RESULTS);
   }, [items, deferredSearch, getLabel]);
 
   const selectItem = useCallback(
@@ -10631,26 +10704,33 @@ function InventoryItemPicker({
           />
           <div className="asset-picker-list">
             {filtered.length ? (
-              filtered.map((item) => (
-                <button
-                  type="button"
-                  key={`inventory-picker-${item.id}`}
-                  className={`asset-picker-option ${String(item.id) === value ? "asset-picker-option-active" : ""}`}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    selectItem(String(item.id));
-                  }}
-                  onClick={() => selectItem(String(item.id))}
-                >
-                  {item.photo ? (
-                    <img loading="lazy" decoding="async" src={item.photo} alt={item.itemCode} className="asset-picker-thumb" />
-                  ) : (
-                    <span className="asset-picker-thumb-empty">-</span>
-                  )}
-                  <span>{getLabel(item)}</span>
-                </button>
-              ))
+              <>
+                {filtered.map((item) => (
+                  <button
+                    type="button"
+                    key={`inventory-picker-${item.id}`}
+                    className={`asset-picker-option ${String(item.id) === value ? "asset-picker-option-active" : ""}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      selectItem(String(item.id));
+                    }}
+                    onClick={() => selectItem(String(item.id))}
+                  >
+                    {item.photo ? (
+                      <img loading="lazy" decoding="async" src={item.photo} alt={item.itemCode} className="asset-picker-thumb" />
+                    ) : (
+                      <span className="asset-picker-thumb-empty">-</span>
+                    )}
+                    <span>{getLabel(item)}</span>
+                  </button>
+                ))}
+                {!deferredSearch.trim() && items.length > INVENTORY_PICKER_MAX_RESULTS ? (
+                  <div className="asset-picker-empty">
+                    Showing first {INVENTORY_PICKER_MAX_RESULTS} items. Type to search more.
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div className="asset-picker-empty">No items found.</div>
             )}
@@ -11122,6 +11202,7 @@ export default function App() {
   const [locationTagCopies, setLocationTagCopies] = useState("8");
   const [reportInventoryMode, setReportInventoryMode] = useState<"all" | "low">("all");
   const [reportInventoryViewMode, setReportInventoryViewMode] = useState<"list" | "campus_compare">("list");
+  const [reportInventoryHideZeroAmount, setReportInventoryHideZeroAmount] = useState(false);
   const [reportInventoryCompareSort, setReportInventoryCompareSort] = useState<{
     key: "item" | "totalStock" | "campus";
     direction: "asc" | "desc";
@@ -11147,9 +11228,10 @@ export default function App() {
   }>(null);
   const [reportInventoryGroupFilter, setReportInventoryGroupFilter] = useState<
     "ALL" | "SUPPLY" | "CLEAN_TOOL" | "MAINT_TOOL" | "GARDEN_TOOL" | "POOL_TOOL"
-  >("CLEAN_TOOL");
+  >("ALL");
   const [reportInventoryCampusFilter, setReportInventoryCampusFilter] = useState<string[]>(["ALL"]);
   const [reportInventoryPropertyFilter, setReportInventoryPropertyFilter] = useState<ReportInventoryPropertyFilter>("AUTO");
+  const [reportInventoryReviewMonth, setReportInventoryReviewMonth] = useState(() => toYmd(new Date()).slice(0, 7));
   const canUsePrinterCounterOcr = true;
   const openInventorySection = useCallback(
     (
@@ -12272,8 +12354,9 @@ export default function App() {
     direction: "asc",
   });
   const [staffBorrowingCampusFilter, setStaffBorrowingCampusFilter] = useState<string[]>(["ALL"]);
+  const [staffBorrowingCategoryFilter, setStaffBorrowingCategoryFilter] = useState<string[]>(["ALL"]);
   const [staffBorrowingAssignedToFilter, setStaffBorrowingAssignedToFilter] = useState("ALL");
-  const [staffBorrowingLocationFilter, setStaffBorrowingLocationFilter] = useState("ALL");
+  const [staffBorrowingItemNameFilter, setStaffBorrowingItemNameFilter] = useState("ALL");
   const [assetMasterCampusFilter, setAssetMasterCampusFilter] = useState<string[]>(["ALL"]);
   const [assetMasterCategoryFilter, setAssetMasterCategoryFilter] = useState<string[]>(["ALL"]);
   const [assetMasterItemFilter, setAssetMasterItemFilter] = useState<string[]>(["ALL"]);
@@ -15127,6 +15210,7 @@ export default function App() {
   });
   const [quickOutEcoSelectedDate, setQuickOutEcoSelectedDate] = useState(() => toYmd(new Date()));
   const [editingInventoryTxnId, setEditingInventoryTxnId] = useState<number | null>(null);
+  const [inventoryTxnEditModalOpen, setInventoryTxnEditModalOpen] = useState(false);
   const [inventoryTxnEditForm, setInventoryTxnEditForm] = useState({
     itemId: "",
     date: toYmd(new Date()),
@@ -15134,6 +15218,12 @@ export default function App() {
     qty: "",
     by: "",
     note: "",
+    fromCampus: "",
+    toCampus: "",
+    expectedReturnDate: "",
+    requestedBy: "",
+    approvedBy: "",
+    receivedBy: "",
   });
   const [inventoryItemFilterCampus, setInventoryItemFilterCampus] = useState("ALL");
   const [inventoryItemFilterGroup, setInventoryItemFilterGroup] = useState("ALL");
@@ -15248,6 +15338,23 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+  const appVersionBadgeLabel = useMemo(() => {
+    const version = String(appVersionBadge || "").trim() || APP_VERSION;
+    if (/^v?\d+\.\d+\.\d+-[a-f0-9]{7,}$/i.test(version)) {
+      return `Live Build ${version}`;
+    }
+    return `Build ${version}`;
+  }, [appVersionBadge]);
+  const appVersionBadgeTitle = useMemo(() => {
+    if (appVersionBadgeLabel.startsWith("Live Build ")) {
+      return lang === "km"
+        ? `កំពុងដំណើរការ ${appVersionBadgeLabel}. ចុចដើម្បីមើលកំណត់ត្រាកំណែ។`
+        : `Running ${appVersionBadgeLabel}. Click to view update notes.`;
+    }
+    return lang === "km"
+      ? `កំពុងដំណើរការ ${appVersionBadgeLabel}. ប្រសិនបើមិនឃើញ commit សូមពិនិត្យ /api/health។`
+      : `Running ${appVersionBadgeLabel}. If no commit is shown, verify /api/health.`;
+  }, [appVersionBadgeLabel, lang]);
 
   useEffect(() => {
     if (rememberLogin) {
@@ -17448,6 +17555,10 @@ export default function App() {
   const inventoryItemLabel = useCallback((item: InventoryItem) => {
     return `${item.itemCode} - ${inventoryDisplayName(item.itemName, lang)} • ${inventoryCampusLabel(item.campus)}`;
   }, [inventoryCampusLabel, lang]);
+  const inventoryTxnPickerItems = useMemo(
+    () => inventoryVisibleItems.slice().sort((a, b) => a.itemCode.localeCompare(b.itemCode)),
+    [inventoryVisibleItems]
+  );
   const inventoryTxnSelectedItem = useMemo(
     () => inventoryVisibleItems.find((item) => String(item.id) === String(inventoryTxnForm.itemId || "")) || null,
     [inventoryVisibleItems, inventoryTxnForm.itemId]
@@ -17464,17 +17575,49 @@ export default function App() {
     () => buildInventoryItemCode(inventoryItems, inventoryItemForm.campus, inventoryItemForm.category),
     [inventoryItems, inventoryItemForm.campus, inventoryItemForm.category]
   );
-  const inventoryBalanceRows = useMemo(() => {
-    const byItem = new Map<number, { in: number; out: number }>();
-    for (const tx of inventoryVisibleTxns) {
-      const current = byItem.get(tx.itemId) || { in: 0, out: 0 };
-      if (isInventoryTxnIn(tx.type)) current.in += tx.qty;
-      if (isInventoryTxnOut(tx.type)) current.out += tx.qty;
-      byItem.set(tx.itemId, current);
+  const inventoryTxnStatsByItem = useMemo(() => {
+    const sortedTxns = inventoryVisibleTxns.slice().sort((a, b) => {
+      const aDate = normalizeYmdInput(a.date) || String(a.date || "");
+      const bDate = normalizeYmdInput(b.date) || String(b.date || "");
+      if (aDate !== bDate) return aDate.localeCompare(bDate);
+      return Number(a.id || 0) - Number(b.id || 0);
+    });
+    const byItem = new Map<number, { in: number; out: number; current: number }>();
+    for (const item of inventoryVisibleItems) {
+      byItem.set(Number(item.id), {
+        in: 0,
+        out: 0,
+        current: Math.max(0, Number(item.openingQty || 0)),
+      });
     }
+    for (const tx of sortedTxns) {
+      const itemId = Number(tx.itemId || 0);
+      if (!itemId) continue;
+      const current = byItem.get(itemId) || { in: 0, out: 0, current: 0 };
+      const qty = Math.max(0, Number(tx.qty || 0));
+      if (isInventoryTxnIn(tx.type)) current.in += qty;
+      if (isInventoryTxnOut(tx.type)) current.out += qty;
+      if (isInventoryTxnStockEffective(tx)) {
+        if (isInventoryTxnSet(tx.type)) {
+          current.current = qty;
+        } else if (isInventoryTxnIn(tx.type)) {
+          current.current += qty;
+        } else if (isInventoryTxnOut(tx.type)) {
+          current.current -= qty;
+        }
+      }
+      byItem.set(itemId, current);
+    }
+    return byItem;
+  }, [inventoryVisibleItems, inventoryVisibleTxns]);
+  const inventoryBalanceRows = useMemo(() => {
     let rows = inventoryVisibleItems.map((item) => {
-      const total = byItem.get(item.id) || { in: 0, out: 0 };
-      const currentStock = calcInventoryCurrentStockFromRows(item, inventoryVisibleTxns);
+      const total = inventoryTxnStatsByItem.get(Number(item.id)) || {
+        in: 0,
+        out: 0,
+        current: Math.max(0, Number(item.openingQty || 0)),
+      };
+      const currentStock = total.current;
       return {
         ...item,
         stockIn: total.in,
@@ -17490,7 +17633,7 @@ export default function App() {
       );
     }
     return rows.sort((a, b) => a.itemCode.localeCompare(b.itemCode));
-  }, [inventoryVisibleItems, inventoryVisibleTxns, inventorySearch, ownerTypeLabel]);
+  }, [inventorySearch, inventoryTxnStatsByItem, inventoryVisibleItems, ownerTypeLabel]);
   const inventoryItemCampusOptions = useMemo(() => {
     const campuses = new Set<string>();
     for (const row of inventoryBalanceRows) {
@@ -18292,6 +18435,34 @@ export default function App() {
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [toolReviewReports]);
+  const reportInventoryReviewMonthOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const row of toolReviewReports) {
+      const month = String(row.month || "").trim();
+      if (/^\d{4}-\d{2}$/.test(month)) values.add(month);
+    }
+    values.add(toYmd(new Date()).slice(0, 7));
+    return Array.from(values).sort((a, b) => b.localeCompare(a));
+  }, [toolReviewReports]);
+  useEffect(() => {
+    if (reportInventoryReviewMonthOptions.includes(reportInventoryReviewMonth)) return;
+    setReportInventoryReviewMonth(reportInventoryReviewMonthOptions[0] || toYmd(new Date()).slice(0, 7));
+  }, [reportInventoryReviewMonth, reportInventoryReviewMonthOptions]);
+  const reportInventoryReviewByItemId = useMemo(() => {
+    const map = new Map<number, ToolReviewReport>();
+    for (const row of toolReviewReports) {
+      if (String(row.month || "").trim() !== reportInventoryReviewMonth) continue;
+      const itemId = Number(row.itemId || 0);
+      if (!itemId) continue;
+      const current = map.get(itemId);
+      const currentStamp = String(current?.updated || current?.created || "");
+      const nextStamp = String(row.updated || row.created || "");
+      if (!current || nextStamp > currentStamp) {
+        map.set(itemId, row);
+      }
+    }
+    return map;
+  }, [reportInventoryReviewMonth, toolReviewReports]);
   const toolReviewSummary = useMemo(() => {
     const totalTools = toolReviewItemOptions.length;
     const reviewedIds = new Set(toolReviewMonthReports.map((row) => String(row.itemId)));
@@ -18580,10 +18751,17 @@ export default function App() {
     () => (reportInventoryMode === "low" ? inventoryLowStockRows : inventoryBalanceRows),
     [reportInventoryMode, inventoryLowStockRows, inventoryBalanceRows]
   );
+  const shouldHideZeroAmountRow = useCallback(
+    (row: { currentStock?: number | string | null }) => Number(row.currentStock ?? 0) <= 0,
+    []
+  );
   const reportInventoryRows = useMemo(
     () =>
       reportInventoryBaseRows
         .filter((row) => {
+          if (reportInventoryHideZeroAmount && shouldHideZeroAmountRow(row)) {
+            return false;
+          }
           const isToolGroupFilter =
             reportInventoryGroupFilter === "ALL" ||
             reportInventoryGroupFilter === "CLEAN_TOOL" ||
@@ -18617,16 +18795,27 @@ export default function App() {
           return true;
         })
         .map((row) => {
-          const latestReview = latestToolReviewByItemId.get(Number(row.id || 0));
+          const latestReview = reportInventoryReviewByItemId.get(Number(row.id || 0));
           const latestPhoto = String(latestReview?.photo || "").trim();
           return latestPhoto ? { ...row, photo: latestPhoto } : row;
         }),
-    [latestToolReviewByItemId, reportInventoryBaseRows, reportInventoryCampusFilter, reportInventoryGroupFilter, reportInventoryPropertyFilter]
+    [
+      reportInventoryReviewByItemId,
+      reportInventoryBaseRows,
+      reportInventoryCampusFilter,
+      reportInventoryGroupFilter,
+      reportInventoryHideZeroAmount,
+      reportInventoryPropertyFilter,
+      shouldHideZeroAmountRow,
+    ]
   );
   const reportInventoryComparisonSourceRows = useMemo(
     () =>
       reportInventoryBaseRows
         .filter((row) => {
+          if (reportInventoryHideZeroAmount && shouldHideZeroAmountRow(row)) {
+            return false;
+          }
           const isToolGroupFilter =
             reportInventoryGroupFilter === "ALL" ||
             reportInventoryGroupFilter === "CLEAN_TOOL" ||
@@ -18657,11 +18846,18 @@ export default function App() {
           return true;
         })
         .map((row) => {
-          const latestReview = latestToolReviewByItemId.get(Number(row.id || 0));
+          const latestReview = reportInventoryReviewByItemId.get(Number(row.id || 0));
           const latestPhoto = String(latestReview?.photo || "").trim();
           return latestPhoto ? { ...row, photo: latestPhoto } : row;
         }),
-    [latestToolReviewByItemId, reportInventoryBaseRows, reportInventoryGroupFilter, reportInventoryPropertyFilter]
+    [
+      reportInventoryReviewByItemId,
+      reportInventoryBaseRows,
+      reportInventoryGroupFilter,
+      reportInventoryHideZeroAmount,
+      reportInventoryPropertyFilter,
+      shouldHideZeroAmountRow,
+    ]
   );
   const reportInventoryComparisonCampuses = useMemo(() => {
     const campuses = Array.from(
@@ -19013,11 +19209,6 @@ export default function App() {
     },
     [reportInventoryCompareSort]
   );
-  useEffect(() => {
-    if (reportInventoryGroupFilter === "ALL") {
-      setReportInventoryGroupFilter("CLEAN_TOOL");
-    }
-  }, [reportInventoryGroupFilter]);
   useEffect(() => {
     if (reportInventoryGroupFilter !== "POOL_TOOL") return;
     if (reportInventoryCampusFilter.includes("ALL")) return;
@@ -22923,31 +23114,21 @@ export default function App() {
   const loadInventorySync = useCallback(async () => {
     if (!authUser) return;
     try {
-      const settingsRes = await requestJson<{ settings?: ServerSettings }>("/api/settings");
-      const settingsObj = settingsRes.settings || {};
-      const hasServerInventoryItems = Object.prototype.hasOwnProperty.call(settingsObj, "inventoryItems");
-      const hasServerInventoryTxns = Object.prototype.hasOwnProperty.call(settingsObj, "inventoryTxns");
-      const serverInventoryItems = normalizeArray<InventoryItem>(settingsRes.settings?.inventoryItems);
-      const serverInventoryTxns = normalizeArray<InventoryTxn>(settingsRes.settings?.inventoryTxns);
-      const fallbackInventoryItems = readInventoryItemFallback();
-      const fallbackInventoryTxns = readInventoryTxnFallback();
-      const preferredInventory =
-        hasServerInventoryItems || hasServerInventoryTxns
-          ? {
-              items: hasServerInventoryItems ? serverInventoryItems : inventoryItems,
-              txns: hasServerInventoryTxns ? serverInventoryTxns : inventoryTxns,
-            }
-          : selectPreferredInventorySnapshot([
-              { items: serverInventoryItems, txns: serverInventoryTxns },
-              { items: inventoryItems, txns: inventoryTxns },
-              { items: fallbackInventoryItems, txns: fallbackInventoryTxns },
-            ]);
+      const params = new URLSearchParams();
+      if (campusFilter !== "ALL") params.set("campus", campusFilter);
+      const [itemsRes, txnsRes, settingsRes] = await Promise.all([
+        requestJson<{ items: InventoryItem[] }>(`/api/inventory/items?${params.toString()}`),
+        requestJson<{ txns: InventoryTxn[] }>(`/api/inventory/txns?${params.toString()}`),
+        requestJson<{ settings?: ServerSettings }>("/api/settings?include=toolReviewReports"),
+      ]);
+      const serverInventoryItems = normalizeArray<InventoryItem>(itemsRes.items);
+      const serverInventoryTxns = normalizeArray<InventoryTxn>(txnsRes.txns);
       const serverToolReviewReports = normalizeToolReviewReportsClient(settingsRes.settings?.toolReviewReports);
-      setInventoryItems(preferredInventory.items);
-      setInventoryTxns(preferredInventory.txns);
+      setInventoryItems(serverInventoryItems);
+      setInventoryTxns(serverInventoryTxns);
       setToolReviewReports(serverToolReviewReports);
-      writeInventoryItemFallback(preferredInventory.items);
-      writeInventoryTxnFallback(preferredInventory.txns);
+      writeInventoryItemFallback(serverInventoryItems);
+      writeInventoryTxnFallback(serverInventoryTxns);
     } catch (err) {
       if (
         isApiUnavailableError(err) ||
@@ -22958,7 +23139,7 @@ export default function App() {
       }
       console.warn("Failed to sync inventory data", err);
     }
-  }, [authUser, inventoryItems, inventoryTxns]);
+  }, [authUser, campusFilter]);
 
   const loadTicketSync = useCallback(async () => {
     if (!authUser) return;
@@ -23086,7 +23267,11 @@ export default function App() {
         | { ok: false }
         | { ok: "skip" }
       > = shouldRefreshSettings
-        ? requestJson<{ settings?: ServerSettings }>("/api/settings")
+        ? requestJson<{ settings?: ServerSettings }>(
+            tabNeedsSettingsSnapshot(activeTab)
+              ? "/api/settings"
+              : "/api/settings?include=campusNames,staffUsers,calendarEvents,maintenanceReminderOffsets,inventoryApprovalRouting,telegramChatIds,telegramMaintenanceChatIds,telegramToolChatIds,toolOwnerTypes,itemNames,itemAssetCategories,itemTypeOptions"
+          )
             .then((settings) => ({ ok: true as const, settings }))
             .catch(() => ({ ok: false as const }))
         : Promise.resolve({ ok: "skip" as const });
@@ -23615,7 +23800,9 @@ export default function App() {
   }, [authUser, loadMaintenanceNotifications]);
 
   useEffect(() => {
-    if (!authUser || tab !== "inventory") return;
+    const needsInventorySync =
+      tab === "inventory" || (tab === "reports" && reportType === "inventory_balance");
+    if (!authUser || !needsInventorySync) return;
 
     void loadInventorySync();
     const timer = window.setInterval(() => {
@@ -23632,7 +23819,7 @@ export default function App() {
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
     };
-  }, [authUser, tab, loadInventorySync]);
+  }, [authUser, tab, reportType, loadInventorySync]);
 
   useEffect(() => {
     if (!authUser || (tab !== "tickets" && tab !== "dashboard")) return;
@@ -23876,15 +24063,6 @@ export default function App() {
         })
       : (createIsGenerator
           ? buildGeneratorSpecs(assetForm.specs, assetForm.generatorPower, assetForm.generatorFrequency, {
-              fuelType: assetForm.generatorFuelType,
-              tankCapacity: assetForm.generatorTankCapacity,
-              fuelLevel: assetForm.generatorFuelLevel,
-              lowFuelThreshold: assetForm.generatorLowFuelThreshold,
-              hourMeter: assetForm.generatorHourMeter,
-              lastRefillDate: assetForm.generatorLastRefillDate,
-              lastRefillLiters: assetForm.generatorLastRefillLiters,
-              lastServiceHours: assetForm.generatorLastServiceHours,
-              nextServiceHours: assetForm.generatorNextServiceHours,
               hasAts: assetForm.generatorHasAts,
               atsSerial: assetForm.generatorAtsSerial,
             })
@@ -31336,6 +31514,10 @@ export default function App() {
       setError(message);
       return false;
     }
+    const resolvedHourMeterStart = String(form.hourMeterStart || detailGenerator?.hourMeter || "").trim();
+    const resolvedHourMeterStop =
+      calculateGeneratorHourMeterStop(form.startAt, form.stopAt, resolvedHourMeterStart) ||
+      String(form.hourMeterStop || "").trim();
     setBusy(true);
     setAssetDetailGeneratorError("");
     setAssetDetailGeneratorMessage("");
@@ -31346,8 +31528,8 @@ export default function App() {
           mode: "usage",
           startAt: form.startAt,
           stopAt: form.stopAt,
-          hourMeterStart: form.hourMeterStart.trim(),
-          hourMeterStop: form.hourMeterStop.trim(),
+          hourMeterStart: resolvedHourMeterStart,
+          hourMeterStop: resolvedHourMeterStop,
           note: form.note.trim(),
           by: form.by.trim(),
         }),
@@ -31458,6 +31640,7 @@ export default function App() {
     mode = "date",
     showLegend = false,
     className = "",
+    formatDisplayValue,
   }: {
     value: string;
     onChange: (value: string) => void;
@@ -31468,6 +31651,7 @@ export default function App() {
     mode?: "date" | "month";
     showLegend?: boolean;
     className?: string;
+    formatDisplayValue?: (value: string) => string;
   }) {
     const [open, setOpen] = useState(false);
     const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -31517,6 +31701,7 @@ export default function App() {
     const displayValue = useMemo(() => {
       const ymd = normalizedValue;
       if (!ymd) return "";
+      if (formatDisplayValue) return formatDisplayValue(ymd);
       const date = new Date(`${ymd}T00:00:00`);
       if (Number.isNaN(date.getTime())) return value;
       if (mode === "month") {
@@ -31533,7 +31718,7 @@ export default function App() {
         month: "long",
         year: "numeric",
       });
-    }, [lang, mode, normalizedValue, value]);
+    }, [formatDisplayValue, lang, mode, normalizedValue, value]);
 
     const monthLabel = useMemo(
       () =>
@@ -32924,6 +33109,7 @@ export default function App() {
       return;
     }
     setEditingInventoryTxnId(row.id);
+    setInventoryTxnEditModalOpen(true);
     setInventoryTxnEditForm({
       itemId: String(row.itemId),
       date: row.date,
@@ -32931,12 +33117,19 @@ export default function App() {
       qty: String(row.qty),
       by: row.by || "",
       note: row.note || "",
+      fromCampus: row.fromCampus || "",
+      toCampus: row.toCampus || "",
+      expectedReturnDate: row.expectedReturnDate || "",
+      requestedBy: row.requestedBy || "",
+      approvedBy: row.approvedBy || "",
+      receivedBy: row.receivedBy || "",
     });
     setError("");
   }
 
   function cancelInventoryTxnEdit() {
     setEditingInventoryTxnId(null);
+    setInventoryTxnEditModalOpen(false);
     setInventoryTxnEditForm({
       itemId: "",
       date: toYmd(new Date()),
@@ -32944,6 +33137,12 @@ export default function App() {
       qty: "",
       by: "",
       note: "",
+      fromCampus: "",
+      toCampus: "",
+      expectedReturnDate: "",
+      requestedBy: "",
+      approvedBy: "",
+      receivedBy: "",
     });
   }
 
@@ -33015,6 +33214,12 @@ export default function App() {
             qty,
             by: inventoryTxnEditForm.by.trim(),
             note: inventoryTxnEditForm.note.trim(),
+            fromCampus: inventoryTxnEditForm.fromCampus.trim(),
+            toCampus: inventoryTxnEditForm.toCampus.trim(),
+            expectedReturnDate: inventoryTxnEditForm.expectedReturnDate.trim(),
+            requestedBy: inventoryTxnEditForm.requestedBy.trim(),
+            approvedBy: inventoryTxnEditForm.approvedBy.trim(),
+            receivedBy: inventoryTxnEditForm.receivedBy.trim(),
           }),
         });
         setInventoryTxns((prev) => prev.map((x) => (x.id === editingInventoryTxnId ? res.txn : x)));
@@ -33033,6 +33238,12 @@ export default function App() {
                 qty,
                 by: inventoryTxnEditForm.by.trim(),
                 note: inventoryTxnEditForm.note.trim(),
+                fromCampus: inventoryTxnEditForm.fromCampus.trim(),
+                toCampus: inventoryTxnEditForm.toCampus.trim(),
+                expectedReturnDate: inventoryTxnEditForm.expectedReturnDate.trim(),
+                requestedBy: inventoryTxnEditForm.requestedBy.trim(),
+                approvedBy: inventoryTxnEditForm.approvedBy.trim(),
+                receivedBy: inventoryTxnEditForm.receivedBy.trim(),
                 borrowStatus:
                   inventoryTxnEditForm.type === "BORROW_OUT"
                     ? (x.borrowStatus || "BORROW_OPEN")
@@ -34391,15 +34602,6 @@ export default function App() {
           })
         : (editingIsGenerator
             ? buildGeneratorSpecs(assetEditForm.specs.trim(), assetEditForm.generatorPower, assetEditForm.generatorFrequency, {
-                fuelType: assetEditForm.generatorFuelType,
-                tankCapacity: assetEditForm.generatorTankCapacity,
-                fuelLevel: assetEditForm.generatorFuelLevel,
-                lowFuelThreshold: assetEditForm.generatorLowFuelThreshold,
-                hourMeter: assetEditForm.generatorHourMeter,
-                lastRefillDate: assetEditForm.generatorLastRefillDate,
-                lastRefillLiters: assetEditForm.generatorLastRefillLiters,
-                lastServiceHours: assetEditForm.generatorLastServiceHours,
-                nextServiceHours: assetEditForm.generatorNextServiceHours,
                 hasAts: assetEditForm.generatorHasAts,
                 atsSerial: assetEditForm.generatorAtsSerial,
               })
@@ -38647,6 +38849,10 @@ export default function App() {
     () => (detailAsset && isGeneratorAsset(detailAsset.category, detailAsset.type) ? parseGeneratorSpecs(detailAsset.specs || "") : null),
     [detailAsset]
   );
+  const generatorUsageTotalDuration = useMemo(
+    () => formatGeneratorRunDuration(assetDetailGeneratorUsageForm.startAt, assetDetailGeneratorUsageForm.stopAt),
+    [assetDetailGeneratorUsageForm.startAt, assetDetailGeneratorUsageForm.stopAt]
+  );
   const detailGeneratorRecords = useMemo(
     () =>
       detailAsset
@@ -39122,10 +39328,10 @@ export default function App() {
                   <div className="panel-note toner-summary-note" style={{ marginBottom: 12 }}>
                     Staff can record generator fuel refill and running period here directly after scanning QR code or opening Asset Detail.
                   </div>
-                  <div className="row-actions toner-summary-primary-actions" style={{ marginBottom: 10 }}>
+                  <div className="row-actions toner-summary-primary-actions generator-record-toggle-row" style={{ marginBottom: 10 }}>
                     <button
                       type="button"
-                      className="tab btn-small toner-summary-toggle-btn"
+                      className="tab btn-small toner-summary-toggle-btn generator-record-toggle-btn"
                       onClick={() => {
                         setAssetDetailGeneratorFuelOpen((prev) => !prev);
                         if (!assetDetailGeneratorFuelOpen) setAssetDetailGeneratorUsageOpen(false);
@@ -39135,7 +39341,7 @@ export default function App() {
                     </button>
                     <button
                       type="button"
-                      className="tab btn-small toner-summary-toggle-btn"
+                      className="tab btn-small toner-summary-toggle-btn generator-record-toggle-btn"
                       onClick={() => {
                         setAssetDetailGeneratorUsageOpen((prev) => !prev);
                         if (!assetDetailGeneratorUsageOpen) setAssetDetailGeneratorFuelOpen(false);
@@ -39148,22 +39354,21 @@ export default function App() {
                   {assetDetailGeneratorError ? <div className="panel-note" style={{ marginBottom: 8, color: "#b42318" }}>{assetDetailGeneratorError}</div> : null}
                   {assetDetailGeneratorFuelOpen ? (
                     <>
-                      <div className="form-grid">
+                      <div className="form-grid generator-fuel-record-grid">
                         <label className="field">
                           <span>Refill Date</span>
-                          <input className="input" type="date" value={assetDetailGeneratorFuelForm.date} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, date: e.target.value }))} />
+                          <EcoDateInput
+                            value={assetDetailGeneratorFuelForm.date}
+                            onChange={(value) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, date: value }))}
+                            placeholder="dd-mmm-yyyy"
+                            ariaLabel="Open refill date picker"
+                            className="generator-eco-date-field"
+                            formatDisplayValue={(value) => formatSignatureDateValue(value)}
+                          />
                         </label>
                         <label className="field">
                           <span>Fuel Added</span>
                           <input className="input" placeholder="ex: 20 L" value={assetDetailGeneratorFuelForm.liters} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, liters: e.target.value }))} />
-                        </label>
-                        <label className="field">
-                          <span>Fuel After Refill</span>
-                          <input className="input" placeholder="ex: 120 L" value={assetDetailGeneratorFuelForm.fuelLevel} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, fuelLevel: e.target.value }))} />
-                        </label>
-                        <label className="field">
-                          <span>Hour Meter</span>
-                          <input className="input" placeholder="ex: 845 h" value={assetDetailGeneratorFuelForm.hourMeter} onChange={(e) => setAssetDetailGeneratorFuelForm((prev) => ({ ...prev, hourMeter: e.target.value }))} />
                         </label>
                         <label className="field">
                           <span>By</span>
@@ -39186,19 +39391,71 @@ export default function App() {
                       <div className="form-grid">
                         <label className="field">
                           <span>Start Date & Time</span>
-                          <input className="input" type="datetime-local" value={assetDetailGeneratorUsageForm.startAt} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, startAt: e.target.value }))} />
+                          <div className="generator-usage-datetime-row">
+                            <EcoDateInput
+                              value={extractDateFromDateTimeLocalValue(assetDetailGeneratorUsageForm.startAt)}
+                              onChange={(value) =>
+                                setAssetDetailGeneratorUsageForm((prev) => ({
+                                  ...prev,
+                                  startAt: mergeDateAndTimeParts(value, extractTimeFromDateTimeLocalValue(prev.startAt) || "00:00"),
+                                }))
+                              }
+                              placeholder="dd-mmm-yyyy"
+                              ariaLabel="Open start date picker"
+                              className="generator-eco-date-field"
+                              formatDisplayValue={(value) => formatSignatureDateValue(value)}
+                            />
+                            <input
+                              className="input generator-usage-time-input"
+                              type="time"
+                              value={extractTimeFromDateTimeLocalValue(assetDetailGeneratorUsageForm.startAt)}
+                              onChange={(e) =>
+                                setAssetDetailGeneratorUsageForm((prev) => ({
+                                  ...prev,
+                                  startAt: mergeDateAndTimeParts(extractDateFromDateTimeLocalValue(prev.startAt) || toYmd(new Date()), e.target.value),
+                                }))
+                              }
+                            />
+                          </div>
                         </label>
                         <label className="field">
                           <span>Stop Date & Time</span>
-                          <input className="input" type="datetime-local" value={assetDetailGeneratorUsageForm.stopAt} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, stopAt: e.target.value }))} />
+                          <div className="generator-usage-datetime-row">
+                            <EcoDateInput
+                              value={extractDateFromDateTimeLocalValue(assetDetailGeneratorUsageForm.stopAt)}
+                              onChange={(value) =>
+                                setAssetDetailGeneratorUsageForm((prev) => ({
+                                  ...prev,
+                                  stopAt: mergeDateAndTimeParts(value, extractTimeFromDateTimeLocalValue(prev.stopAt) || "00:00"),
+                                }))
+                              }
+                              placeholder="dd-mmm-yyyy"
+                              ariaLabel="Open stop date picker"
+                              className="generator-eco-date-field"
+                              formatDisplayValue={(value) => formatSignatureDateValue(value)}
+                            />
+                            <input
+                              className="input generator-usage-time-input"
+                              type="time"
+                              value={extractTimeFromDateTimeLocalValue(assetDetailGeneratorUsageForm.stopAt)}
+                              onChange={(e) =>
+                                setAssetDetailGeneratorUsageForm((prev) => ({
+                                  ...prev,
+                                  stopAt: mergeDateAndTimeParts(extractDateFromDateTimeLocalValue(prev.stopAt) || toYmd(new Date()), e.target.value),
+                                }))
+                              }
+                            />
+                          </div>
                         </label>
                         <label className="field">
-                          <span>Hour Meter Start</span>
-                          <input className="input" placeholder="Optional" value={assetDetailGeneratorUsageForm.hourMeterStart} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, hourMeterStart: e.target.value }))} />
-                        </label>
-                        <label className="field">
-                          <span>Hour Meter Stop</span>
-                          <input className="input" placeholder="Optional" value={assetDetailGeneratorUsageForm.hourMeterStop} onChange={(e) => setAssetDetailGeneratorUsageForm((prev) => ({ ...prev, hourMeterStop: e.target.value }))} />
+                          <span>Total (H:MM)</span>
+                          <input
+                            className="input"
+                            value={generatorUsageTotalDuration}
+                            readOnly
+                            placeholder="Auto from start and stop time"
+                            title="Auto calculated from start and stop time"
+                          />
                         </label>
                         <label className="field">
                           <span>By</span>
@@ -41860,11 +42117,10 @@ export default function App() {
         if (!taskId || String(entry.scheduleTaskKind || "").trim() !== "service") return;
         const compareDate = String(entry.scheduleSourceDate || entry.date || "").trim();
         if (!compareDate) return;
-        const displayDate = String(entry.date || compareDate).trim();
         const key = `${asset.campus}||${taskId}`;
         const current = map.get(key) || "";
         if (!current || compareDate > current) {
-          map.set(key, displayDate);
+          map.set(key, compareDate);
         }
       });
     });
@@ -42555,11 +42811,20 @@ export default function App() {
   const upcomingScheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
     const in7 = toYmd(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
-    return visibleScheduleAssets.filter((a) => (a.nextMaintenanceDate || "") >= today && (a.nextMaintenanceDate || "") <= in7);
+    return visibleScheduleAssets.filter((asset) => {
+      const dueDate = String(asset.nextMaintenanceDate || "").trim();
+      if (!dueDate) return false;
+      if (dueDate < today || dueDate > in7) return false;
+      return !hasCompletedMaintenanceOnDate(asset, dueDate);
+    });
   }, [visibleScheduleAssets]);
   const overdueScheduleAssets = useMemo(() => {
     const today = toYmd(new Date());
-    return visibleScheduleAssets.filter((a) => (a.nextMaintenanceDate || "") < today);
+    return visibleScheduleAssets.filter((asset) => {
+      const dueDate = String(asset.nextMaintenanceDate || "").trim();
+      if (!dueDate || dueDate >= today) return false;
+      return !hasCompletedMaintenanceOnDate(asset, dueDate);
+    });
   }, [visibleScheduleAssets]);
   const overdueMonthOptions = useMemo(() => {
     return Array.from(
@@ -43161,9 +43426,24 @@ export default function App() {
     () => resolvedAssets.find((asset) => String(asset.assetId || "").trim() === reportAssetIdFilter) || null,
     [resolvedAssets, reportAssetIdFilter]
   );
+  const assetFullRecordGeneratorRows = useMemo(
+    () =>
+      normalizeArray<MaintenanceEntry>(focusedReportAsset?.maintenanceHistory)
+        .filter((row) => {
+          const type = String(row.type || "").trim().toLowerCase();
+          return type === "generator fuel refill" || type === "generator usage record";
+        })
+        .slice()
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
+    [focusedReportAsset]
+  );
   const assetFullRecordMaintenanceRows = useMemo(
     () =>
       normalizeArray<MaintenanceEntry>(focusedReportAsset?.maintenanceHistory)
+        .filter((row) => {
+          const type = String(row.type || "").trim().toLowerCase();
+          return type !== "generator fuel refill" && type !== "generator usage record";
+        })
         .slice()
         .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))),
     [focusedReportAsset]
@@ -43199,7 +43479,14 @@ export default function App() {
           ? false
           : staffBorrowingCampusFilter.includes("ALL")
             ? true
-            : staffBorrowingCampusFilter.includes(String(asset.campus || "").trim())
+          : staffBorrowingCampusFilter.includes(String(asset.campus || "").trim())
+      )
+      .filter((asset) =>
+        !staffBorrowingCategoryFilter.length
+          ? false
+          : staffBorrowingCategoryFilter.includes("ALL")
+            ? true
+            : staffBorrowingCategoryFilter.includes(String(asset.category || "").trim())
       )
       .filter((asset) =>
         staffBorrowingAssignedToFilter === "ALL"
@@ -43207,9 +43494,9 @@ export default function App() {
           : String(asset.assignedTo || "").trim() === staffBorrowingAssignedToFilter
       )
       .filter((asset) =>
-        staffBorrowingLocationFilter === "ALL"
+        staffBorrowingItemNameFilter === "ALL"
           ? true
-          : String(asset.location || "").trim() === staffBorrowingLocationFilter
+          : assetItemName(asset.category, asset.type, asset.pcType || "") === staffBorrowingItemNameFilter
       )
       .map((asset) => {
         const latestCustody = [...(asset.custodyHistory || [])].sort((a, b) =>
@@ -43220,6 +43507,10 @@ export default function App() {
           assetId: asset.assetId,
           assetPhoto: asset.photo || "",
           itemName: assetItemName(asset.category, asset.type, asset.pcType || ""),
+          category: String(asset.category || "").trim(),
+          brand: String(asset.brand || "").trim(),
+          model: String(asset.model || "").trim(),
+          serialNumber: String(asset.serialNumber || "").trim(),
           campus: asset.campus,
           location: asset.location || "-",
           assignedTo: String(asset.assignedTo || "").trim(),
@@ -43230,7 +43521,15 @@ export default function App() {
         };
       })
       .sort((a, b) => a.assignedTo.localeCompare(b.assignedTo) || a.assetId.localeCompare(b.assetId));
-  }, [assets, assetItemName, reportAssetIdFilter, staffBorrowingAssignedToFilter, staffBorrowingCampusFilter, staffBorrowingLocationFilter]);
+  }, [
+    assets,
+    assetItemName,
+    reportAssetIdFilter,
+    staffBorrowingAssignedToFilter,
+    staffBorrowingCampusFilter,
+    staffBorrowingCategoryFilter,
+    staffBorrowingItemNameFilter,
+  ]);
   const staffBorrowingCampusFilterOptions = useMemo(
     () =>
       Array.from(
@@ -43243,19 +43542,26 @@ export default function App() {
       ).sort(compareCampusByCode),
     [assets]
   );
-  const staffBorrowingAssignedToFilterOptions = useMemo(
+  const staffBorrowingCategoryFilterOptions = useMemo(
     () =>
       Array.from(
         new Set(
           assets
             .filter((asset) => String(asset.assignedTo || "").trim())
-            .map((asset) => String(asset.assignedTo || "").trim())
+            .filter((asset) =>
+              !staffBorrowingCampusFilter.length
+                ? false
+                : staffBorrowingCampusFilter.includes("ALL")
+                  ? true
+                  : staffBorrowingCampusFilter.includes(String(asset.campus || "").trim())
+            )
+            .map((asset) => String(asset.category || "").trim())
             .filter(Boolean)
         )
       ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
-    [assets]
+    [assets, staffBorrowingCampusFilter]
   );
-  const staffBorrowingLocationFilterOptions = useMemo(
+  const staffBorrowingAssignedToFilterOptions = useMemo(
     () =>
       Array.from(
         new Set(
@@ -43269,22 +43575,73 @@ export default function App() {
                   : staffBorrowingCampusFilter.includes(String(asset.campus || "").trim())
             )
             .filter((asset) =>
+              !staffBorrowingCategoryFilter.length
+                ? false
+                : staffBorrowingCategoryFilter.includes("ALL")
+                  ? true
+                  : staffBorrowingCategoryFilter.includes(String(asset.category || "").trim())
+            )
+            .map((asset) => String(asset.assignedTo || "").trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    [assets, staffBorrowingCampusFilter, staffBorrowingCategoryFilter]
+  );
+  const staffBorrowingItemNameFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          assets
+            .filter((asset) => String(asset.assignedTo || "").trim())
+            .filter((asset) =>
+              !staffBorrowingCampusFilter.length
+                ? false
+                : staffBorrowingCampusFilter.includes("ALL")
+                  ? true
+                  : staffBorrowingCampusFilter.includes(String(asset.campus || "").trim())
+            )
+            .filter((asset) =>
+              !staffBorrowingCategoryFilter.length
+                ? false
+                : staffBorrowingCategoryFilter.includes("ALL")
+                  ? true
+                  : staffBorrowingCategoryFilter.includes(String(asset.category || "").trim())
+            )
+            .filter((asset) =>
               staffBorrowingAssignedToFilter === "ALL"
                 ? true
                 : String(asset.assignedTo || "").trim() === staffBorrowingAssignedToFilter
             )
-            .map((asset) => String(asset.location || "").trim())
+            .map((asset) => assetItemName(asset.category, asset.type, asset.pcType || ""))
             .filter(Boolean)
         )
       ).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
-    [assets, staffBorrowingAssignedToFilter, staffBorrowingCampusFilter]
+    [assets, assetItemName, staffBorrowingAssignedToFilter, staffBorrowingCampusFilter, staffBorrowingCategoryFilter]
   );
   useEffect(() => {
-    if (staffBorrowingLocationFilter === "ALL") return;
-    if (!staffBorrowingLocationFilterOptions.includes(staffBorrowingLocationFilter)) {
-      setStaffBorrowingLocationFilter("ALL");
+    const allowed = staffBorrowingCategoryFilterOptions;
+    setStaffBorrowingCategoryFilter((current) => {
+      if (current.includes("ALL")) return current.length === 1 ? current : ["ALL"];
+      const cleaned = current.filter((value) => allowed.includes(value));
+      if (!cleaned.length) return ["ALL"];
+      if (cleaned.length === current.length && cleaned.every((value, index) => value === current[index])) {
+        return current;
+      }
+      return cleaned;
+    });
+  }, [staffBorrowingCategoryFilterOptions]);
+  useEffect(() => {
+    if (staffBorrowingAssignedToFilter === "ALL") return;
+    if (!staffBorrowingAssignedToFilterOptions.includes(staffBorrowingAssignedToFilter)) {
+      setStaffBorrowingAssignedToFilter("ALL");
     }
-  }, [staffBorrowingLocationFilter, staffBorrowingLocationFilterOptions]);
+  }, [staffBorrowingAssignedToFilter, staffBorrowingAssignedToFilterOptions]);
+  useEffect(() => {
+    if (staffBorrowingItemNameFilter === "ALL") return;
+    if (!staffBorrowingItemNameFilterOptions.includes(staffBorrowingItemNameFilter)) {
+      setStaffBorrowingItemNameFilter("ALL");
+    }
+  }, [staffBorrowingItemNameFilter, staffBorrowingItemNameFilterOptions]);
   const sortedStaffBorrowingRows = useMemo(() => {
     const direction = staffBorrowingSort.direction === "asc" ? 1 : -1;
     const text = (value: string) => String(value || "").toLowerCase();
@@ -45538,9 +45895,9 @@ export default function App() {
       { key: "itemName", label: t.name, sortable: true },
       { key: "campus", label: t.campus, sortable: true },
       { key: "location", label: t.location, sortable: true },
-      { key: "assignedTo", label: "Assigned To", sortable: true },
-      { key: "sinceDate", label: "Since", sortable: true },
-      { key: "responsibilityAck", label: "Ack", sortable: true },
+      { key: "assignedTo", label: "Borrowed By", sortable: true },
+      { key: "sinceDate", label: "Borrowed Since", sortable: true },
+      { key: "responsibilityAck", label: "Sign Ack", sortable: true },
       { key: "lastAction", label: "Last Action", sortable: true },
     ],
     [t.assetId, t.photo, t.name, t.campus, t.location]
@@ -45766,7 +46123,7 @@ export default function App() {
         case "amount":
           return String(row.currentStock ?? 0);
         case "checkStatus":
-          return latestToolReviewByItemId.has(Number(row.id || 0))
+          return reportInventoryReviewByItemId.has(Number(row.id || 0))
             ? (lang === "km" ? "បានពិនិត្យ" : "Checked")
             : (lang === "km" ? "មិនទាន់ពិនិត្យ" : "Not Checked Yet");
         case "stockIn":
@@ -45783,7 +46140,7 @@ export default function App() {
           return "-";
       }
     },
-    [inventoryCampusLabel, inventoryReportOwnerText, lang, latestToolReviewByItemId]
+    [inventoryCampusLabel, inventoryReportOwnerText, lang, reportInventoryReviewByItemId]
   );
   const assetMasterCampusTitle = useMemo(() => {
     if (assetMasterCampusFilter.includes("ALL")) return t.allCampuses;
@@ -45836,7 +46193,7 @@ export default function App() {
             overdue: "មើលឧបករណ៍ដែលលើសកាលកំណត់ថែទាំ។",
             transfer: "ប្រវត្តិផ្ទេរទ្រព្យសម្បត្តិរវាងសាខា/ទីតាំង។",
             school_key_control: "បង្ហាញសោសាលាតាមសាខា ស្ថានភាពបច្ចុប្បន្ន និងប្រវត្តិចេញ/ចូលសោ។",
-            staff_borrowing: "ទ្រព្យដែលសាលាបានចាត់តាំងឱ្យបុគ្គលិកប្រើប្រាស់ និងអ្នកទទួលខុសត្រូវបច្ចុប្បន្ន។",
+            staff_borrowing: "បោះពុម្ពទម្រង់ខ្ចីសម្ភារៈសម្រាប់បុគ្គលិក ដោយយកពីទ្រព្យដែលបានចាត់តាំងឱ្យប្រើប្រាស់ និងរួចសម្រាប់ចុះហត្ថលេខា។",
             maintenance_completion: "តាមដានលទ្ធផលថែទាំក្នុងចន្លោះកាលបរិច្ឆេទ។",
             verification_summary: "សង្ខេបលទ្ធផលត្រួតពិនិត្យតាមខែ ឬត្រីមាស។",
             qr_labels: "បោះពុម្ពស្លាក QR សម្រាប់ទ្រព្យសម្បត្តិ ឬម៉ាស៊ីនបោះពុម្ពជួល។",
@@ -45854,7 +46211,7 @@ export default function App() {
             overdue: "Show assets that are overdue for maintenance.",
             transfer: "Transfer history between campuses and locations.",
             school_key_control: "Show school keys by campus with current holder status and movement history.",
-            staff_borrowing: "Assets currently assigned to staff with accountability records.",
+            staff_borrowing: "Printable staff borrowing form based on current assigned assets, ready for handover and sign-off.",
             maintenance_completion: "Maintenance completion records in selected date range.",
             verification_summary: "Verification summary by month or term.",
             qr_labels: "Print QR labels for selected assets or rental printers.",
@@ -46064,8 +46421,9 @@ export default function App() {
     if (reportType === "staff_borrowing") {
       setReportAssetIdFilter("");
       setStaffBorrowingCampusFilter(["ALL"]);
+      setStaffBorrowingCategoryFilter(["ALL"]);
       setStaffBorrowingAssignedToFilter("ALL");
-      setStaffBorrowingLocationFilter("ALL");
+      setStaffBorrowingItemNameFilter("ALL");
       setStaffBorrowingVisibleColumns([
         "assetId",
         "photo",
@@ -46122,9 +46480,11 @@ export default function App() {
       setReportAssetIdFilter("");
       setReportInventoryMode("all");
       setReportInventoryViewMode("list");
-      setReportInventoryGroupFilter("CLEAN_TOOL");
+      setReportInventoryHideZeroAmount(false);
+      setReportInventoryGroupFilter("ALL");
       setReportInventoryCampusFilter(["ALL"]);
       setReportInventoryPropertyFilter("AUTO");
+      setReportInventoryReviewMonth(toYmd(new Date()).slice(0, 7));
       setInventoryReportVisibleColumns([
         "code",
         "photo",
@@ -46193,8 +46553,9 @@ export default function App() {
     setReportType("asset_master");
     setReportAssetIdFilter("");
     setStaffBorrowingCampusFilter(["ALL"]);
+    setStaffBorrowingCategoryFilter(["ALL"]);
     setStaffBorrowingAssignedToFilter("ALL");
-    setStaffBorrowingLocationFilter("ALL");
+    setStaffBorrowingItemNameFilter("ALL");
     setReportInventoryMode("all");
     setReportInventoryPropertyFilter("AUTO");
     resetAssetMasterReportFilters();
@@ -47483,6 +47844,32 @@ export default function App() {
     let columns: string[] = [];
     let rows: string[][] = [];
     let qrPrintMap: Record<string, string> = {};
+    const buildStaffBorrowingPrintSheets = () => {
+      const grouped = new Map<string, typeof sortedStaffBorrowingRows>();
+      for (const row of sortedStaffBorrowingRows) {
+        const key = String(row.assignedTo || "").trim() || "Unassigned";
+        const current = grouped.get(key) || [];
+        current.push(row);
+        grouped.set(key, current);
+      }
+      return Array.from(grouped.entries())
+        .map(([staffName, sheetRows]) => {
+          const campuses = Array.from(new Set(sheetRows.map((row) => reportCampusName(row.campus)).filter(Boolean)));
+          const latestSinceDate = sheetRows
+            .map((row) => String(row.sinceDate || "").trim())
+            .filter(Boolean)
+            .sort((a, b) => b.localeCompare(a))[0] || "";
+          return {
+            staffName,
+            rows: [...sheetRows].sort((a, b) => a.assetId.localeCompare(b.assetId)),
+            campusLabel: campuses.join(", ") || "-",
+            latestSinceDate,
+            ackCount: sheetRows.filter((row) => row.responsibilityAck === "Yes").length,
+          };
+        })
+        .sort((a, b) => a.staffName.localeCompare(b.staffName, undefined, { sensitivity: "base" }));
+    };
+    const staffBorrowingPrintSheets = buildStaffBorrowingPrintSheets();
 
     const printPhotoBase =
       (apiBaseInput || ENV_API_BASE_URL || getAutoApiBaseForHost() || (typeof window !== "undefined" ? window.location.origin : ""))
@@ -47736,7 +48123,7 @@ export default function App() {
         row.note || "-",
       ]);
     } else if (reportType === "staff_borrowing") {
-      title = "Staff Asset Assignment List Report";
+      title = "Staff Borrowing Sign-Off Report";
       columns = visibleStaffBorrowingColumnDefs.map((column) => column.label);
       rows = sortedStaffBorrowingRows.map((r) =>
         visibleStaffBorrowingColumnDefs.map((column) => {
@@ -48090,7 +48477,7 @@ export default function App() {
           : `<tr><td colspan="${columns.length}">${escapeHtml(lang === "km" ? "មិនមានទិន្នន័យ" : "No data.")}</td></tr>`;
 
     const inventoryToolReportMonthLabel = reportInventoryIsToolGroup
-      ? formatMonthYear(toolReviewMonth || toYmd(new Date()).slice(0, 7))
+      ? formatMonthYear(reportInventoryReviewMonth || toYmd(new Date()).slice(0, 7))
       : "";
     const inventoryToolPropertyLabel = reportInventoryIsToolGroup
       ? reportInventoryPropertyFilter === "SCHOOL"
@@ -48111,8 +48498,8 @@ export default function App() {
               })()
             : reportInventoryPropertyFilterLabel
       : "";
-    const inventoryToolCheckedCount = reportInventoryRows.filter((row) => latestToolReviewByItemId.has(Number(row.id || 0))).length;
-    const inventoryToolNotCheckedCount = reportInventoryRows.filter((row) => !latestToolReviewByItemId.has(Number(row.id || 0))).length;
+    const inventoryToolCheckedCount = reportInventoryRows.filter((row) => reportInventoryReviewByItemId.has(Number(row.id || 0))).length;
+    const inventoryToolNotCheckedCount = reportInventoryRows.filter((row) => !reportInventoryReviewByItemId.has(Number(row.id || 0))).length;
     const inventoryComparisonZeroStockCount = reportInventoryComparisonRows.reduce(
       (sum, row) => sum + row.campusStocks.filter((entry) => Number(entry.stock || 0) <= 0).length,
       0
@@ -48244,31 +48631,7 @@ export default function App() {
                 ]
           )
         : reportType === "staff_borrowing"
-        ? buildPrintSummaryGrid([
-            { label: lang === "km" ? "ទ្រព្យដែលខ្ចី/ប្រគល់" : "Borrowed / Assigned Assets", value: sortedStaffBorrowingRows.length },
-            {
-              label: lang === "km" ? "សាខា" : "Campus",
-              value: summarizeMultiFilter(staffBorrowingCampusFilter, t.allCampuses, reportCampusName),
-            },
-            {
-              label: lang === "km" ? "បុគ្គលិក" : "Staff",
-              value:
-                staffBorrowingAssignedToFilter === "ALL"
-                  ? (lang === "km" ? "បុគ្គលិកទាំងអស់" : "All Staff")
-                  : staffBorrowingAssignedToFilter,
-            },
-            {
-              label: lang === "km" ? "ទីតាំង" : "Location",
-              value:
-                staffBorrowingLocationFilter === "ALL"
-                  ? (lang === "km" ? "គ្រប់ទីតាំង" : "All Locations")
-                  : staffBorrowingLocationFilter,
-            },
-            {
-              label: lang === "km" ? "ការទទួលស្គាល់" : "Ack",
-              value: lang === "km" ? "ការទទួលស្គាល់ទំនួលខុសត្រូវ" : "Responsibility acknowledgement",
-            },
-          ])
+        ? ""
         : reportType === "asset_master"
         ? isAirconAssetMasterReport
           ? `<section class="report-two-column-summary">
@@ -48438,6 +48801,8 @@ export default function App() {
               lang === "km" ? "របាយការណ៍នេះសម្រាប់" : "This Report of"
             )}: ${escapeHtml(itemText)}</p>`;
           })()
+        : reportType === "staff_borrowing"
+        ? ""
         : reportType === "it_vault"
         ? [
             `<p class="meta">Department: Eco International School | IT and Facility Control Center</p>`,
@@ -48529,7 +48894,9 @@ export default function App() {
 
     const qrPrintVariant = qrLabelSize.replace("cm", "");
     const qrLabelPageCss =
-      reportType === "qr_labels"
+      reportType === "staff_borrowing"
+        ? `@page { size: A4 portrait; margin: 0; }`
+        : reportType === "qr_labels"
         ? `@page { size: A4 portrait; margin: 4mm; }`
         : reportType === "location_tags"
         ? `@page { size: A4 portrait; margin: 6mm; }`
@@ -48552,6 +48919,8 @@ export default function App() {
                 ? (lang === "km" ? "ប្រតិទិនកម្ចាត់សត្វល្អិត" : "Pest Service Calendar")
                 : (lang === "km" ? "ប្រតិទិនថែទាំ" : "Maintenance Calendar")
             )
+          : reportType === "staff_borrowing"
+            ? "Staff Borrowing Sign-Off Report"
           : reportType === "location_tags"
             ? (lang === "km" ? "ស្លាកឈ្មោះសម្ភារៈតាមទីតាំង" : "Simple Location Tags")
           : reportType === "inventory_balance" && reportInventoryIsToolGroup
@@ -48597,12 +48966,38 @@ export default function App() {
                   : schoolKeyHolderLabel(reportSchoolKeyStatusFilter)
               }`,
             ].join("\n")
+        : reportType === "staff_borrowing"
+          ? ""
         : "";
 
     const reportContentHtml =
       reportType === "asset_full_record"
         ? (() => {
             const assetPhoto = toPrintablePhotoUrl(String(focusedReportAsset?.photo || ""));
+            const generatorHeaders = ["No.", "Date", "Record Type", "By", "Details"];
+            const generatorDataRows = assetFullRecordGeneratorRows.map((row, index) => [
+              String(index + 1),
+              `${formatDate(row.date || "-")}${maintenanceEntryDisplayTime(row) ? ` ${formatTimeOnly(maintenanceEntryDisplayTime(row))}` : ""}`,
+              row.type || "-",
+              row.by || "-",
+              row.note || "-",
+            ]);
+            const generatorColgroup = buildPreviewColgroupHtml(buildPreviewColumnWidths(generatorHeaders, generatorDataRows));
+            const generatorRowsHtml = assetFullRecordGeneratorRows.length
+              ? assetFullRecordGeneratorRows
+                  .map((row, index) => `<tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(
+                        `${formatDate(row.date || "-")}${
+                          maintenanceEntryDisplayTime(row) ? ` ${formatTimeOnly(maintenanceEntryDisplayTime(row))}` : ""
+                        }`
+                      )}</td>
+                      <td>${escapeHtml(row.type || "-")}</td>
+                      <td>${escapeHtml(row.by || "-")}</td>
+                      <td style="white-space:pre-wrap;">${escapeHtml(row.note || "-")}</td>
+                    </tr>`)
+                  .join("")
+              : `<tr><td colspan="5">No generator fuel or usage records.</td></tr>`;
             const maintenanceHeaders = ["No.", "Date", "Type", "Status", "Condition", "By", "Note", "After Photo"];
             const maintenanceDataRows = assetFullRecordMaintenanceRows.map((row, index) => [
               String(index + 1),
@@ -48758,6 +49153,14 @@ export default function App() {
                       })()
                     : `<p>No current assignment history.</p>`
                 }
+              </div>
+              <div class="asset-full-print-block">
+                <h2>Generator Records</h2>
+                <table class="preview-report-table">
+                  ${generatorColgroup}
+                  ${buildPreviewHeadHtml(generatorHeaders)}
+                  <tbody>${generatorRowsHtml}</tbody>
+                </table>
               </div>
               <div class="asset-full-print-block">
                 <h2>Maintenance History</h2>
@@ -49064,6 +49467,80 @@ export default function App() {
                   <tbody>${tableHtml}</tbody>
                 </table>
               </div>`;
+          })()
+        : reportType === "staff_borrowing"
+        ? (() => {
+            if (!staffBorrowingPrintSheets.length) {
+              return `<div class="staff-borrowing-print-empty">${escapeHtml(
+                lang === "km" ? "មិនមានទ្រព្យខ្ចីសម្រាប់បុគ្គលិកក្នុងតម្រងនេះទេ។" : "No staff borrowing records in the current filter."
+              )}</div>`;
+            }
+            return `<div class="staff-borrowing-print-sheet-list">
+              ${staffBorrowingPrintSheets
+                .map((sheet, sheetIndex) => {
+                  const totalQty = sheet.rows.length;
+                  const assetRowsHtml = sheet.rows
+                    .map((row, index) => {
+                      const printablePhoto = toPrintablePhotoUrl(String(row.assetPhoto || "").trim());
+                      const brandModel = [row.brand, row.model].filter(Boolean).join(" / ") || "-";
+                      return `<tr>
+                        <td>${index + 1}</td>
+                        <td class="staff-borrowing-asset-photo-cell">${
+                          printablePhoto
+                            ? `<img loading="lazy" decoding="async" src="${escapeHtml(printablePhoto)}" alt="${escapeHtml(row.assetId || `asset-${index + 1}`)}" class="staff-borrowing-asset-photo" />`
+                            : `<div class="staff-borrowing-asset-photo-empty">${escapeHtml(lang === "km" ? "គ្មានរូប" : "No Photo")}</div>`
+                        }</td>
+                        <td><strong>${escapeHtml(row.assetId || "-")}</strong></td>
+                        <td>${escapeHtml(row.itemName || "-")}</td>
+                        <td>${escapeHtml(brandModel)}</td>
+                        <td>${escapeHtml(row.location || "-")}</td>
+                        <td class="staff-borrowing-asset-qty">1</td>
+                      </tr>`;
+                    })
+                    .join("");
+                  return `<section class="staff-borrowing-print-sheet${sheetIndex < staffBorrowingPrintSheets.length - 1 ? " has-page-break" : ""}">
+                    <div class="staff-borrowing-sample-meta staff-borrowing-sample-meta-primary">
+                      <div class="staff-borrowing-sample-meta-line">
+                        <span>${escapeHtml(lang === "km" ? "ឈ្មោះបុគ្គលិក" : "Staff Name")}:</span>
+                        <strong>${escapeHtml(sheet.staffName || "-")}</strong>
+                      </div>
+                      <div class="staff-borrowing-sample-meta-line staff-borrowing-sample-meta-line-right">
+                        <span>${escapeHtml(lang === "km" ? "កាលបរិច្ឆេទ" : "Date")}:</span>
+                        <strong>${escapeHtml(sheet.latestSinceDate ? formatDate(sheet.latestSinceDate) : generatedAt)}</strong>
+                      </div>
+                    </div>
+                    <table class="staff-borrowing-asset-table">
+                      <thead>
+                        <tr>
+                          <th class="staff-borrowing-asset-col-no">${escapeHtml(lang === "km" ? "ល.រ" : "No")}</th>
+                          <th class="staff-borrowing-asset-col-photo">${escapeHtml(lang === "km" ? "រូបថត" : "Photo")}</th>
+                          <th>${escapeHtml(lang === "km" ? "លេខទ្រព្យ" : "Asset ID")}</th>
+                          <th>${escapeHtml(lang === "km" ? "សម្ភារៈ" : "Item")}</th>
+                          <th>${escapeHtml(lang === "km" ? "ម៉ាក / ម៉ូឌែល" : "Brand / Model")}</th>
+                          <th>${escapeHtml(lang === "km" ? "ទីតាំង" : "Location")}</th>
+                          <th class="staff-borrowing-asset-col-qty">${escapeHtml(lang === "km" ? "ចំនួន" : "Qty")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${assetRowsHtml}
+                      </tbody>
+                    </table>
+                    <div class="staff-borrowing-sample-signatures">
+                      <div class="staff-borrowing-sample-signature-card">
+                        <div class="staff-borrowing-sample-signature-title">${escapeHtml(lang === "km" ? "អ្នកទទួល" : "Staff Receive")}:</div>
+                        <div class="staff-borrowing-sample-signature-space"></div>
+                        <div class="staff-borrowing-sample-signature-line"></div>
+                      </div>
+                      <div class="staff-borrowing-sample-signature-card">
+                        <div class="staff-borrowing-sample-signature-title">${escapeHtml(lang === "km" ? "ចេញដោយ" : "Issued by")}:</div>
+                        <div class="staff-borrowing-sample-signature-space"></div>
+                        <div class="staff-borrowing-sample-signature-line"></div>
+                      </div>
+                    </div>
+                  </section>`;
+                })
+                .join("")}
+            </div>`;
           })()
         : reportType === "location_tags"
         ? `<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;">
@@ -49424,14 +49901,39 @@ export default function App() {
           ])
         : "",
     ].filter(Boolean);
-    const reportSignatureHtml = reportSignatureCards.length
+    const reportSignatureHtml = reportType === "staff_borrowing"
+      ? ""
+      : reportSignatureCards.length
       ? `<section class="report-signature-section report-signature-section-count-${reportSignatureCards.length}">${reportSignatureCards.join("")}</section>`
       : "";
+    const reportHeadHtml =
+      reportType === "staff_borrowing"
+        ? `<div class="report-head staff-borrowing-report-head">
+            <div class="staff-borrowing-report-head-top">
+              <img loading="lazy" decoding="async" class="report-head-logo staff-borrowing-report-head-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
+            </div>
+            <div class="staff-borrowing-report-head-school">${escapeHtml(lang === "km" ? "សាលា អេកូ អន្តរជាតិ" : "Eco International School")}</div>
+            <div class="staff-borrowing-report-head-title">${reportHeadingTitleHtml}</div>
+          </div>`
+        : `<div class="report-head${reportType === "inventory_balance" && reportInventoryIsToolGroup ? " report-head-centered" : ""}">
+            <div class="report-head-left">
+              <h1>${escapeHtml(lang === "km" ? "សាលា អេកូ អន្តរជាតិ" : "Eco International School")}</h1>
+              <h2>${reportHeadingTitleHtml}</h2>
+              ${reportHeadingSubtitle
+                ? `<div class="report-head-subtitle">${reportHeadingSubtitle
+                    .split("\n")
+                    .map((line) => escapeHtml(line))
+                    .join("<br />")}</div>`
+                : ""}
+            </div>
+            <img loading="lazy" decoding="async" class="report-head-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
+          </div>`;
     const defaultPrintWindowTitle = appendCampusToPrintTitle(title, resolveCurrentReportPrintCampusLabel());
     const printWindowTitle = defaultPrintWindowTitle;
     const isPestServiceCalendarPrint =
       reportType === "schedule_calendar" && reportScheduleGroupFilter === "pest_service";
     const previewBodyClassName = [
+      reportType === "staff_borrowing" ? "staff-borrowing-print-mode" : "",
       reportType === "qr_labels" ? "qr-print-mode" : "",
       isPestServiceCalendarPrint ? "schedule-pest-print" : "",
     ]
@@ -49596,7 +50098,7 @@ export default function App() {
             --preview-amount-label-size: 9px;
             --preview-empty-label-size: 11px;
           }
-          body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #f5f1e7; }
+          body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; color: #1b2d23; background: #ffffff; }
           body,
           body *,
           .report-document-shell,
@@ -49647,11 +50149,23 @@ export default function App() {
           .preview-btn-primary { background: #f26f21; color: #fff; border-color: #f26f21; }
           .preview-shell { padding: 20px; }
           .report-document-shell {
-            border: 1px solid #deccb1;
+            border: 0;
             border-radius: 24px;
-            background: linear-gradient(180deg, #f8f2e6 0%, #f4ecdd 100%);
+            background: #ffffff;
             box-shadow: 0 18px 42px rgba(79, 60, 32, 0.08);
             padding: 28px 28px 24px;
+          }
+          body.staff-borrowing-print-mode .preview-shell {
+            padding: 20px 0;
+            display: flex;
+            justify-content: center;
+          }
+          body.staff-borrowing-print-mode .report-document-shell {
+            width: 210mm;
+            max-width: calc(100vw - 40px);
+            min-height: 297mm;
+            padding: 14mm 10mm 12mm;
+            border-radius: 12px;
           }
           h1 { margin: 0 0 8px; font-size: 24px; }
           h2 { margin: 0; font-size: 18px; }
@@ -49676,14 +50190,14 @@ export default function App() {
             justify-items: center;
             text-align: center;
             align-items: start;
-            margin-bottom: 10px;
-            min-height: 92px;
-            padding: 14px 220px 0 220px;
+            margin-bottom: 14px;
+            min-height: 118px;
+            padding: 32px 0 0;
             overflow: visible;
           }
           .report-head-left {
             width: 100%;
-            max-width: none;
+            max-width: 620px;
             margin: 0 auto;
             padding-right: 0;
             box-sizing: border-box;
@@ -49691,29 +50205,64 @@ export default function App() {
           }
           .report-head-logo {
             position: absolute;
-            right: 10px;
-            top: 8px;
-            transform: none;
-            width: 190px;
-            max-width: 24vw;
+            right: 28px;
+            top: 24px;
+            width: 170px;
+            max-width: 170px;
             max-height: 72px;
-            object-position: right top;
+            object-position: right center;
           }
           .report-head h1 {
             font-size: 18px;
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: #5a705f;
-            margin: 0 0 8px 0;
+            margin: 0;
             line-height: 1.25;
+            white-space: nowrap;
           }
           .report-head h2 {
-            font-size: 28px;
+            font-size: 26px;
             font-weight: 800;
             color: #1f2e26;
             line-height: 1.2;
             max-width: 100%;
             margin: 0;
+            white-space: nowrap;
+          }
+          .staff-borrowing-report-head {
+            gap: 10px;
+            min-height: 0;
+            padding-top: 22px;
+          }
+          .staff-borrowing-report-head-top {
+            display: flex;
+            justify-content: center;
+          }
+          .staff-borrowing-report-head-school {
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #5a705f;
+            text-align: center;
+            white-space: nowrap;
+          }
+          .staff-borrowing-report-head-logo {
+            position: static;
+            width: 210px;
+            max-width: 210px;
+            max-height: 88px;
+          }
+          .staff-borrowing-report-head-title {
+            width: 100%;
+            font-size: 28px;
+            font-weight: 800;
+            color: #1f2e26;
+            line-height: 1.2;
+            text-align: center;
+            white-space: nowrap;
+            margin-top: 2px;
           }
           .report-head-centered h2 {
             font-size: 24px;
@@ -50519,6 +51068,141 @@ export default function App() {
           .asset-full-print-grid span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #6f7d73; margin-bottom: 4px; }
           .asset-full-print-grid strong { font-size: 14px; color: #1b2d23; }
           .asset-full-print-block { display: grid; gap: 8px; }
+          .staff-borrowing-print-sheet-list { display: grid; gap: 14px; }
+          .staff-borrowing-print-sheet {
+            display: grid;
+            gap: 14px;
+            padding: 16px 14px 18px;
+            border: 0;
+            border-radius: 10px;
+            background: #fff;
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .staff-borrowing-print-sheet.has-page-break { break-after: page; page-break-after: always; }
+          .staff-borrowing-sample-signatures { display: grid; }
+          .staff-borrowing-sample-meta {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px 20px;
+            margin: 0;
+          }
+          .staff-borrowing-sample-meta-primary {
+            align-items: center;
+            margin-bottom: 2px;
+          }
+          .staff-borrowing-sample-meta-line {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 13px;
+            color: #1b1b1b;
+          }
+          .staff-borrowing-sample-meta-line-right {
+            justify-content: flex-end;
+            text-align: right;
+          }
+          .staff-borrowing-sample-meta-line span {
+            font-weight: 700;
+          }
+          .staff-borrowing-sample-meta-line strong {
+            font-size: 13px;
+            font-weight: 500;
+          }
+          .staff-borrowing-asset-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 10px;
+            color: #111;
+            margin-top: 2px;
+          }
+          .staff-borrowing-asset-table th,
+          .staff-borrowing-asset-table td {
+            border: 1px solid #222;
+            padding: 6px 6px;
+            line-height: 1.25;
+            vertical-align: middle;
+          }
+          .staff-borrowing-asset-table th {
+            background: #fff200;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-align: center;
+          }
+          .staff-borrowing-asset-table td:nth-child(1),
+          .staff-borrowing-asset-table td:nth-child(7) {
+            text-align: center;
+          }
+          .staff-borrowing-asset-col-no { width: 6%; }
+          .staff-borrowing-asset-col-photo { width: 15%; }
+          .staff-borrowing-asset-col-qty { width: 7%; }
+          .staff-borrowing-asset-photo-cell { text-align: center; }
+          .staff-borrowing-asset-photo,
+          .staff-borrowing-asset-photo-empty {
+            width: 54px;
+            height: 54px;
+            border: 1px solid #cfd7dd;
+            border-radius: 6px;
+            object-fit: cover;
+            background: #fff;
+            display: inline-grid;
+            place-items: center;
+            color: #61707b;
+            font-size: 8px;
+            font-weight: 700;
+          }
+          .staff-borrowing-asset-qty { text-align: center; }
+          .staff-borrowing-sample-signatures {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 92px;
+            margin-top: 64px;
+            align-items: end;
+            width: 100%;
+          }
+          .staff-borrowing-sample-signature-card {
+            display: grid;
+            gap: 18px;
+            align-content: start;
+            min-height: 210px;
+            padding: 0;
+            border: 0;
+            width: 100%;
+            box-sizing: border-box;
+          }
+          .staff-borrowing-sample-signature-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #17231d;
+          }
+          .staff-borrowing-sample-signature-card:last-child {
+            text-align: right;
+          }
+          .staff-borrowing-sample-signature-card:last-child .staff-borrowing-sample-signature-title {
+            justify-self: end;
+          }
+          .staff-borrowing-sample-signature-card:last-child .staff-borrowing-sample-signature-line {
+            margin-left: auto;
+          }
+          .staff-borrowing-sample-signature-space {
+            min-height: 128px;
+          }
+          .staff-borrowing-sample-signature-line {
+            width: 88%;
+            max-width: 88%;
+            height: 0;
+            border-bottom: 2px solid #202020;
+            align-self: end;
+          }
+          .staff-borrowing-print-empty {
+            padding: 24px;
+            border: 1px dashed #cfded0;
+            border-radius: 16px;
+            text-align: center;
+            color: #5f6f65;
+            background: #fff;
+          }
           .preview-column-resizer {
             position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; user-select: none; z-index: 2;
           }
@@ -50609,6 +51293,25 @@ export default function App() {
               color-adjust: exact !important;
             }
             .report-two-column-summary { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); }
+            body.staff-borrowing-print-mode {
+              background: #ffffff;
+            }
+            body.staff-borrowing-print-mode .preview-shell {
+              padding: 0;
+              display: flex;
+              justify-content: center;
+            }
+            body.staff-borrowing-print-mode .report-document-shell {
+              box-sizing: border-box;
+              width: 210mm;
+              max-width: 210mm;
+              min-height: 297mm;
+              border: 0;
+              border-radius: 12px;
+              box-shadow: none;
+              padding: 14mm 10mm 12mm;
+              background: #ffffff;
+            }
           }
           @media (max-width: 1200px) {
             .report-summary-box-value-item-grid {
@@ -50616,6 +51319,36 @@ export default function App() {
             }
             .maintenance-pending-list {
               grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            body.staff-borrowing-print-mode .preview-shell {
+              padding: 12px;
+              display: block;
+            }
+            body.staff-borrowing-print-mode .report-document-shell {
+              width: auto;
+              max-width: 100%;
+              min-height: 0;
+              padding: 14px 14px 18px;
+            }
+            .staff-borrowing-sample-signatures,
+            .staff-borrowing-sample-meta {
+              grid-template-columns: 1fr;
+            }
+            body.staff-borrowing-print-mode .staff-borrowing-sample-signatures {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .staff-borrowing-report-head-top {
+              display: flex;
+              justify-content: center;
+            }
+            .staff-borrowing-asset-photo,
+            .staff-borrowing-asset-photo-empty {
+              width: 44px;
+              height: 44px;
+            }
+            .staff-borrowing-sample-meta-line strong {
+              min-width: 0;
+              width: 100%;
             }
           }
         </style>
@@ -50667,19 +51400,7 @@ export default function App() {
         </div>
         <div class="preview-shell">
           <div class="report-document-shell">
-            <div class="report-head${reportType === "inventory_balance" && reportInventoryIsToolGroup ? " report-head-centered" : ""}">
-              <div class="report-head-left">
-                <h1>${escapeHtml(lang === "km" ? "សាលា អេកូ អន្តរជាតិ" : "Eco International School")}</h1>
-                <h2>${reportHeadingTitleHtml}</h2>
-                ${reportHeadingSubtitle
-                  ? `<div class="report-head-subtitle">${reportHeadingSubtitle
-                      .split("\n")
-                      .map((line) => escapeHtml(line))
-                      .join("<br />")}</div>`
-                  : ""}
-              </div>
-              <img loading="lazy" decoding="async" class="report-head-logo" src="${ECO_LOGO_URL}" alt="Eco International School logo" />
-            </div>
+            ${reportHeadHtml}
             <div class="report-meta-stack">
               ${printMetaHtml}
             </div>
@@ -56944,67 +57665,7 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                       </div>
                       <div className="field field-wide">
-                        <span>Diesel Control</span>
-                        <div className="form-grid" style={{ marginTop: 8 }}>
-                          <input
-                            className="input"
-                            value={assetForm.generatorFuelType}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorFuelType: e.target.value }))}
-                            placeholder="Diesel"
-                          />
-                          <input
-                            className="input"
-                            value={assetForm.generatorTankCapacity}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorTankCapacity: e.target.value }))}
-                            placeholder="Tank capacity, ex: 200 L"
-                          />
-                          <input
-                            className="input"
-                            value={assetForm.generatorFuelLevel}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorFuelLevel: e.target.value }))}
-                            placeholder="Current fuel, ex: 120 L"
-                          />
-                          <input
-                            className="input"
-                            value={assetForm.generatorLowFuelThreshold}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorLowFuelThreshold: e.target.value }))}
-                            placeholder="Low fuel alert, ex: 40 L"
-                          />
-                          <input
-                            className="input"
-                            value={assetForm.generatorHourMeter}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorHourMeter: e.target.value }))}
-                            placeholder="Hour meter, ex: 845 h"
-                          />
-                          <input
-                            type="date"
-                            className="input"
-                            value={normalizeYmdInput(assetForm.generatorLastRefillDate)}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorLastRefillDate: normalizeYmdInput(e.target.value) }))}
-                          />
-                          <input
-                            className="input"
-                            value={assetForm.generatorLastRefillLiters}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorLastRefillLiters: e.target.value }))}
-                            placeholder="Last refill amount, ex: 60 L"
-                          />
-                          <input
-                            className="input"
-                            value={assetForm.generatorLastServiceHours}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorLastServiceHours: e.target.value }))}
-                            placeholder="Last service hours, ex: 800 h"
-                          />
-                          <input
-                            className="input"
-                            value={assetForm.generatorNextServiceHours}
-                            onChange={(e) => setAssetForm((f) => ({ ...f, generatorNextServiceHours: e.target.value }))}
-                            placeholder="Next service hours, ex: 1000 h"
-                          />
-                        </div>
-                        <div className="tiny">Use liters and running hours so fuel stock and service timing are easy to track.</div>
-                      </div>
-                      <div className="field field-wide">
-                        <span>Included Components</span>
+                        <span>ATS Linked Component</span>
                         <input
                           id="generator-ats-create-upload"
                           className="file-input"
@@ -57047,6 +57708,9 @@ function formatTicketRequestSource(value?: string) {
                             </div>
                             <div className="tiny">
                               ATS is saved as a child component under this generator.
+                            </div>
+                            <div className="tiny">
+                              Fuel, usage, and maintenance are recorded in their own history sections.
                             </div>
                           </div>
                           {assetForm.generatorHasAts ? (
@@ -59074,67 +59738,7 @@ function formatTicketRequestSource(value?: string) {
                           </div>
                         </div>
                         <div className="field field-wide">
-                          <span>Diesel Control</span>
-                          <div className="form-grid" style={{ marginTop: 8 }}>
-                            <input
-                              className="input"
-                              value={assetEditForm.generatorFuelType}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorFuelType: e.target.value }))}
-                              placeholder="Diesel"
-                            />
-                            <input
-                              className="input"
-                              value={assetEditForm.generatorTankCapacity}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorTankCapacity: e.target.value }))}
-                              placeholder="Tank capacity, ex: 200 L"
-                            />
-                            <input
-                              className="input"
-                              value={assetEditForm.generatorFuelLevel}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorFuelLevel: e.target.value }))}
-                              placeholder="Current fuel, ex: 120 L"
-                            />
-                            <input
-                              className="input"
-                              value={assetEditForm.generatorLowFuelThreshold}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorLowFuelThreshold: e.target.value }))}
-                              placeholder="Low fuel alert, ex: 40 L"
-                            />
-                            <input
-                              className="input"
-                              value={assetEditForm.generatorHourMeter}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorHourMeter: e.target.value }))}
-                              placeholder="Hour meter, ex: 845 h"
-                            />
-                            <input
-                              type="date"
-                              className="input"
-                              value={normalizeYmdInput(assetEditForm.generatorLastRefillDate)}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorLastRefillDate: normalizeYmdInput(e.target.value) }))}
-                            />
-                            <input
-                              className="input"
-                              value={assetEditForm.generatorLastRefillLiters}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorLastRefillLiters: e.target.value }))}
-                              placeholder="Last refill amount, ex: 60 L"
-                            />
-                            <input
-                              className="input"
-                              value={assetEditForm.generatorLastServiceHours}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorLastServiceHours: e.target.value }))}
-                              placeholder="Last service hours, ex: 800 h"
-                            />
-                            <input
-                              className="input"
-                              value={assetEditForm.generatorNextServiceHours}
-                              onChange={(e) => setAssetEditForm((f) => ({ ...f, generatorNextServiceHours: e.target.value }))}
-                              placeholder="Next service hours, ex: 1000 h"
-                            />
-                          </div>
-                          <div className="tiny">This lets you update diesel level, refill history, and service-hour planning in one place.</div>
-                        </div>
-                        <div className="field field-wide">
-                          <span>Included Components</span>
+                          <span>ATS Linked Component</span>
                           <input
                             id="generator-ats-edit-upload"
                             className="file-input"
@@ -59177,6 +59781,9 @@ function formatTicketRequestSource(value?: string) {
                               </div>
                               <div className="tiny">
                                 ATS stays linked as a child component under this generator.
+                              </div>
+                              <div className="tiny">
+                                Fuel, usage, and maintenance stay in their own history records.
                               </div>
                             </div>
                             {assetEditForm.generatorHasAts ? (
@@ -63351,7 +63958,7 @@ function formatTicketRequestSource(value?: string) {
                     <span>Item</span>
                     <InventoryItemPicker
                       value={inventoryTxnForm.itemId}
-                      items={inventoryVisibleItems.slice().sort((a, b) => a.itemCode.localeCompare(b.itemCode))}
+                      items={inventoryTxnPickerItems}
                       onChange={(itemId) => setInventoryTxnForm((f) => ({ ...f, itemId }))}
                       placeholder="Select item"
                       getLabel={inventoryItemLabel}
@@ -63550,7 +64157,7 @@ function formatTicketRequestSource(value?: string) {
                           "";
                         return (
                         <article key={`inv-tx-mobile-${row.id}`} className="inventory-stock-mobile-card">
-                          {editingInventoryTxnId === row.id ? (
+                          {editingInventoryTxnId === row.id && !inventoryTxnEditModalOpen ? (
                             <>
                               <div className="inventory-stock-mobile-head">
                                 <strong>{lang === "km" ? "កែប្រែប្រតិបត្តិការ" : "Edit Transaction"}</strong>
@@ -63737,7 +64344,7 @@ function formatTicketRequestSource(value?: string) {
                               key={`inv-tx-row-${row.id}`}
                               className={editingInventoryTxnId === row.id ? "inventory-stock-edit-row" : ""}
                             >
-                              {editingInventoryTxnId === row.id ? (
+                              {editingInventoryTxnId === row.id && !inventoryTxnEditModalOpen ? (
                                 <>
                                   <td>
                                     <input
@@ -68041,6 +68648,106 @@ function formatTicketRequestSource(value?: string) {
         )}
           </section>
         )}
+
+        {inventoryTxnEditModalOpen && editingInventoryTxnId !== null ? (
+          <div className="modal-backdrop" onClick={cancelInventoryTxnEdit}>
+            <section
+              className="panel modal-panel inventory-item-edit-modal inventory-item-create-panel"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="panel-row">
+                <h2>{lang === "km" ? "កែប្រែប្រតិបត្តិការស្តុក" : "Edit Stock Transaction"}</h2>
+                <button className="tab" type="button" onClick={cancelInventoryTxnEdit}>Close</button>
+              </div>
+              <div className="form-grid">
+                <label className="field field-wide">
+                  <span>Item</span>
+                  <InventoryItemPicker
+                    value={inventoryTxnEditForm.itemId}
+                    items={inventoryTxnPickerItems}
+                    onChange={(itemId) => setInventoryTxnEditForm((f) => ({ ...f, itemId }))}
+                    placeholder="Select item"
+                    getLabel={inventoryItemLabel}
+                  />
+                </label>
+                <label className="field">
+                  <span>{t.date}</span>
+                  <input className="input" type="date" value={inventoryTxnEditForm.date} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, date: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>Type</span>
+                  <select className="input" value={inventoryTxnEditForm.type} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, type: e.target.value as InventoryTxn["type"] }))}>
+                    {inventoryTxnTypeOptions.map((typeOption) => (
+                      <option key={`inv-edit-modal-type-${typeOption.value}`} value={typeOption.value}>
+                        {typeOption.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{lang === "km" ? "បរិមាណ" : "Qty"}</span>
+                  <input className="input" type="number" min="0" value={inventoryTxnEditForm.qty} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, qty: e.target.value }))} />
+                </label>
+                <label className="field">
+                  <span>{t.by}</span>
+                  <input className="input" value={inventoryTxnEditForm.by} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, by: e.target.value }))} />
+                </label>
+                <label className="field field-wide">
+                  <span>{t.notes}</span>
+                  <textarea className="textarea" value={inventoryTxnEditForm.note} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, note: e.target.value }))} />
+                </label>
+                {inventoryTxnEditForm.type === "BORROW_IN" ? (
+                  <>
+                    <label className="field">
+                      <span>From Campus</span>
+                      <select className="input" value={inventoryTxnEditForm.fromCampus} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, fromCampus: e.target.value }))}>
+                        <option value="">Select source campus</option>
+                        {CAMPUS_LIST.map((campus) => (
+                          <option key={`inv-edit-borrow-from-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Received By</span>
+                      <input className="input" value={inventoryTxnEditForm.receivedBy} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, receivedBy: e.target.value }))} />
+                    </label>
+                  </>
+                ) : null}
+                {inventoryTxnEditForm.type === "BORROW_OUT" || inventoryTxnEditForm.type === "BORROW_CONSUME" ? (
+                  <>
+                    <label className="field">
+                      <span>To Campus</span>
+                      <select className="input" value={inventoryTxnEditForm.toCampus} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, toCampus: e.target.value }))}>
+                        <option value="">Select destination campus</option>
+                        {CAMPUS_LIST.map((campus) => (
+                          <option key={`inv-edit-borrow-to-${campus}`} value={campus}>{campusLabel(campus)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Requested By</span>
+                      <input className="input" value={inventoryTxnEditForm.requestedBy} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, requestedBy: e.target.value }))} />
+                    </label>
+                    <label className="field">
+                      <span>Approved By</span>
+                      <input className="input" value={inventoryTxnEditForm.approvedBy} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, approvedBy: e.target.value }))} />
+                    </label>
+                  </>
+                ) : null}
+                {inventoryTxnEditForm.type === "BORROW_OUT" ? (
+                  <label className="field">
+                    <span>Expected Return Date</span>
+                    <input className="input" type="date" value={inventoryTxnEditForm.expectedReturnDate} onChange={(e) => setInventoryTxnEditForm((f) => ({ ...f, expectedReturnDate: e.target.value }))} />
+                  </label>
+                ) : null}
+              </div>
+              <div className="asset-actions">
+                <button className="tab btn-small" type="button" disabled={busy} onClick={cancelInventoryTxnEdit}>Cancel</button>
+                <button className="btn-primary btn-small" type="button" disabled={busy} onClick={() => void updateInventoryTxn()}>Save Update</button>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {tab === "pool" && (
           <>
@@ -73771,6 +74478,19 @@ function formatTicketRequestSource(value?: string) {
                           />
                         </label>
                       ) : null}
+                      {reportInventoryIsToolGroup ? (
+                        <label className="field report-inventory-mobile-campus-field">
+                          <span>{lang === "km" ? "ខែត្រួតពិនិត្យ" : "Review Month"}</span>
+                          <input
+                            className="input"
+                            type="month"
+                            value={reportInventoryReviewMonth}
+                            min={reportInventoryReviewMonthOptions[reportInventoryReviewMonthOptions.length - 1] || undefined}
+                            max={reportInventoryReviewMonthOptions[0] || undefined}
+                            onChange={(e) => setReportInventoryReviewMonth(e.target.value)}
+                          />
+                        </label>
+                      ) : null}
                     </div>
                   </section>
                 ) : null}
@@ -74299,6 +75019,30 @@ function formatTicketRequestSource(value?: string) {
                       emptyText={lang === "km" ? "មិនមានកម្មសិទ្ធិ" : "No property type found."}
                     />
                   ) : null}
+                  {reportInventoryIsToolGroup ? (
+                    <label className="report-inline-field">
+                      <span>{lang === "km" ? "ខែត្រួតពិនិត្យ" : "Review Month"}</span>
+                      <input
+                        className="input"
+                        type="month"
+                        value={reportInventoryReviewMonth}
+                        min={reportInventoryReviewMonthOptions[reportInventoryReviewMonthOptions.length - 1] || undefined}
+                        max={reportInventoryReviewMonthOptions[0] || undefined}
+                        onChange={(e) => setReportInventoryReviewMonth(e.target.value)}
+                      />
+                    </label>
+                  ) : null}
+                  <label className="report-inline-field report-inline-field-check report-inline-field-check-compact">
+                    <span>{lang === "km" ? "ចំនួនសូន្យ" : "Zero Amount"}</span>
+                    <span className="report-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={reportInventoryHideZeroAmount}
+                        onChange={(e) => setReportInventoryHideZeroAmount(e.target.checked)}
+                      />
+                      <span>{lang === "km" ? "លាក់ចំនួន = 0" : "Hide amount = 0"}</span>
+                    </span>
+                  </label>
                   {reportInventoryViewMode === "list" ? (
                     <SearchableMultiSelectPicker
                       summary={columnFilterSummary}
@@ -74747,18 +75491,18 @@ function formatTicketRequestSource(value?: string) {
                     emptyText={lang === "km" ? "មិនមានបុគ្គលិក" : "No staff found."}
                   />
                   <LocationPicker
-                    value={staffBorrowingLocationFilter}
-                    onChange={setStaffBorrowingLocationFilter}
+                    value={staffBorrowingItemNameFilter}
+                    onChange={setStaffBorrowingItemNameFilter}
                     options={[
-                      { value: "ALL", label: lang === "km" ? "គ្រប់ទីតាំង" : "All Locations" },
-                      ...staffBorrowingLocationFilterOptions.map((location) => ({
-                        value: location,
-                        label: location,
+                      { value: "ALL", label: lang === "km" ? "គ្រប់សម្ភារៈ" : "All Items" },
+                      ...staffBorrowingItemNameFilterOptions.map((itemName) => ({
+                        value: itemName,
+                        label: itemName,
                       })),
                     ]}
-                    placeholder={lang === "km" ? "ជ្រើសទីតាំង" : "Filter Location"}
-                    searchPlaceholder={lang === "km" ? "ស្វែងរកទីតាំង..." : "Search location..."}
-                    emptyText={lang === "km" ? "មិនមានទីតាំង" : "No location found."}
+                    placeholder={lang === "km" ? "ជ្រើសសម្ភារៈ" : "Filter Item"}
+                    searchPlaceholder={lang === "km" ? "ស្វែងរកសម្ភារៈ..." : "Search item name..."}
+                    emptyText={lang === "km" ? "មិនមានសម្ភារៈ" : "No item found."}
                   />
                   <SearchableMultiSelectPicker
                     summary={columnFilterSummary}
@@ -76261,7 +77005,7 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                         <div className="report-card-list">
                           {section.rows.map((row) => {
-                            const latestReview = reportInventoryIsToolGroup ? latestToolReviewByItemId.get(Number(row.id || 0)) || null : null;
+                            const latestReview = reportInventoryIsToolGroup ? reportInventoryReviewByItemId.get(Number(row.id || 0)) || null : null;
                             return (
                             <article
                               key={`report-inventory-mobile-card-${section.group}-${row.id}`}
@@ -76639,6 +77383,10 @@ function formatTicketRequestSource(value?: string) {
 
                     <div className="report-formal-count-grid">
                       <article className="report-formal-count-card">
+                        <span>Generator Records</span>
+                        <strong>{assetFullRecordGeneratorRows.length}</strong>
+                      </article>
+                      <article className="report-formal-count-card">
                         <span>Maintenance Records</span>
                         <strong>{assetFullRecordMaintenanceRows.length}</strong>
                       </article>
@@ -76687,6 +77435,46 @@ function formatTicketRequestSource(value?: string) {
                         </div>
                       </section>
                     ) : null}
+
+                    <section className="report-formal-section">
+                      <div className="report-formal-section-head">
+                        <h4>Generator Records</h4>
+                        <span>{assetFullRecordGeneratorRows.length} record{assetFullRecordGeneratorRows.length === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="table-wrap report-table-wrap report-full-record-table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>No.</th>
+                            <th>Date</th>
+                            <th>Record Type</th>
+                            <th>By</th>
+                            <th>Details</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {assetFullRecordGeneratorRows.length ? (
+                            assetFullRecordGeneratorRows.map((row, index) => (
+                              <tr key={`asset-full-generator-${row.id}`}>
+                                <td>{index + 1}</td>
+                                <td>
+                                  {formatDate(row.date || "-")}
+                                  {maintenanceEntryDisplayTime(row) ? ` ${formatTimeOnly(maintenanceEntryDisplayTime(row))}` : ""}
+                                </td>
+                                <td>{row.type || "-"}</td>
+                                <td>{row.by || "-"}</td>
+                                <td style={{ whiteSpace: "pre-wrap" }}>{row.note || "-"}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5}>No generator fuel or usage records.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                      </div>
+                    </section>
 
                     <section className="report-formal-section">
                       <div className="report-formal-section-head">
@@ -80611,11 +81399,13 @@ function formatTicketRequestSource(value?: string) {
             <div className="form-grid">
               <label className="field">
                 <span>{t.date}</span>
-                <input
-                  type="date"
-                  className="input"
+                <EcoDateInput
                   value={calendarEventForm.date}
-                  onChange={(e) => setCalendarEventForm((f) => ({ ...f, date: e.target.value }))}
+                  onChange={(value) => setCalendarEventForm((f) => ({ ...f, date: value }))}
+                  placeholder="dd-mmm-yyyy"
+                  ariaLabel="Open calendar event date picker"
+                  className="generator-eco-date-field"
+                  formatDisplayValue={(value) => formatSignatureDateValue(value)}
                 />
               </label>
               <label className="field">
@@ -85170,9 +85960,10 @@ function formatTicketRequestSource(value?: string) {
             type="button"
             className="version-badge-btn"
             onClick={() => setUpdateNotesOpen(true)}
-            title={lang === "km" ? "មើលកំណត់ត្រាកំណែ" : "View update notes"}
+            title={appVersionBadgeTitle}
           >
-            {appVersionBadge}
+            <span className="version-badge-label">{lang === "km" ? "កំណែ" : "Version"}</span>
+            <strong>{appVersionBadgeLabel}</strong>
           </button>
         </div>
       </section>
